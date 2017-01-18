@@ -138,9 +138,8 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
    renew would fail, also return 0, since there's nothing we can do with it
 */
 int
-needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft)
-{
-    krb5_error_code code;
+needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
+    krb5_error_code code, code2;
     krb5_cc_cursor cur;
     krb5_creds creds;
     krb5_principal princ;
@@ -179,14 +178,12 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft)
       krb5_free_cred_contents(kcontext, &creds);
     }
 
-    krb5_cc_end_seq_get(kcontext, cache, &cur);
-
-    if (code && code != KRB5_CC_END) {
-      mylog(LOG_ERR, "error in reading credentials from cache %s", error_message(code));
+    if ((code2 = krb5_cc_end_seq_get(kcontext, cache, &cur))) {
+      mylog(LOG_ERR, "close cc sequence failed %s", error_message(code2));
       goto done;
     }
-    if ((code = krb5_cc_end_seq_get(kcontext, cache, &cur))) {
-      mylog(LOG_ERR, "close cc sequence failed %s", error_message(code));
+    if (code && code != KRB5_CC_END) {
+      mylog(LOG_ERR, "error in reading credentials from cache %s", error_message(code));
       goto done;
     }
 
@@ -237,7 +234,6 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
     if (code != 0) {
       // file is probably empty. Can't renew if there's no principal
       mylog(LOG_ERR, "error reading ticket cache");
-      krb5_cc_close(ctx, ccache);
       goto done;
     }
 
@@ -279,11 +275,11 @@ done:
 static void
 renewalluser(krb5_context kcontext, uid_t uid, time_t minleft) {
   krb5_error_code code;
-  krb5_ccache cache;
+  krb5_ccache cache = NULL;
   krb5_cccol_cursor cursor;
   char namebuf[1024];
 
-  sprintf(namebuf, "KEYRING:persistent:%lu", (unsigned long)uid);
+  snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu", (unsigned long)uid);
 
   // cccol_cursor_new uses the default collection from the content
   // The context will normally have a collection for the current user
@@ -304,6 +300,7 @@ renewalluser(krb5_context kcontext, uid_t uid, time_t minleft) {
     if (strstr(cname, ":renewd-") == NULL)
       renew(kcontext, cache, minleft);
     krb5_cc_close(kcontext, cache);
+    cache = NULL;
   }
  done:
   if (cache)
@@ -334,7 +331,7 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
     // This should be the default cache collection. Do it explicitly
     // because this is a different uid than our own
     // cc_resolve will get the primary cache from the collection
-    sprintf(namebuf, "KEYRING:persistent:%lu", (unsigned long)uid);
+    snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu", (unsigned long)uid);
 
     ccache = NULL;
     code = krb5_cc_resolve(ctx, namebuf, &ccache);
@@ -352,7 +349,6 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
     if (code != 0) {
       // file is probably empty. Can't renew if there's no principal
       mylog(LOG_ERR, "error reading ticket cache");
-      krb5_cc_close(ctx, ccache);
       goto done;
     }
 
@@ -373,7 +369,7 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
       // ourselves. Try 100 times to create new cache. Just increment the time
       // to get the next try. This isn't wonderful code, but it shouldn't ever
       // actually be needed.
-      sprintf(namebuf, "KEYRING:persistent:%lu:renewd-%lu", (unsigned long)uid, now);
+      snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu:renewd-%lu", (unsigned long)uid, now);
     
       code = krb5_cc_resolve(ctx, namebuf, &ncache);
       if (code) {
@@ -397,6 +393,7 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
       }
       // valid cache. We need a new one so close it and try again
       krb5_cc_close(ctx, ncache);
+      ncache = NULL;
       pass--;
       now++;
     }
@@ -452,7 +449,7 @@ uid_t getprocuid(pid_t pid) {
   uid_t ret;
   FILE *statfile;
 
-  sprintf(buffer, "/proc/%lu/status", (unsigned long)pid);
+  snprintf(buffer, sizeof(buffer)-1, "/proc/%lu/status", (unsigned long)pid);
   statfile = fopen(buffer, "r");
   if (!statfile) {
     mylog(LOG_ERR, "can't open %s %m", buffer);
@@ -505,7 +502,7 @@ void getuids() {
   while ((dir = readdir(procdir))) {
     residual = NULL; // anything left after a number?
     pid = strtol(dir->d_name, &residual, 10);
-    if (*residual == '\0') { // nothing left over after number
+    if (residual && *residual == '\0') { // nothing left over after number
       uid_t uid = getprocuid(pid);
       if (uid != -1L) {
 	char uidbuf[32];
