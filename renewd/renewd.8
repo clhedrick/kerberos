@@ -1,0 +1,48 @@
+.TH RENEWD 8
+.SH NAME
+renewd \- renew Kerberos credentials for all users automatically
+.SH SYNOPSIS
+.B renewd
+[-w waittime][ -d ]
+.SH DESCRIPTION
+.I  renewd
+renews credentials for all users with processes currently active.
+Commonly users remain logged in for days, and want Kerberized NFS
+mounts to continuing working. Ticket expiration should be no more 
+than a few hours, in order to allow the ticket to be reclaimed fairly
+quickly after they logout. 
+.PP
+WARNING: This only looks at credential caches in KEYRING:persistent:%{uid}. This should
+be the default for Linux. A special strategy is used to avoid race conditions
+that can occur in other related daemons (e.g. kstart). That strategy depends
+upon the implementation of KEYRING.
+.PP
+As noted, the goal of this daemon is to renew credentials as long as they
+are logged in. It actually performs two slightly different jobs.
+.PP
+1. For each user with a current process, it will check their primary
+credential cache. This is the one that will be used to authenticate NFS
+access. If it doesn't have at least (waittime + 10 min) left, the
+credentials will be renewed if possible. To avoid race conditions, a
+new credentials cache is created and made primary. The old one will be removed by the
+kernel when it expires.
+.PP
+2. Two minutes later, for each user with a curent process, it will check all credential
+caches that it did not create. If they do not have at least (waittime + 6 min) 
+left, the credentials will be renewed if possible. This will be a normal
+renewal, done the same way as kinit -R. It is subject to race conditions if
+another process is attempting to use the cache at the exact moment it is
+being renewed. Normal renewal is used because ssh and other ways into the system
+often set an environment variable with a specific credentials cache. Thus it won't
+work to create a new cache. The author is not aware of any way to renew a cache
+without creating a brief time period when the cache is not valid (or having the
+cache grow in size without limit).
+.PP
+waittime is the amount of time between successive runs of 1.
+.PP
+renewd normally detaches from the terminal, and logs to syslog.
+If -d is supplied it remains attached to the terminal, and prints
+debug and error messasges there.
+.PP
+renewd must run as root. Most Kerberos operations are performed as
+the user that owns the cache.

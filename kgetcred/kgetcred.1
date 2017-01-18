@@ -1,0 +1,19 @@
+.TH KGETCRED 1
+.SH NAME
+kgetcred \- get Kerberos credentials from keytab stored on credserv server
+.SH SYNOPSIS
+.B kgetcred
+[ -d ]
+.SH DESCRIPTION
+.I  kgetcred
+is designed for cron jobs or services that need access to Kerberos
+credentials, but don't have an interactive user to supply them.
+Kgetcred sends a request to a credserv server running on the 
+host specified in /etc/kgetcred.conf. If successful a Kerberos
+TGT is put into the user's default credentials cache.
+.SH OPTIONS
+.TP
+.B \-d
+print debugging messages
+.SH "SEE ALSO"
+credserv(8)
