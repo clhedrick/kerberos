@@ -535,6 +535,7 @@ void freeuids() {
     free(uidlist->key);
     uidlist = next;
   }
+  hdestroy();
 }
 
 // go through all uids that are active and renew the primary cache for that uid if necessary
