@@ -12,6 +12,13 @@ mounts to continuing working. Ticket expiration should be no more
 than a few hours, in order to allow the ticket to be reclaimed fairly
 quickly after they logout. 
 .PP
+Also, creates and renews credentials for anonymous.user, if a file
+/etc/krb5.anonymous exists. The file is assumed to be a key table for
+anonymous.user. The credentials are put into /tmp/krb5_cc_anon. These
+credentials are intended for use as armor in kinit and pam_krb5, to 
+support the user of one-time passwords. There's a more elegant mechanism,
+but it isn't always easy to set up.
+.PP
 WARNING: This only looks at credential caches in KEYRING:persistent:%{uid}. This should
 be the default for Linux. A special strategy is used to avoid race conditions
 that can occur in other related daemons (e.g. kstart). That strategy depends

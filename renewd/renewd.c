@@ -88,6 +88,12 @@ int debug = 0;
 // hash used to collect uids of all running processes
 ENTRY *uidlist;
 
+#define ANONKT "/etc/krb5.anonymous"
+#define ANONCC "/tmp/krb5_cc_anon"
+#define ANONCCTEMP "/tmp/krb5_cc_anon.new"
+#define ANONCCTEMPNAME "FILE:/tmp/krb5_cc_anon.new"
+#define ANONPRINC1 "anonymous.user"
+
 void mylog (int level, const char *format, ...)  __attribute__ ((format (printf, 2, 3)));
 void mylog (int level, const char *format, ...) {
   va_list args;
@@ -441,6 +447,146 @@ done:
     return code;
 }
 
+/*
+ * Maintain /tmp/krb5_cc_anon
+ */
+static krb5_error_code
+checkanonymous(krb5_context ctx, time_t minleft) {
+    krb5_error_code code;
+    krb5_ccache ccache = NULL;
+    krb5_ccache ncache = NULL;
+    krb5_principal user = NULL;
+    krb5_creds creds;
+    int creds_valid = 0;
+    char *realm = NULL;
+    krb5_creds usercreds;
+    int credsused = 0;
+    krb5_keytab userkeytab;
+    krb5_get_init_creds_opt *options;
+
+    memset(&creds, 0, sizeof(creds));
+
+    if (access(ANONKT, F_OK) != 0) {
+      mylog(LOG_DEBUG, "don't check for anonymous cc, %m");
+      return 0;
+    }
+
+    ccache = NULL;
+    code = krb5_cc_resolve(ctx, ANONCC, &ccache);
+    if (code) {
+      mylog(LOG_ERR, "error resolving %s %s", ANONCC, error_message(code));
+      goto done;
+    }
+
+    // if we have a cache and it doesn't need renewing, exit
+    if ((code = krb5_cc_get_principal(ctx, ccache, &user)) == 0 &&
+	!needs_renew(ctx, ccache, minleft)) {	
+      mylog(LOG_DEBUG, "anonymous cache OK");
+      goto done;
+    }
+
+    if (user != NULL)
+      krb5_free_principal(ctx, user);
+
+    if (ccache)
+      krb5_cc_close(ctx, ccache);    
+
+    mylog(LOG_DEBUG, "renewing principal cache %s", ANONCC);
+
+    // this one is in /tmp. To minimize race conditions, creata a new version and rename it onto the real name
+
+    // create temp one
+    code = krb5_cc_resolve(ctx, ANONCCTEMPNAME, &ccache);
+    if (code) {
+      mylog(LOG_ERR, "error resolving %s %s", ANONCC, error_message(code));
+      goto done;
+    }
+
+    code = krb5_get_default_realm(ctx, &realm);
+    if (code) {
+      mylog(LOG_ERR, "can't get default realm %s", error_message(code));
+      goto done;
+    }
+
+    code = krb5_build_principal(ctx, &user, strlen(realm), realm, ANONPRINC1, NULL);
+    if (code != 0) {
+      mylog(LOG_ERR, "error building principal for %s %s", ANONPRINC1,error_message(code));
+      goto done;
+    }
+
+    code = krb5_cc_initialize(ctx, ccache, user);
+    if (code != 0) {
+      mylog(LOG_ERR, "error reinitializing cache %s", error_message(code));
+      goto done;
+    }
+
+    if ((code = krb5_kt_resolve(ctx, ANONKT, &userkeytab))) {
+      mylog(LOG_ERR, "unable to get keytab from %s %s", ANONKT, error_message(code));
+      goto done;
+    }
+
+    if ((code = krb5_get_init_creds_opt_alloc(ctx, &options))) {
+      mylog(LOG_ERR, "unable to allocate options %s", error_message(code));
+      goto done;
+    }
+
+    if ((code = krb5_get_init_creds_keytab(ctx, &usercreds, user, userkeytab, 0,  NULL, options))) {
+      mylog(LOG_ERR, "unable to make credentials for ANONYMOUS from keytab %s", error_message(code));
+      goto done;
+    }
+
+    credsused = 1;
+
+    code = krb5_cc_store_cred(ctx, ccache, &usercreds);
+    if (code != 0) {
+      mylog(LOG_ERR, "error storing credentials %s", error_message(code));
+      goto done;
+    }
+
+    krb5_cc_close(ctx, ccache);    
+    ccache = NULL;
+
+    code = chmod(ANONCCTEMP, 0644);
+    if (code) {
+      mylog(LOG_ERR, "unable to make new anonymous creds public %m");
+      goto done;
+    }
+
+    // rename it to real name
+    code = rename(ANONCCTEMP, ANONCC);
+    if (code) {
+      mylog(LOG_ERR, "unable to put new anonymous creds in place %m");
+      goto done;
+    }
+
+    mylog(LOG_DEBUG, "new anonymous cache created");
+
+done:
+    // if ncache is there we took an error exit.
+    // try to avoid leaving a bad cache around
+    if (ncache != NULL) {
+      krb5_cc_destroy(ctx, ncache);
+    }
+    if (ccache != NULL)
+      krb5_cc_close(ctx, ccache);
+    if (user != NULL)
+      krb5_free_principal(ctx, user);
+    if (creds_valid)
+      krb5_free_cred_contents(ctx, &creds);
+    if (realm)
+      krb5_free_default_realm(ctx, realm);
+    if (userkeytab)
+      krb5_kt_close(ctx, userkeytab);
+    if (options)
+      krb5_get_init_creds_opt_free(ctx, options);
+    if (credsused)
+      krb5_free_cred_contents(ctx, &usercreds);
+
+    return code;
+}
+
+
+
 /* find controlling uid for a process. Linux procfs. Obviously only works with Linux */
 uid_t getprocuid(pid_t pid) {
   char buffer[1024];
@@ -655,6 +801,8 @@ int main(int argc, char *argv[])
 
     time_t now = time(0);
     time_t nextloop = now + wait * 60;
+
+    checkanonymous(context, 60 * (wait + 10));
 
     mylog(LOG_DEBUG, "main loop");
 
