@@ -88,11 +88,10 @@ int debug = 0;
 // hash used to collect uids of all running processes
 ENTRY *uidlist;
 
-#define ANONKT "/etc/krb5.anonymous"
-#define ANONCC "/tmp/krb5_cc_anon"
-#define ANONCCTEMP "/tmp/krb5_cc_anon.new"
-#define ANONCCTEMPNAME "FILE:/tmp/krb5_cc_anon.new"
-#define ANONPRINC1 "anonymous.user"
+#define HOSTKT "/etc/krb5.keytab"
+#define ANONCC "/tmp/krb5_cc_host"
+#define ANONCCTEMP "/tmp/krb5_cc_host.new"
+#define ANONCCTEMPNAME "FILE:/tmp/krb5_cc_host.new"
 
 void mylog (int level, const char *format, ...)  __attribute__ ((format (printf, 2, 3)));
 void mylog (int level, const char *format, ...) {
@@ -463,13 +462,10 @@ checkanonymous(krb5_context ctx, time_t minleft) {
     int credsused = 0;
     krb5_keytab userkeytab;
     krb5_get_init_creds_opt *options;
+    krb5_kt_cursor ktcursor;
+    krb5_keytab_entry ktentry;
 
     memset(&creds, 0, sizeof(creds));
-
-    if (access(ANONKT, F_OK) != 0) {
-      mylog(LOG_DEBUG, "don't check for anonymous cc, %m");
-      return 0;
-    }
 
     ccache = NULL;
     code = krb5_cc_resolve(ctx, ANONCC, &ccache);
@@ -495,6 +491,41 @@ checkanonymous(krb5_context ctx, time_t minleft) {
 
     // this one is in /tmp. To minimize race conditions, creata a new version and rename it onto the real name
 
+    // we need a principal. Get the first one from /etc/krb5.keytab
+    // that's normally host/xxx. At any rate it should have a good random key
+
+    if ((code = krb5_kt_resolve(ctx, HOSTKT, &userkeytab))) {
+      mylog(LOG_ERR, "unable to get keytab from %s %s", HOSTKT, error_message(code));
+      goto done;
+    }
+
+    if ((code = krb5_kt_start_seq_get(ctx, userkeytab, &ktcursor))) {
+      mylog(LOG_ERR, "unable to get cursor for keytab from %s %s", HOSTKT, error_message(code));
+      goto done;
+    }
+
+    if ((code = krb5_kt_next_entry(ctx, userkeytab, &ktentry, &ktcursor))) {
+      krb5_kt_end_seq_get(ctx, userkeytab, &ktcursor);
+      goto done;
+    }
+
+    // copy the principal so we can free the entry
+    if ((code = krb5_copy_principal(ctx, ktentry.principal, &user))) {
+      mylog(LOG_ERR, "unable to copy principal from key table %s", error_message(code));
+    }
+
+    if ((code = krb5_free_keytab_entry_contents(ctx, &ktentry))) {
+      mylog(LOG_ERR, "unable to free entry for keytab from %s %s", HOSTKT, error_message(code));
+    }
+
+    if ((code = krb5_kt_end_seq_get(ctx, userkeytab, &ktcursor))) {
+      mylog(LOG_ERR, "unable to end cursor for keytab from %s %s", HOSTKT, error_message(code));
+    }
+
+    // get rid of any leftover temp files
+    // there's clearly a race condition here, but I'm assuming only one
+    // copy of renewd will be running.
+    unlink(ANONCCTEMPNAME);
     // create temp one
     code = krb5_cc_resolve(ctx, ANONCCTEMPNAME, &ccache);
     if (code) {
@@ -502,26 +533,9 @@ checkanonymous(krb5_context ctx, time_t minleft) {
       goto done;
     }
 
-    code = krb5_get_default_realm(ctx, &realm);
-    if (code) {
-      mylog(LOG_ERR, "can't get default realm %s", error_message(code));
-      goto done;
-    }
-
-    code = krb5_build_principal(ctx, &user, strlen(realm), realm, ANONPRINC1, NULL);
-    if (code != 0) {
-      mylog(LOG_ERR, "error building principal for %s %s", ANONPRINC1,error_message(code));
-      goto done;
-    }
-
     code = krb5_cc_initialize(ctx, ccache, user);
     if (code != 0) {
       mylog(LOG_ERR, "error reinitializing cache %s", error_message(code));
-      goto done;
-    }
-
-    if ((code = krb5_kt_resolve(ctx, ANONKT, &userkeytab))) {
-      mylog(LOG_ERR, "unable to get keytab from %s %s", ANONKT, error_message(code));
       goto done;
     }
 
@@ -546,7 +560,10 @@ checkanonymous(krb5_context ctx, time_t minleft) {
     krb5_cc_close(ctx, ccache);    
     ccache = NULL;
 
-    code = chmod(ANONCCTEMP, 0644);
+    // make sure this is protected. It has a session key that could be
+    // used to spy on a user's login. Since root could use a keylogger,
+    // we think restricting it to root as about as good as we can do.
+    code = chmod(ANONCCTEMP, 0600);
     if (code) {
       mylog(LOG_ERR, "unable to make new anonymous creds public %m");
       goto done;
