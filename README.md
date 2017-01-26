@@ -8,7 +8,7 @@ I'm keeping a copy on /staff/src for consistency with other software, but the pr
 repository is github. If you need to change it please ask hedrick to add you to the
 repository.
 
-@ Goals
+# Goals
 
 1. Secure NFS. Make sure users can't install systems at an IP where we've exported a file system and then access all files.
 
