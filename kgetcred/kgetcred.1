@@ -11,6 +11,14 @@ credentials, but don't have an interactive user to supply them.
 Kgetcred sends a request to a credserv server running on the 
 host specified in /etc/kgetcred.conf. If successful a Kerberos
 TGT is put into the user's default credentials cache.
+.PP
+If successful, it prints the name of a cache. This can be used
+in a script, e.g. KRB5CCNAME=`kgetcred`
+.PP
+In case of error, a message is printed and exit with code 1.
+.PP
+Kgetcred must be installed setuid, because it has to read /etc/krb5.keytab to authenticate.
+It will drop privileges as soon as it's read the key table.
 .SH OPTIONS
 .TP
 .B \-d

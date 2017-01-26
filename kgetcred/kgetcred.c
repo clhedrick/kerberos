@@ -442,7 +442,8 @@ main(int argc, char *argv[])
             exit(1);
         } 
 
-        fprintf(stderr, "Credentials for %s put in %s\n", username, krb5_cc_get_name(context, ccache));
+        // output will be used in scripts to set KRB5CCNAME
+        printf("%s:%s\n",krb5_cc_get_type(context, ccache),krb5_cc_get_name(context, ccache));
         krb5_cc_close(context, ccache);
 
         krb5_free_tgt_creds(context, creds);
