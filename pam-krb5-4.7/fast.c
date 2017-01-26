@@ -43,7 +43,7 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache UNUSED)
 
 #define ANON_KEYTAB
 #define ANON_USER "anonymous.user"
-#define ANONKT "/etc/krb5.anonymous"
+#define ANONKT "/etc/krb5.keytab"
 
 // Instead of the weird anonymous stuff, get credentials from a keytab: /etc/krb5.anonymous
 
@@ -59,31 +59,30 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache)
     bool creds_valid = false;
     krb5_get_init_creds_opt *opts = NULL;
     krb5_keytab userkeytab;
+    krb5_kt_cursor ktcursor;
+    krb5_keytab_entry ktentry;
 
     *ccache = NULL;
     memset(&creds, 0, sizeof(creds));
 
+#ifndef ANON_KEYTAB
     /* Construct the anonymous principal name. */
     retval = krb5_get_default_realm(c, &realm);
     if (retval != 0) {
         putil_debug_krb5(args, retval, "cannot find realm for anonymous FAST");
         return retval;
     }
-#ifdef ANON_KEYTAB
-    retval = krb5_build_principal_ext(c, &princ, strlen(realm), realm,
-		 strlen(ANON_USER), ANON_USER, NULL);
-#else
+
     retval = krb5_build_principal_ext(c, &princ, strlen(realm), realm,
                  strlen(KRB5_WELLKNOWN_NAME), KRB5_WELLKNOWN_NAME,
                  strlen(KRB5_ANON_NAME), KRB5_ANON_NAME, NULL);
-#endif
     if (retval != 0) {
         krb5_free_default_realm(c, realm);
         putil_debug_krb5(args, retval, "cannot create anonymous principal");
         return retval;
     }
-
     krb5_free_default_realm(c, realm);
+#endif
 
     /*
      * Set up the credential cache the anonymous credentials.  We use a
@@ -117,6 +116,33 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache)
       putil_err_krb5(args, retval, "can resolve anonymous keytab");
       goto done;
     }
+
+    if ((retval = krb5_kt_start_seq_get(c, userkeytab, &ktcursor))) {
+      putil_err_krb5(args, retval, "unable to get cursor for /etc/krb5.keytab");
+      goto done;
+    }
+
+    if ((retval = krb5_kt_next_entry(c, userkeytab, &ktentry, &ktcursor))) {
+      krb5_kt_end_seq_get(c, userkeytab, &ktcursor);
+      goto done;
+    }
+
+    // copy the principal so we can free the entry
+    if ((retval = krb5_copy_principal(c, ktentry.principal, &princ))) {
+      putil_err_krb5(args, retval, "unable to copy principal from /etc/krb5.keytab");
+      krb5_free_keytab_entry_contents(c, &ktentry);
+      krb5_kt_end_seq_get(c, userkeytab, &ktcursor);
+      goto done;
+    }
+
+    if ((retval = krb5_free_keytab_entry_contents(c, &ktentry))) {
+      putil_err_krb5(args, retval, "unable to free entry from keytab");
+    }
+
+    if ((retval = krb5_kt_end_seq_get(c, userkeytab, &ktcursor))) {
+      putil_err_krb5(args, retval, "end cursor for keytab");
+    }
+
     if ((retval = krb5_get_init_creds_keytab(c, &creds, princ, userkeytab, 0,  NULL, opts))) {
       putil_err_krb5(args, retval, "unable to make credentials for ANONYMOUS from keytab");
       goto done;
