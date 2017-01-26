@@ -41,6 +41,12 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache UNUSED)
 
 #else /* HAVE_KRB5_GET_INIT_CREDS_OPT_SET_ANONYMOUS */
 
+#define ANON_KEYTAB
+#define ANON_USER "anonymous.user"
+#define ANONKT "/etc/krb5.anonymous"
+
+// Instead of the weird anonymous stuff, get credentials from a keytab: /etc/krb5.anonymous
+
 static krb5_error_code
 cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache)
 {
@@ -52,6 +58,7 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache)
     krb5_creds creds;
     bool creds_valid = false;
     krb5_get_init_creds_opt *opts = NULL;
+    krb5_keytab userkeytab;
 
     *ccache = NULL;
     memset(&creds, 0, sizeof(creds));
@@ -62,14 +69,20 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache)
         putil_debug_krb5(args, retval, "cannot find realm for anonymous FAST");
         return retval;
     }
+#ifdef ANON_KEYTAB
+    retval = krb5_build_principal_ext(c, &princ, strlen(realm), realm,
+		 strlen(ANON_USER), ANON_USER, NULL);
+#else
     retval = krb5_build_principal_ext(c, &princ, strlen(realm), realm,
                  strlen(KRB5_WELLKNOWN_NAME), KRB5_WELLKNOWN_NAME,
                  strlen(KRB5_ANON_NAME), KRB5_ANON_NAME, NULL);
+#endif
     if (retval != 0) {
         krb5_free_default_realm(c, realm);
         putil_debug_krb5(args, retval, "cannot create anonymous principal");
         return retval;
     }
+
     krb5_free_default_realm(c, realm);
 
     /*
@@ -95,11 +108,22 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache)
         putil_err_krb5(args, retval, "cannot create FAST credential options");
         goto done;
     }
-    krb5_get_init_creds_opt_set_anonymous(opts, 1);
-    krb5_get_init_creds_opt_set_tkt_life(opts, 60);
 # ifdef HAVE_KRB5_GET_INIT_CREDS_OPT_SET_OUT_CCACHE
     krb5_get_init_creds_opt_set_out_ccache(c, opts, *ccache);
 # endif
+
+#ifdef ANON_KEYTAB
+    if ((retval = krb5_kt_resolve(c, ANONKT, &userkeytab))) {
+      putil_err_krb5(args, retval, "can resolve anonymous keytab");
+      goto done;
+    }
+    if ((retval = krb5_get_init_creds_keytab(c, &creds, princ, userkeytab, 0,  NULL, opts))) {
+      putil_err_krb5(args, retval, "unable to make credentials for ANONYMOUS from keytab");
+      goto done;
+    }
+#else
+    krb5_get_init_creds_opt_set_anonymous(opts, 1);
+    krb5_get_init_creds_opt_set_tkt_life(opts, 60);
     retval = krb5_get_init_creds_password(c, &creds, princ, NULL, NULL, NULL,
                                           0, NULL, opts);
     if (retval != 0) {
@@ -107,6 +131,7 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache)
                          " for FAST");
         goto done;
     }
+#endif
     creds_valid = true;
 
     /*
@@ -140,6 +165,8 @@ cache_init_anonymous(struct pam_args *args, krb5_ccache *ccache)
         krb5_get_init_creds_opt_free(c, opts);
     if (creds_valid)
         krb5_free_cred_contents(c, &creds);
+    if (userkeytab)
+        krb5_kt_close(c, userkeytab);
     return retval;
 }
 #endif /* HAVE_KRB5_GET_INIT_CREDS_OPT_SET_ANONYMOUS */

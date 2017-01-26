@@ -82,6 +82,8 @@ putil_args_new(pam_handle_t *pamh, int flags)
         return NULL;
     }
 #endif /* HAVE_KRB5 */
+
+    args->password = NULL;
     return args;
 }
 

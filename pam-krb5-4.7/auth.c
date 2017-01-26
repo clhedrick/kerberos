@@ -699,6 +699,7 @@ pamk5_password_auth(struct pam_args *args, const char *service,
     bool creds_valid = false;
     const char *pass = NULL;
     int authtok = (service == NULL) ? PAM_AUTHTOK : PAM_OLDAUTHTOK;
+    int firsttime = 1;
 
     /* Sanity check and initialization. */
     if (args->config->ctx == NULL)
@@ -794,6 +795,14 @@ pamk5_password_auth(struct pam_args *args, const char *service,
             if (status != PAM_SUCCESS)
                 goto done;
         }
+
+	// save initial password. If kerberos asks for a OTP, initially try
+	// the one the user typed
+	if (firsttime) {
+	   args->password = pass;
+	   firsttime = 0;
+	} else
+	   args->password = NULL;
 
         /*
          * Attempt authentication.  If we succeeded, we're done.  Otherwise,

@@ -24,6 +24,7 @@
 #include <pam-util/args.h>
 #include <pam-util/logging.h>
 
+#define OTPPROMPT  "Enter OTP Token Value"
 
 /*
  * Prompt for a password.
@@ -210,6 +211,20 @@ pamk5_prompter_krb5(krb5_context context UNUSED, void *data, const char *name,
     struct pam_message **msg;
     struct pam_response *resp = NULL;
     struct pam_conv *conv;
+
+    // for some reasoin, the Kerberos library ignores the password it's given if the user has OTP. Instead
+    // it prompts. This is stupid, as the user has to enter at least one character at the first prompt, which is
+    // ignored, and then respond to the second prompt. So what we do is detect this case and use the password
+    // that the user typed. 
+
+    // if we have a password, exactly one prompt, and it's the OTP password prompt, and there's room for the password
+    // in the reply, use the exsting password
+    if (args->password && num_prompts == 1 && strncmp(prompts[0].prompt, OTPPROMPT, strlen(OTPPROMPT)) == 0 &&
+	strlen(args->password) < prompts[0].reply->length) {
+        strcpy(prompts[0].reply->data, args->password);
+        prompts[0].reply->length = strlen(args->password);
+	return 0;
+    }
 
     /* Treat the name and banner as prompts that doesn't need input. */
     if (name != NULL && !args->silent)

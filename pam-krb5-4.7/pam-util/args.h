@@ -54,11 +54,11 @@ struct pam_args {
     bool debug;                 /* Log debugging information. */
     bool silent;                /* Do not pass text to the application. */
     const char *user;           /* User being authenticated. */
-
 #ifdef HAVE_KRB5
     krb5_context ctx;           /* Context for Kerberos operations. */
     char *realm;                /* Kerberos realm for configuration. */
 #endif
+    char *password;             /* initial password entered */
 };
 
 BEGIN_DECLS
