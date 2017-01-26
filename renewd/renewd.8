@@ -38,20 +38,9 @@ work to create a new cache. The author is not aware of any way to renew a cache
 without creating a brief time period when the cache is not valid (or having the
 cache grow in size without limit).
 .PP
-Also, creates and renews credentials for use in armoring a request.
-This is needed for two-factor authentication. It creates or updates
-/tmp/krb5_cc_host, using the first principal found in /etc/krb5.keytab.
-It is protected 600, because someone who can read it can protentially
-compromise security of the login transactions. Root could do that anyway
-in a number of ways, so this is probably reasonably safe. 
-.PP 
-Often there's already a krb5ccmachine_DOMAIN. However I don't want to
-depend upon that, and I renew it in a way that should be race-free. I'm
-not so sure about krb5ccmachine_DOMAIN.
-.PP
-This doesn't fully solve the problem of using 2FA. It works for login
-and sshd, but not kinit or screen savers, since you need to be root to read it.
-Using sssd is cleaner, since it talks to a daemon that runs as root.
+Also, can create and renews credentials for use in armoring a request.
+However this is currently commented out, because it's cleaner to do
+it in pam_krb5.
 .PP
 waittime is the amount of time between successive runs of 1.
 .PP

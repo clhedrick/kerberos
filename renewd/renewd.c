@@ -819,7 +819,7 @@ int main(int argc, char *argv[])
     time_t now = time(0);
     time_t nextloop = now + wait * 60;
 
-    checkanonymous(context, 60 * (wait + 10));
+    // checkanonymous(context, 60 * (wait + 10));
 
     mylog(LOG_DEBUG, "main loop");
 
