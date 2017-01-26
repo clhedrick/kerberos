@@ -1,9 +1,0 @@
-This is a git repository on github.
-
-To get it use
-
-git clone https://github.com/clhedrick/kerberos.git
-
-I'm keeping a copy on /staff/src for consistency with other software, but the primary
-repository is github. If you need to change it please ask hedrick to add you to the
-repository.
