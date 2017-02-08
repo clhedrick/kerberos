@@ -378,11 +378,23 @@ main(int argc, char *argv[])
         fprintf(stderr, "sendauth rejected, error reply is:\n\t\"%*s\"\n",
                err_ret->text.length, err_ret->text.data);
     } else if (rep_ret) {
+        int isError = 0;
+        char status[1];
+
         /* got a reply */
         krb5_free_ap_rep_enc_part(context, rep_ret);
 
         if (debug)
             fprintf(stderr, "sendauth succeeded, reply is:\n");
+        if ((retval = net_read(sock, (char *)status, 1)) <= 0) {
+            if (retval == 0)
+                errno = ECONNABORTED;
+            com_err(argv[0], errno, "while reading data from server");
+            exit(1);
+        }
+        if (status[0] == 'e')
+            isError = 1;
+
         if ((retval = net_read(sock, (char *)&xmitlen,
                                sizeof(xmitlen))) <= 0) {
             if (retval == 0)
@@ -404,6 +416,11 @@ main(int argc, char *argv[])
             exit(1);
         }
         recv_data.data[recv_data.length] = '\0';
+
+        if (isError) {
+            fprintf(stderr, "Error: %s\n", recv_data.data);
+            exit(1);
+        }
 
         retval = krb5_rd_cred(context, auth_context, &recv_data, &creds, &replay);
         if (retval) {

@@ -53,6 +53,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <syslog.h>
+#include <sys/stat.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -67,6 +68,9 @@ int debug = 0;
 #ifndef GETPEERNAME_ARG3_TYPE
 #define GETPEERNAME_ARG3_TYPE int
 #endif
+
+#define GENERIC_ERR "Unable to get credentials"
+#define NOKEYTAB_ERR "You must register a keytable for this host before you can use this program."
 
 static void
 usage(char *name)
@@ -150,6 +154,8 @@ main(int argc, char *argv[])
     krb5_get_init_creds_opt *options;
     int gotcred = 0;
     krb5_data data;
+    char *errmsg = GENERIC_ERR;
+
 
     // in case we're run by a user from the command line, get a known environment
     clearenv();
@@ -409,6 +415,7 @@ main(int argc, char *argv[])
     krb5_principal serverp = 0;
     krb5_address **addresses = NULL;
     char *default_realm = NULL;
+    struct stat statbuf;
 
     if ((r = krb5_get_default_realm(context, &default_realm))) {
         mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
@@ -417,6 +424,12 @@ main(int argc, char *argv[])
 
     // get the keytab registered for this user and host
     snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/%s-%s.keytab", username, host->h_name);
+
+    if (stat(repbuf, &statbuf) != 0) {
+        // don't log an error. This is normal if user is confused.
+        errmsg = NOKEYTAB_ERR;
+        goto cleanup;
+    }
 
     if ((r = krb5_kt_resolve(context, repbuf, &userkeytab))) {
         mylog(LOG_ERR, "unable to get keytab for user %s %s", username, error_message(r));
@@ -549,7 +562,16 @@ main(int argc, char *argv[])
     cleanup:
 
     if (gotcred) {
+        char status[1];
         mylog(LOG_DEBUG, "returning credentials to client %s for user %s length %d", inet_ntoa(peername.sin_addr), username, data.length);
+
+        status[0] = 's'; // success
+
+        if ((retval = krb5_net_write(context, 0, (char *)status, 1)) < 0) {
+            mylog(LOG_ERR, "%m: while writing len to client");
+            exit(1);
+        }
+
         xmitlen = htons(data.length);
         if ((retval = krb5_net_write(context, 0, (char *)&xmitlen,
                                  sizeof(xmitlen))) < 0) {
@@ -559,6 +581,27 @@ main(int argc, char *argv[])
         if ((retval = krb5_net_write(context, 0, (char *)data.data,
                                      data.length)) < 0) {
             mylog(LOG_ERR, "%m: while writing data to client");
+            exit(1);
+        }
+    } else {
+        char status[1];
+        status[0] = 'e'; // failure
+        mylog(LOG_DEBUG, "returning error to client %s for user %s %s", inet_ntoa(peername.sin_addr), username, errmsg);
+
+        if ((retval = krb5_net_write(context, 0, (char *)status, 1)) < 0) {
+            mylog(LOG_ERR, "%m: while writing len to client");
+            exit(1);
+        }
+
+        xmitlen = htons(strlen(errmsg));
+        if ((retval = krb5_net_write(context, 0, (char *)&xmitlen,
+                                 sizeof(xmitlen))) < 0) {
+            mylog(LOG_ERR, "%m: while writing len to client");
+            exit(1);
+        }
+
+        if ((retval = krb5_net_write(context, 0, errmsg, strlen(errmsg))) < 0) {
+            mylog(LOG_ERR, "%m: while writing len to client");
             exit(1);
         }
     }
