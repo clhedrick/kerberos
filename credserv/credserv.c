@@ -281,6 +281,7 @@ main(int argc, char *argv[])
             mylog(LOG_ERR, "listen: %m");
             exit(3);
         }
+        signal(SIGCHLD, SIG_IGN);
         while (1) {
             if ((acc = accept(sock, (struct sockaddr *)&peername, &namelen)) == -1){
                 mylog(LOG_ERR, "accept: %m");
