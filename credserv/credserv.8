@@ -16,6 +16,13 @@ request comes. (The name is normalized by a DNS lookup.) If a keytab
 exists and credentials can be built from it, they are returned to
 kgetcred, which puts them into the user's default credential cache.
 .PP
+Normally the keytab must contain credentials for the specific user.
+However for root, the principal is taken from the keytab itself.
+The assumption is that root cronjobs will run with a principal
+that has just those privileges needed for jobs on that host.
+Obviously whatever process you use to store keytabs for this service
+should make sure that root keytabs aren't set up by unauthorized people.
+.PP
 Credserv normally detaches from the terminal, and logs to syslog.
 If -d is supplied it remains attached to the terminal, and prints
 debug and error messasges there.

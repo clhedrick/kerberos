@@ -414,17 +414,61 @@ main(int argc, char *argv[])
         goto cleanup;
     }
 
-    if ((r = krb5_build_principal(context, &userprinc, strlen(default_realm), default_realm, username, NULL))) {
-        mylog(LOG_ERR, "unable to make principal for user %s %s", username, error_message(r));
-        goto cleanup;
-    }
-
+    // get the keytab registered for this user and host
     snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/%s-%s.keytab", username, host->h_name);
 
     if ((r = krb5_kt_resolve(context, repbuf, &userkeytab))) {
         mylog(LOG_ERR, "unable to get keytab for user %s %s", username, error_message(r));
         goto cleanup;
     }
+
+    // get principal for the credentials we are going to return
+    // if user isn't root, we use the specified user
+    // but for root, the principal is probably something like scripts,
+    // so we need to get it from the stored keytab. At some point we may
+    // need to support more than one keytab for a host, but for now assume
+    // root scripts can always run as a specific user
+    if (strcmp(username, "root") != 0) {
+        // non-root, use specific users
+        if ((r = krb5_build_principal(context, &userprinc, strlen(default_realm), default_realm, username, NULL))) {
+            mylog(LOG_ERR, "unable to make principal for user %s %s", username, error_message(r));
+            goto cleanup;
+        }
+    } else {
+        krb5_kt_cursor ktcursor;
+        krb5_keytab_entry ktentry;
+ 
+        // we need a principal. Get the first one from the keytab
+        if ((r = krb5_kt_start_seq_get(context, userkeytab, &ktcursor))) {
+            mylog(LOG_ERR, "unable to get cursor for keytab from %s %s", repbuf, error_message(r));
+            goto cleanup;
+        }
+
+        if ((r = krb5_kt_next_entry(context, userkeytab, &ktentry, &ktcursor))) {
+            mylog(LOG_ERR, "no entry in keytab %s %s", repbuf, error_message(r));
+            krb5_kt_end_seq_get(context, userkeytab, &ktcursor);
+            goto cleanup;
+        }
+
+        // copy the principal so we can free the entry
+        if ((r = krb5_copy_principal(context, ktentry.principal, &userprinc))) {
+            mylog(LOG_ERR, "unable to copy principal from key table %s %s", repbuf,  error_message(r));
+            krb5_free_keytab_entry_contents(context, &ktentry);
+            krb5_kt_end_seq_get(context, userkeytab, &ktcursor);
+            goto cleanup;
+        }
+
+        if ((r = krb5_free_keytab_entry_contents(context, &ktentry))) {
+            mylog(LOG_ERR, "unable to free entry for keytab from %s %s", repbuf, error_message(r));
+        }
+
+        if ((r = krb5_kt_end_seq_get(context, userkeytab, &ktcursor))) {
+            mylog(LOG_ERR, "unable to end cursor for keytab from %s %s", repbuf, error_message(r));
+        }
+
+    }
+    // now we have a principal in userprinc
+    // we also have a keytab to use to generate credentials
 
     if ((r = krb5_get_init_creds_opt_alloc(context, &options))) {
         mylog(LOG_ERR, "unable to allocate options %s", error_message(r));
@@ -441,7 +485,7 @@ main(int argc, char *argv[])
     krb5_get_init_creds_opt_set_address_list(options, addresses);
 
     if ((r = krb5_get_init_creds_keytab(context, &usercreds, userprinc, userkeytab, 0,  NULL, options))) {
-        mylog(LOG_ERR, "unable to make credentials for user from keytab %s %s", username, error_message(r));
+        mylog(LOG_ERR, "unable to make credentials for user from keytab %s %s %s", username, repbuf, error_message(r));
         goto cleanup;
     }
 
