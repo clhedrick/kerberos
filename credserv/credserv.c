@@ -147,6 +147,7 @@ main(int argc, char *argv[])
     char hostname[1024];
      struct hostent* host;
     char *username;
+    char *hostp;
 
     krb5_principal userprinc;
     krb5_creds usercreds;
@@ -360,7 +361,6 @@ main(int argc, char *argv[])
 
     {
     char *servicep;
-    char *hostp;
     char *p;
     struct in_addr **addr_list;
     int found = 0;
@@ -542,7 +542,7 @@ main(int argc, char *argv[])
       goto cleanup;
     }
 
-    if ((r = krb5_fwd_tgt_creds(context, auth_context, 0, userprinc, serverp,
+    if ((r = krb5_fwd_tgt_creds(context, auth_context, hostp, userprinc, serverp,
 			        ccache, 0, &data))) {
       mylog(LOG_ERR, "error getting forwarded credentials for user %s %s",username, error_message(r));
       goto cleanup;
