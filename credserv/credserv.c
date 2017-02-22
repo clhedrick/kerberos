@@ -156,6 +156,7 @@ main(int argc, char *argv[])
     int gotcred = 0;
     krb5_data data;
     char *errmsg = GENERIC_ERR;
+    int root = 0;
 
 
     // in case we're run by a user from the command line, get a known environment
@@ -480,10 +481,13 @@ main(int argc, char *argv[])
             mylog(LOG_ERR, "unable to end cursor for keytab from %s %s", repbuf, error_message(r));
         }
 
+        root = 1;
+
     }
     // now we have a principal in userprinc
     // we also have a keytab to use to generate credentials
 
+    // create options structure for new credentials
     if ((r = krb5_get_init_creds_opt_alloc(context, &options))) {
         mylog(LOG_ERR, "unable to allocate options %s", error_message(r));
         goto cleanup;
@@ -542,8 +546,11 @@ main(int argc, char *argv[])
       goto cleanup;
     }
 
+    // hack. for the moment, if root, make it forwardaable. Otherwise can't use IPA. The hope is that
+    // the script will do a kdestroy at the end.
+
     if ((r = krb5_fwd_tgt_creds(context, auth_context, hostp, userprinc, serverp,
-			        ccache, 0, &data))) {
+			        ccache, root, &data))) {
       mylog(LOG_ERR, "error getting forwarded credentials for user %s %s",username, error_message(r));
       goto cleanup;
     }
