@@ -60,6 +60,10 @@
 #define GETSOCKNAME_ARG3_TYPE int
 #endif
 
+#ifdef MAC
+extern char** environ;
+#endif
+
 static int
 net_read(int fd, char *buf, int len)
 {
@@ -179,7 +183,12 @@ main(int argc, char *argv[])
     // uid, so it should be safe.
 
     krb5ccname = getenv("KRB5CCNAME");
+#ifdef MAC
+    environ = malloc(sizeof(char *));
+    environ[0] = NULL;
+#else
     clearenv();
+#endif
     if (krb5ccname)
         setenv("KRB5CCNAME", krb5ccname, 1);
 
@@ -440,6 +449,7 @@ main(int argc, char *argv[])
             com_err(argv[0], errno, "while reading data from server");
             exit(1);
         }
+
         recv_data.data[recv_data.length] = '\0';
 
         if (isError) {
