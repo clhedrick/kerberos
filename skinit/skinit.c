@@ -9,15 +9,50 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
+
+char keyring[256];
+int gstatus;
+char **environ;
+
+// destroy ticket and exit
+
+void cleanup (int exitstatus) {
+
+  pid_t pid = vfork();
+
+  if (pid == -1) {
+    fprintf(stderr, "fork failed\n");
+    exit(1);
+  } else if (pid > 0) {
+    // parent
+    int status;
+    waitpid(pid, &status, 0);
+    // ignore error return. we want to exit with the status of the main call
+  } else {
+    // kdestroy -c "KEYRING:session:$MUID:$$"
+    // null environment, for safety
+    execle("/bin/kdestroy", "kdestroy", "-c", keyring, NULL, environ);
+    exit(1); // shouldn't happen
+  }
+
+  exit(exitstatus);
+}
+
+void intHandler(int dummy) {
+  cleanup(gstatus);
+}
 
 main(int argc, char *argv[]) 
 {
-  char **environ = malloc(sizeof(char *));
-  environ[0] = NULL;
-  char keyring[256];
   char hostname[512];
   char hostprinc[512];
   char **newargv = malloc(sizeof(char *) * (argc + 3));
+
+  environ = malloc(sizeof(char *));
+  environ[0] = NULL;
+
+  gstatus = 0;
 
   gethostname(hostname, sizeof(hostname) - 1);
   hostname[sizeof(hostname) - 1] = '\0';  // spec allows for no null termination, so make sure it's there
@@ -41,9 +76,13 @@ main(int argc, char *argv[])
   } else {
     // kinit -c "KEYRING:session:$MUID:$$" -t -k /etc/krb5.keytab
     // null environment, for safety
-    execle("/bin/kinit", "kinit", "-c", keyring, "-k", "-t", "/etc/krb5.keytab", hostprinc, NULL, environ);
+    // I'm supplying arguments to restrict the ticket as much as possible. Only last for 5 min, not forwarsable
+    execle("/bin/kinit", "kinit", "-c", keyring, "-F", "-a", "-l", "5m", "-r", "5m", "-k", "-t", "/etc/krb5.keytab", hostprinc, NULL, environ);
     exit(1); // shouldn't happen
   }
+
+  // have key, make sure we destroy it on exit
+  signal(SIGINT, intHandler);
 
   pid = vfork();
 
@@ -52,10 +91,9 @@ main(int argc, char *argv[])
     exit(1);
   } else if (pid > 0) {
     // parent
-    int status;
-    waitpid(pid, &status, 0);
-    if (status)
-      exit(status);
+    waitpid(pid, &gstatus, 0);
+    // note: we'll return gstatus, but
+    // even if non-zero we continue, becauase we want to destroy the credentials
   } else {
     int i;
 
@@ -75,24 +113,6 @@ main(int argc, char *argv[])
     exit(1); // shouldn't happen
   }
 
-  pid = vfork();
-
-  if (pid == -1) {
-    fprintf(stderr, "fork failed\n");
-    exit(1);
-  } else if (pid > 0) {
-    // parent
-    int status;
-    waitpid(pid, &status, 0);
-    if (status)
-      exit(status);
-  } else {
-    // kdestroy -c "KEYRING:session:$MUID:$$"
-    // null environment, for safety
-    execle("/bin/kdestroy", "kdestroy", "-c", keyring, NULL, environ);
-    exit(1); // shouldn't happen
-  }
-
-  exit(0);
+  cleanup(gstatus);
 }
 
