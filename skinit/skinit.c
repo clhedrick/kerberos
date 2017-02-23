@@ -13,7 +13,7 @@
 
 char keyring[256];
 int gstatus;
-char **environ;
+char **ourenviron;
 
 // destroy ticket and exit
 
@@ -32,7 +32,7 @@ void cleanup (int exitstatus) {
   } else {
     // kdestroy -c "KEYRING:session:$MUID:$$"
     // null environment, for safety
-    execle("/bin/kdestroy", "kdestroy", "-c", keyring, NULL, environ);
+    execle("/bin/kdestroy", "kdestroy", "-c", keyring, NULL, ourenviron);
     exit(1); // shouldn't happen
   }
 
@@ -49,8 +49,8 @@ main(int argc, char *argv[])
   char hostprinc[512];
   char **newargv = malloc(sizeof(char *) * (argc + 3));
 
-  environ = malloc(sizeof(char *));
-  environ[0] = NULL;
+  ourenviron = malloc(sizeof(char *));
+  ourenviron[0] = NULL;
 
   gstatus = 0;
 
@@ -77,7 +77,7 @@ main(int argc, char *argv[])
     // kinit -c "KEYRING:session:$MUID:$$" -t -k /etc/krb5.keytab
     // null environment, for safety
     // I'm supplying arguments to restrict the ticket as much as possible. Only last for 5 min, not forwarsable
-    execle("/bin/kinit", "kinit", "-c", keyring, "-F", "-a", "-l", "5m", "-r", "5m", "-k", "-t", "/etc/krb5.keytab", hostprinc, NULL, environ);
+    execle("/bin/kinit", "kinit", "-c", keyring, "-F", "-a", "-l", "5m", "-r", "5m", "-k", "-t", "/etc/krb5.keytab", hostprinc, NULL, ourenviron);
     exit(1); // shouldn't happen
   }
 
@@ -96,6 +96,9 @@ main(int argc, char *argv[])
     // even if non-zero we continue, becauase we want to destroy the credentials
   } else {
     int i;
+    char *ccname;
+    char envvar[512];
+    char **cleanedenv = malloc(sizeof(char *) * 2);
 
     // as user: kinit $@ with original environment variables
     // drop privs
@@ -109,7 +112,17 @@ main(int argc, char *argv[])
     newargv[2 + i] = NULL;
 
     argv[0] = "kinit";
-    execv("/bin/kinit", newargv);
+
+    ccname = getenv("KRB5CCNAME");
+    if (ccname) {
+      snprintf(envvar, sizeof(envvar) - 1, "KRB5CCNAME=%s", ccname);
+      cleanedenv[0] = envvar;
+      cleanedenv[1] = NULL;
+    }  else {
+      cleanedenv[0] = NULL;
+    }
+
+    execvpe("/bin/kinit", newargv, cleanedenv);
     exit(1); // shouldn't happen
   }
 

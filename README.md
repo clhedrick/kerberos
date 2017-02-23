@@ -57,6 +57,15 @@ host where they'll be using a cron job. credserv / kgetcred will generate creden
 put it on their system. They will be locked to an ip address and not forwardable. This is about the best protection
 I can think of.
 
+## skinit
+
+Kinit for users with OTP. 
+
+With one time passwords, kinit requires "armor." skinit gets a ticket from /etc/krb5.keytab, and uses it to armor
+the request. Arguments are just passed on to the main kinit call. It has to run setuid root to get /etc/krb5.keytab,
+but drops privileges after that. The host ticket is very limited: 5 min lifetime, non-renewaable, stored in a session
+keyring. It's destroyed on exit or control-C.
+
 ## pam
 
 The issue here is two factor authentication. Freeipa doesn't currently support anonymous credentials with PKINIT.
