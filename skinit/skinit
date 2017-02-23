@@ -1,0 +1,12 @@
+#!/bin/sh
+
+ANONCC=KEYRING:session:`id -u`:$$
+
+KRB5CCNAME="$ANONCC" kgetcred -a >/dev/null
+
+trap 'KRB5CCNAME="$ANONCC" kdestroy' 2
+
+kinit -T "$ANONCC" "$@"
+
+KRB5CCNAME="$ANONCC" kdestroy
+

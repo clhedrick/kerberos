@@ -136,11 +136,33 @@ main(int argc, char *argv[])
     struct passwd * pwd;
     char *default_realm = NULL;
     char *krb5ccname = NULL;
-    int debug = 0;
+    unsigned debug = 0;
+    int anonymous = 0;
+    int ch;
 
 
-    if (argc > 1)
-        debug = 1;
+    /*
+     * Parse command line arguments
+     *
+     */
+    opterr = 0;
+    while ((ch = getopt(argc, argv, "da")) != -1) {
+        switch (ch) {
+        case 'd':
+            debug++;
+            break;
+        case 'a':
+            anonymous++;
+            break;
+        default:
+            printf("-d debug, -a get anonymous ticket\n");
+            exit(1);
+            break;
+        }
+    }
+
+    argc -= optind;
+    argv += optind;
 
     //    if (argc != 2 && argc != 3 && argc != 4) {
     //        fprintf(stderr, "usage: %s <hostname> [port] [service]\n",argv[0]);
@@ -223,7 +245,10 @@ main(int argc, char *argv[])
         fprintf(stderr, "Can't find current user\n");
         exit(1);
     }
-    username = pwd->pw_name;
+    if (anonymous)
+        username = "anonymous.user";
+    else
+        username = pwd->pw_name;
 
     (void) signal(SIGPIPE, SIG_IGN);
 

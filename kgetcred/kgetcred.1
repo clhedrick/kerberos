@@ -3,7 +3,7 @@
 kgetcred \- get Kerberos credentials from keytab stored on credserv server
 .SH SYNOPSIS
 .B kgetcred
-[ -d ]
+[ -d | -a]
 .SH DESCRIPTION
 .I  kgetcred
 is designed for cron jobs or services that need access to Kerberos
@@ -23,5 +23,8 @@ It will drop privileges as soon as it's read the key table.
 .TP
 .B \-d
 print debugging messages
+.B \-a
+get credentials for anonymous.user. Primarily intended for kinit -T, until IPA supports kinit -n.
+Requires a keytable for anonymous.user to be present as /var/credserv/anonymous.keytab on the server.
 .SH "SEE ALSO"
 credserv(8)

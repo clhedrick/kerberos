@@ -61,10 +61,11 @@ I can think of.
 
 Kinit for users with OTP. 
 
-With one time passwords, kinit requires "armor." skinit gets a ticket from /etc/krb5.keytab, and uses it to armor
-the request. Arguments are just passed on to the main kinit call. It has to run setuid root to get /etc/krb5.keytab,
-but drops privileges after that. The host ticket is very limited: 5 min lifetime, non-renewaable, stored in a session
-keyring. It's destroyed on exit or control-C.
+With one time passwords, kinit requires "armor." skinit gets a ticket for anonymous.user, using kgetcred -a,
+and uses it to armor
+the request. Arguments are just passed on to the main kinit call. 
+
+If your setup supports kinit -n, you might prefer to use that rather than kgetcred -a.
 
 ## pam
 

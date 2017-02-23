@@ -424,7 +424,11 @@ main(int argc, char *argv[])
     }
 
     // get the keytab registered for this user and host
-    snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/%s-%s.keytab", username, host->h_name);
+    // anonymous is special -- always allowed
+    if (strcmp(username, "anonymous.user") == 0)
+        snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/anonymous.keytab");
+    else
+        snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/%s-%s.keytab", username, host->h_name);
 
     if (stat(repbuf, &statbuf) != 0) {
         // don't log an error. This is normal if user is confused.
