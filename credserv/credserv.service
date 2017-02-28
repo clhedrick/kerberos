@@ -1,0 +1,9 @@
+[Unit]
+Description=Kerberos Credentials Daemon - server for kgetcred
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/credserv
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+.TH SKINIT 1
+.SH NAME
+skinit \- kinit for one time password users
+.SH SYNOPSIS
+.B skinit
+[ args ]
+.SH DESCRIPTION
+.I  skinit
+calls kinit, passing whatever arguments were supplied, with "armor".
+.PP
+.I skinit
+is intended for users with one-time passwords. Kinit requires an existing
+credentials cache, which it uses to encrypt ("armor") the request. It doesn't
+matter what credentials are in the initial cache. This script uses credentials
+for a user "anonymous.user," who has no permissions to do anything.
+.PP
+Technical note: This script uses kgetcred -a to get the credentials for anonymous.user.
+Credserv has to be set up, and have a keytable for anonymous.user.
+.SH "SEE ALSO"
+kinit(1)
+
