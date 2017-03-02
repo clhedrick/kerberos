@@ -16,6 +16,14 @@ request comes. (The name is normalized by a DNS lookup.) If a keytab
 exists and credentials can be built from it, they are returned to
 kgetcred, which puts them into the user's default credential cache.
 .PP
+Because anonymous kinit isn't supported on all systems yet, and it's
+needed to armor requests for one-time passwords, this service
+also provides a way to get anonymous credentials. If you want to support
+this, put a keytab for "anonymous.user"  in /var/credserv/anonymous.keytab.
+This user should be added to the system with a random password. It should
+not have any privileges, and shouldn't be allowed to login anywhere.
+(This username is built into both kgetcred and credserv.)
+.PP
 Normally the keytab must contain credentials for the specific user.
 However for root, the principal is taken from the keytab itself.
 The assumption is that root cronjobs will run with a principal
