@@ -31,6 +31,18 @@ that has just those privileges needed for jobs on that host.
 Obviously whatever process you use to store keytabs for this service
 should make sure that root keytabs aren't set up by unauthorized people.
 .PP
+There's one subtle difference between credentials returned for root
+and non-root. For non-root users the credentials are not forwardable.
+We intend this to be used primarily to get access to files over
+Kerberized NFS, in cron jobs. That doesn't require forwardable credentials, 
+and making them forwardable would let someone who becomes root use the
+credentials to get access to other systems. However for root, the credentials
+are forwardable. That's because we use root cron jobs to do things with
+freeipa, and they require forwardable credentials. They are for a principal
+that can't login, so you can't use ssh to forward them to another system.
+In the future we'll probably make handling of root credentials more
+configurable.
+.PP
 Credserv normally detaches from the terminal, and logs to syslog.
 If -d is supplied it remains attached to the terminal, and prints
 debug and error messasges there.
