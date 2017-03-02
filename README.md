@@ -24,15 +24,16 @@ This should make it safe to allow faculty to mount our file systems on machines 
 
 1. Make Kerberos transparent. I'm dealing with this by supporting all ways into a machine through pam, and by having a daemon that will keep their credentials renewed as long as they have processes.
 
-2. Support for multiple machine types. This is hard. Without two-factor, Linux, Mac, and probably Windows (though I haven't tried) can support it. Two factor uses recent features. Currently it only works on Centos 7 and possibly 6. It should work on recent versions of other distributions as well. Unfortunately Apple is not using the standard MIT Kerberos, so I don't know when they'll support 2FA.
+2. Support for multiple machine types. This is hard. Without two-factor, Linux, Mac, and probably Windows (though I haven't tried) can support it. Two factor uses recent features. Currently the key part, kgetcred, works on Centos 5 - 7, and OS X (using the Macports version of Kerberos).
 
 Suggested configuration:
 
-pam_krb5, mine on Centos 7, the vendor's on other systems. This will handle most users.
+sssd for authentication for Centos 7, the vendor's pam_krb5 on other systems. This will handle most users.
 
-For users with 2FA, they can ssh into the machine from a Centos 7 system, or we can supply a script that ssh's to such a machine and then ssh's back. That will do the 2FA and put a ticket on the machine. I'm using a script like that on my Mac.
+For users with 2FA, they can ssh into the machine from a Centos 7 system, then go to an older machine.
 
-We can also use pam_ldap. The ldap server on the kdc supports 2FA for binding to LDAP if the user is configured to require it. The only disadvantage to ldap is that it won't give users Kerberos tickets.
+For older systems we could also use pam_ldap after pam_krb5. That would let 2FA users login.
+The only disadvantage to ldap is that it won't give users Kerberos tickets.
 
 # Design issues
 
@@ -44,7 +45,7 @@ Policies need to be chosen carefully to support our goals. In particular, Kerber
 
 Many users stay logged in more or less forever. We don't want long ticket lifetimes, because that leaves their NFS
 connections exposed after they logout. So instead the plan is to expire in 1 hour, but have a daemon that
-renews tickets for anyone with a job currently running. The code currently support only Linux KEYRING, because
+renews tickets for anyone with a job currently running. The code currently supports only Linux KEYRING, because
 it's easier to make the process race-free that way. It could be extended to support other types with a bit of work
 
 ## credserv and kgetcred
@@ -56,6 +57,9 @@ So instead the plan is to have them register a keytab on a central server (throu
 host where they'll be using a cron job. credserv / kgetcred will generate credentials based on the keytab and
 put it on their system. They will be locked to an ip address and not forwardable. This is about the best protection
 I can think of.
+
+kgetcred -a also simulations kinit -n. It gets credentials for an unprivileged user. This can be used for kinit -T,
+to support two factor kinit.
 
 ## skinit
 
@@ -79,3 +83,5 @@ LDAP server support two factor authentication.
 
 I also made a minor patch to avoid an unnecessary second password prompt.
 
+However we are probably going to use sssd rather than this. By the time we roll this out for users, the systems
+should be updated to at least Centos 7.
