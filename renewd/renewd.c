@@ -159,6 +159,7 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
       // return 0, but no need to print an error
       goto done;
     }
+
     if ((code = krb5_cc_start_seq_get(kcontext, cache, &cur))) {
       mylog(LOG_ERR, "can't start sequence for cache %s", error_message(code));
       goto done;
@@ -281,7 +282,7 @@ static void
 renewalluser(krb5_context kcontext, uid_t uid, time_t minleft) {
   krb5_error_code code;
   krb5_ccache cache = NULL;
-  krb5_cccol_cursor cursor;
+  krb5_cccol_cursor cursor = NULL;
   char namebuf[1024];
 
   snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu", (unsigned long)uid);
@@ -302,6 +303,7 @@ renewalluser(krb5_context kcontext, uid_t uid, time_t minleft) {
 	 cache != NULL) {
     const char * cname = krb5_cc_get_name(kcontext, cache);
     // ignore our own
+    mylog(LOG_DEBUG, "in renew user found cache %s", cname);
     if (strstr(cname, ":renewd-") == NULL)
       renew(kcontext, cache, minleft);
     krb5_cc_close(kcontext, cache);
@@ -310,7 +312,8 @@ renewalluser(krb5_context kcontext, uid_t uid, time_t minleft) {
  done:
   if (cache)
     krb5_cc_close(kcontext, cache);
-  krb5_cccol_cursor_free(kcontext, &cursor);
+  if (cursor)
+    krb5_cccol_cursor_free(kcontext, &cursor);
 
 }
 
@@ -326,10 +329,12 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
     krb5_principal user = NULL;
     krb5_principal nuser = NULL;
     krb5_creds creds;
+    krb5_cccol_cursor cursor = NULL;
     int creds_valid = 0;
     char namebuf[1024];
     time_t now;
     int pass = 100;
+    int colvalid = 0;
 
     memset(&creds, 0, sizeof(creds));
 
@@ -338,6 +343,49 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
     // cc_resolve will get the primary cache from the collection
     snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu", (unsigned long)uid);
 
+    // make sure there's something in it before doing krb5_cc_resolve. According to docs
+    // this can create a collection if it doesn't exist. Experiments are ambiguous as to
+    // whether it actually does.
+    krb5_cc_set_default_name(ctx, namebuf);
+
+    code = krb5_cccol_cursor_new(ctx, &cursor);
+    if (code != 0) {
+      mylog(LOG_ERR, "error starting cache list for primary %s", error_message(code));
+      goto done;
+    }
+
+    
+    while (!(code = krb5_cccol_cursor_next(ctx, cursor, &ccache)) &&
+	   ccache != NULL) {
+      const char * cname = krb5_cc_get_name(ctx, ccache);
+      mylog(LOG_DEBUG, "found cache in collection for primary %s", cname);
+      if ((code = krb5_cc_get_principal(ctx, ccache, &user))) {
+	// cache isn't initialized, ignore it
+	mylog(LOG_DEBUG, "cache in collection for primary not valid %s", cname);
+	krb5_cc_close(ctx, ccache);
+	ccache = NULL;
+	if (user != NULL) {
+	  krb5_free_principal(ctx, user);
+	  user = NULL;
+	}
+	continue;
+      }
+      krb5_cc_close(ctx, ccache);
+      ccache = NULL;
+      if (user != NULL) {
+	krb5_free_principal(ctx, user);
+	user = NULL;
+      }
+      colvalid = 1;
+      break;
+    }
+	
+    // if collection doesn't have anything usable, no need to renew it
+    if (!colvalid)
+      goto done;
+
+    mylog(LOG_DEBUG, "trying to renew primary of %s", namebuf);
+
     ccache = NULL;
     code = krb5_cc_resolve(ctx, namebuf, &ccache);
     if (code) {
@@ -345,8 +393,10 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
       goto done;
     }
 
-    if (!needs_renew(ctx, ccache, minleft))
+    if (!needs_renew(ctx, ccache, minleft)) {
+      mylog(LOG_DEBUG, "no need to renew %s", namebuf);
       goto done;
+    }
 
     mylog(LOG_DEBUG, "renewing principal cache %s", krb5_cc_get_name(ctx, ccache));
 
@@ -443,6 +493,8 @@ done:
       krb5_free_principal(ctx, user);
     if (creds_valid)
       krb5_free_cred_contents(ctx, &creds);
+    if (cursor)
+      krb5_cccol_cursor_free(ctx, &cursor);
     return code;
 }
 
