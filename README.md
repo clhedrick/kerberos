@@ -10,6 +10,8 @@ repository.
 
 Note that much of this is based on various code by Russ Allbery.
 
+For non-Rutgers people: I think kgetcred and credserv are safe to use. I expect to change them over the next few months, but if you're happy with what they do, I think it's OK. I haven't used renewd enough yet to feel safe in using it in production. I'd be happy to get feedback about it.
+
 # Goals
 
 1. Secure NFS. Make sure users can't install systems at an IP where we've exported a file system and then access all files.
