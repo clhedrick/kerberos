@@ -3,6 +3,8 @@
 #include <com_err.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <regex.h>
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -25,51 +27,18 @@
 /**************************
 
 automatically renew tickets.
-This is difficult because there's no way to atomically update a cache.
-Current tools that do this are subject to race conditions, which in production actually do produce failures,
-   particularly with Kerberized NFS.
 
-This program only works for KEYRING caches, because it's easier to avoid race conditions with them.
-The major loop will trigger once every 20 min or so.
-There is a second phase delayed two minutes after the first phase
+For each user with current processes renews (where needed)
+ - primary cache in KEYRING
+ - all caches in /tmp/krb5cc_NNN and /tmp/krb5cc_NNN_*
 
-Phase 1:
-Find all users logged in.
-For each user
-   Get their primary ccache.
-   If it is about to expire, 
-     create a new cache with renewed tickets
-     give it a name that lets us know it's one we created.
-     make it primary
+Because renewal isn't atomic, before the first renewal, creates a copy of
+renewed credentials in /tmp/krb5cc_NNN-renew. That is deleted after 2 minutes.
 
-Phase 2:
-For each user
-   Get all their caches
-   For those we didn't create, if it is about to expire
-     init it and put renewed credentials in it
-   (This is the way kinit -R works.)
-
-The reason we have to reinit an existing cache in phase 2 is that ssh
-sessions have an environment variable pointing to a specific cache.
-rpc.gssd will use the primary cache.
-
-For rpc.gssd, we have to renew the primary cache. The only safe way to do that is to create
-   a new one with the renewed credentials. The old one will be deleted by the kernel when it expires.
-
-Ssh sets an environment variable to a specific cache. So we have to renew all caches, in case
-   someone is using it in ssh. It has to stay in the same location. So we have to use the standard
-   protocol of reiniting it and putting renewed keys in. This has to be done after a new primary
-   cache is defined, and we need a brief pause in case one of the ssh caches was initially the primary
-   and gssproxy is in the middle of processing it.
-
-The second phase has to ignore caches we created. If we renew them we'll get a never ending increasing
-   pool of those caches.
-
-A similar approach could be used for /tmp if necesary. However the system won't delete expired caches,
-so we'd have to do it (or run a separate cron job). The difference is that there's no primary cache
-for /tmp. However rpc.gssd will look at all caches. So we could use a differnt naming format for our
-own cache, and then use a similar algorithm. But no point writing a separate set of code when our
-systems will be set to use KEYRING all the time.
+rpc.gssd, which is used by NFS, looks first at the primary cache in KEYRING,
+then all caches in /tmp owned by the user. Hence if it happens to hit one
+during the process of renewal, it will eventually find /tmp/krb5cc_NNN-renew,
+and use that.
 
 
  **************************/
@@ -86,7 +55,15 @@ systems will be set to use KEYRING all the time.
 int debug = 0;
 
 // hash used to collect uids of all running processes
-ENTRY *uidlist;
+
+struct uid_info {
+  char * primary_cc;
+  char * key;
+  ENTRY *entry;
+  struct uid_info *next_item;
+};
+
+struct uid_info *uidlist = NULL;
 
 #define HOSTKT "/etc/krb5.keytab"
 #define ANONCC "/tmp/krb5_cc_host"
@@ -175,13 +152,21 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
 	  break;
 	}
 	// not, is it renewable? Need to be able to get at least 10 min or it's silly
-	if ((creds.times.renew_till - now) > (10*60)) {
+	// and it must not be expired or it can't be renewed
+	if ((creds.times.endtime >= now) && ((creds.times.renew_till - now) > (10*60))) {
 	  // yup. but keep searching in case there's more than one
 	  // and another one is still current
 	  found_tgt = TRUE;
 	}
       }
       krb5_free_cred_contents(kcontext, &creds);
+    }
+
+    if (debug) {
+      if (found_current_tgt) 
+	mylog(LOG_DEBUG, "current ticket in %s", krb5_cc_get_name(kcontext, cache));
+      else if (found_tgt)
+	mylog(LOG_DEBUG, "renewable ticket in %s", krb5_cc_get_name(kcontext, cache));	
     }
 
     if ((code2 = krb5_cc_end_seq_get(kcontext, cache, &cur))) {
@@ -234,8 +219,6 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
     if (!needs_renew(ctx, ccache, minleft))
       goto done;
 
-    mylog(LOG_DEBUG, "renewing cache %s", krb5_cc_get_name(ctx, ccache));
-
     code = krb5_cc_get_principal(ctx, ccache, &user);
     if (code != 0) {
       // file is probably empty. Can't renew if there's no principal
@@ -246,10 +229,14 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
     code = krb5_get_renewed_creds(ctx, &creds, user, ccache, NULL);
     creds_valid = 1;
     if (code != 0) {
-      mylog(LOG_ERR, "renewing credentials %s", error_message(code));
+      // expired ticket is going to be fairly normal for /tmp, so no error
+      if (code != KRB5KRB_AP_ERR_TKT_EXPIRED)
+	mylog(LOG_ERR, "renewing credentials %s", error_message(code));
       goto done;
     }
     
+    mylog(LOG_DEBUG, "renewing cache %s", krb5_cc_get_name(ctx, ccache));
+
     code = krb5_cc_initialize(ctx, ccache, user);
     if (code != 0) {
       mylog(LOG_ERR, "error reinitializing cache %s", error_message(code));
@@ -273,132 +260,27 @@ done:
     return code;
 }
 
-/* 
- * check all caches except the ones we generated for current user
- * caller is expected to change euid.
- */ 
-
-static void
-renewalluser(krb5_context kcontext, uid_t uid, time_t minleft) {
-  krb5_error_code code;
-  krb5_ccache cache = NULL;
-  krb5_cccol_cursor cursor = NULL;
-  char namebuf[1024];
-
-  snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu", (unsigned long)uid);
-
-  // cccol_cursor_new uses the default collection from the content
-  // The context will normally have a collection for the current user
-  // but this context was set up by root. So we need to set the
-  // collection explicitly for the user we're checking.
-  krb5_cc_set_default_name(kcontext, namebuf);
-
-  code = krb5_cccol_cursor_new(kcontext, &cursor);
-  if (code != 0) {
-    mylog(LOG_ERR, "error starting cache list %s", error_message(code));
-    goto done;
-  }
-
-  while (!(code = krb5_cccol_cursor_next(kcontext, cursor, &cache)) &&
-	 cache != NULL) {
-    const char * cname = krb5_cc_get_name(kcontext, cache);
-    // ignore our own
-    mylog(LOG_DEBUG, "in renew user found cache %s", cname);
-    if (strstr(cname, ":renewd-") == NULL)
-      renew(kcontext, cache, minleft);
-    krb5_cc_close(kcontext, cache);
-    cache = NULL;
-  }
- done:
-  if (cache)
-    krb5_cc_close(kcontext, cache);
-  if (cursor)
-    krb5_cccol_cursor_free(kcontext, &cursor);
-
-}
-
 /*
- * Renew the primary entry. Create a new cache and put the
- * renewed thing there.
+ * Make a new renewed cache in /tmp/krb5cc_NNN-renew
+ * only renew if within minleft sec of expiration
  */
 static krb5_error_code
-renewp(krb5_context ctx, uid_t uid, time_t minleft) {
+newrenewed(krb5_context ctx, krb5_ccache ccache, time_t minleft, uid_t uid, struct uid_info *uident) {
     krb5_error_code code;
-    krb5_ccache ccache = NULL;
-    krb5_ccache ncache = NULL;
     krb5_principal user = NULL;
-    krb5_principal nuser = NULL;
     krb5_creds creds;
-    krb5_cccol_cursor cursor = NULL;
+    krb5_ccache ncache = NULL;
     int creds_valid = 0;
     char namebuf[1024];
-    time_t now;
-    int pass = 100;
-    int colvalid = 0;
+    char *namecopy;
+
+    if (uident->primary_cc) {
+      mylog(LOG_ERR, "newrenewd called for %lu when there's already a copy", (unsigned long)uid);
+    }
+
+    snprintf(namebuf, sizeof(namebuf)-1, "/tmp/krb5cc_%lu-renew", (unsigned long)uid);
 
     memset(&creds, 0, sizeof(creds));
-
-    // This should be the default cache collection. Do it explicitly
-    // because this is a different uid than our own
-    // cc_resolve will get the primary cache from the collection
-    snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu", (unsigned long)uid);
-
-    // make sure there's something in it before doing krb5_cc_resolve. According to docs
-    // this can create a collection if it doesn't exist. Experiments are ambiguous as to
-    // whether it actually does.
-    krb5_cc_set_default_name(ctx, namebuf);
-
-    code = krb5_cccol_cursor_new(ctx, &cursor);
-    if (code != 0) {
-      mylog(LOG_ERR, "error starting cache list for primary %s", error_message(code));
-      goto done;
-    }
-
-    
-    while (!(code = krb5_cccol_cursor_next(ctx, cursor, &ccache)) &&
-	   ccache != NULL) {
-      const char * cname = krb5_cc_get_name(ctx, ccache);
-      mylog(LOG_DEBUG, "found cache in collection for primary %s", cname);
-      if ((code = krb5_cc_get_principal(ctx, ccache, &user))) {
-	// cache isn't initialized, ignore it
-	mylog(LOG_DEBUG, "cache in collection for primary not valid %s", cname);
-	krb5_cc_close(ctx, ccache);
-	ccache = NULL;
-	if (user != NULL) {
-	  krb5_free_principal(ctx, user);
-	  user = NULL;
-	}
-	continue;
-      }
-      krb5_cc_close(ctx, ccache);
-      ccache = NULL;
-      if (user != NULL) {
-	krb5_free_principal(ctx, user);
-	user = NULL;
-      }
-      colvalid = 1;
-      break;
-    }
-	
-    // if collection doesn't have anything usable, no need to renew it
-    if (!colvalid)
-      goto done;
-
-    mylog(LOG_DEBUG, "trying to renew primary of %s", namebuf);
-
-    ccache = NULL;
-    code = krb5_cc_resolve(ctx, namebuf, &ccache);
-    if (code) {
-      mylog(LOG_ERR, "error resolving %s %s", namebuf, error_message(code));
-      goto done;
-    }
-
-    if (!needs_renew(ctx, ccache, minleft)) {
-      mylog(LOG_DEBUG, "no need to renew %s", namebuf);
-      goto done;
-    }
-
-    mylog(LOG_DEBUG, "renewing principal cache %s", krb5_cc_get_name(ctx, ccache));
 
     code = krb5_cc_get_principal(ctx, ccache, &user);
     if (code != 0) {
@@ -410,59 +292,23 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
     code = krb5_get_renewed_creds(ctx, &creds, user, ccache, NULL);
     creds_valid = 1;
     if (code != 0) {
-      mylog(LOG_ERR, "renewing credentials %s", error_message(code));
+      // expired ticket is going to be fairly normal for /tmp, so no error
+      if (code != KRB5KRB_AP_ERR_TKT_EXPIRED)
+	mylog(LOG_ERR, "renewing credentials %s", error_message(code));
       goto done;
     }
     
-    now = time(0);
+    mylog(LOG_DEBUG, "copying renewed cache %s to %s", krb5_cc_get_name(ctx, ccache), namebuf);
 
-    while (pass > 0) {
-
-      // you'd expect us just to do new_unique to make a new cache. However
-      // we need to specify the name so we can detect that we created it later.
-      // new_unique ignores the prototype passed. So we have to simulate new_unique
-      // ourselves. Try 100 times to create new cache. Just increment the time
-      // to get the next try. This isn't wonderful code, but it shouldn't ever
-      // actually be needed.
-      snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu:renewd-%lu", (unsigned long)uid, now);
-    
-      code = krb5_cc_resolve(ctx, namebuf, &ncache);
-      if (code) {
-	mylog(LOG_ERR, "error resolving %s %s", namebuf, error_message(code));
-	goto done;
-      }
-
-      // cc_resolve will work whether the cache exists or not. get_principal tells
-      // us whether it actually does exist. This could actually produce the wrong
-      // result if there's a cache in the middle of being created. But the only one
-      // that should create caches of this form is us. That means there's a limit to how
-      // far it makes sense to take this.
-      code = krb5_cc_get_principal(ctx, ncache, &nuser);
-      if (nuser) {
-	krb5_free_principal(ctx, nuser);
-      }
-      if (code) {
-	// if we can't get a princpal for the cache it's probably not set up.
-	// i.e. it's a new one. We're done.
-	break; 
-      }
-      // valid cache. We need a new one so close it and try again
-      krb5_cc_close(ctx, ncache);
-      ncache = NULL;
-      pass--;
-      now++;
-    }
-
-    if (pass == 0) {
-      // run out of 100 tries. We give up
-      mylog(LOG_ERR, "unable to allocate new cache; all 100 possibilities failed");
+    code = krb5_cc_resolve(ctx, namebuf, &ncache);
+    if (code != 0) {
+      mylog(LOG_ERR, "can't open cache %s %s", namebuf, error_message(code));
       goto done;
     }
 
-    // here if we have a new cache. Set it up
     code = krb5_cc_initialize(ctx, ncache, user);
     if (code != 0) {
-      mylog(LOG_ERR, "error reinitializing cache %s", error_message(code));
+      mylog(LOG_ERR, "error initializing cache %s", error_message(code));
       goto done;
     }
     code = krb5_cc_store_cred(ctx, ncache, &creds);
@@ -471,32 +317,146 @@ renewp(krb5_context ctx, uid_t uid, time_t minleft) {
       goto done;
     }
 
-    // make the new cache primary
-    code = krb5_cc_switch(ctx, ncache);
-    if (code != 0) {
-      mylog(LOG_ERR, "unable to make new cache the primary %s", error_message(code));
-      goto done;
-    }
+    // worked. record that we've made a copy
+    namecopy = malloc(strlen(namebuf) + 1);
+    strcpy(namecopy, namebuf);
+    uident->primary_cc = namecopy;
 
-    krb5_cc_close(ctx, ncache);    
-    ncache = NULL;
-    
 done:
-    // if ncache is there we took an error exit.
-    // try to avoid leaving a bad cache around
-    if (ncache != NULL) {
-      krb5_cc_destroy(ctx, ncache);
-    }
-    if (ccache != NULL)
-      krb5_cc_close(ctx, ccache);
     if (user != NULL)
       krb5_free_principal(ctx, user);
     if (creds_valid)
       krb5_free_cred_contents(ctx, &creds);
-    if (cursor)
-      krb5_cccol_cursor_free(ctx, &cursor);
+    if (ncache)
+      krb5_cc_close(ctx, ncache);
     return code;
 }
+
+/* 
+ * renew all cc's for one uid
+ * both their primary in KEYRING and things in /tmp
+ */ 
+
+struct dirent **namelist;
+int numdirs;
+
+static void
+renewpass1(krb5_context kcontext, uid_t uid, time_t minleft, struct uid_info *uident) {
+  krb5_error_code code;
+  krb5_ccache cache = NULL;
+  char namebuf[1024];
+  char tempnamebuf[1024];
+  regex_t regex;
+  char regbuf[100];
+  int i;
+  struct stat statbuf;
+
+  snprintf(namebuf, sizeof(namebuf)-1, "KEYRING:persistent:%lu", (unsigned long)uid);
+
+  // get primary cache for this user
+  krb5_cc_set_default_name(kcontext, namebuf);
+  code = krb5_cc_default(kcontext, &cache);
+  if (code != 0) {
+    mylog(LOG_ERR, "can't get default cache %s", error_message(code));
+    goto done;
+  }
+
+  if (debug > 1)
+    mylog(LOG_ERR, "Considering primary %lu", (unsigned long)uid);
+
+  if (needs_renew(kcontext, cache, minleft)) {
+    // if this the first renewal for this user, create the temporary cache
+    if (!uident->primary_cc)
+      newrenewed(kcontext, cache, minleft, uid, uident);
+    renew(kcontext, cache, minleft);
+  }
+
+  krb5_cc_close(kcontext, cache);
+  cache = NULL;
+
+  // now look in /tmp
+
+  //  /tmp/krb5cc_1044 or /tmp/krb5cc_1044_foo
+  snprintf(regbuf, sizeof(regbuf)-1, "^krb5cc_%lu\\(_\\|$\\)", (unsigned long)uid);
+
+  if(regcomp(&regex, regbuf, 0)) {
+    mylog(LOG_ERR, "Couldn't compile regex %s", regbuf);
+    goto done;
+  }
+
+  for (i = 0; i < numdirs; i++) {
+
+    // only look at directories matching the pattern
+    if (regexec(&regex, namelist[i]->d_name, 0, NULL, 0))
+      continue;
+
+    snprintf(tempnamebuf, sizeof(tempnamebuf)-1, "/tmp/%s", namelist[i]->d_name);
+
+    if (debug > 1)
+      mylog(LOG_ERR, "Considering %s", tempnamebuf);
+
+    if (stat(tempnamebuf, &statbuf)) {
+      // file went away?
+      mylog(LOG_ERR, "can't get default cache %s", error_message(code));
+      continue;
+    }
+    
+    if (!S_ISREG(statbuf.st_mode)) {
+      continue;
+    }
+
+    // only look at files owned by this user
+    if (statbuf.st_uid != uid) {
+      continue;
+    }
+
+    code = krb5_cc_resolve(kcontext, tempnamebuf, &cache);
+    if (code) {
+      mylog(LOG_ERR, "can't resolve %s %s", tempnamebuf, error_message(code));      
+      if (cache)
+	krb5_cc_close(kcontext, cache);
+      cache = NULL;
+      continue;
+    }
+			   
+    if (needs_renew(kcontext, cache, minleft)) {
+      // if this the first renewal for this user, create the temporary cache
+      if (!uident->primary_cc)
+	newrenewed(kcontext, cache, minleft, uid, uident);
+      renew(kcontext, cache, minleft);
+    }
+
+    krb5_cc_close(kcontext, cache);
+    cache = NULL;
+  }
+
+  regfree(&regex);
+
+ done:
+  if (cache)
+    krb5_cc_close(kcontext, cache);
+
+}
+
+/*
+ * Renew the primary entry. It's no longer primary
+ */
+krb5_error_code
+  renewpass2(krb5_context ctx, uid_t uid, time_t minleft, struct uid_info *uident) {
+
+    // nothing to do
+    if (!uident->primary_cc)
+      return 0;
+
+    // delete the temp file
+    mylog(LOG_DEBUG, "Removing %s", uident->primary_cc);
+    unlink(uident->primary_cc);
+
+    return 0;
+}
+
+#ifdef UNDEF
+// code not currently used
 
 /*
  * Maintain /tmp/krb5_cc_anon
@@ -654,6 +614,7 @@ done:
     return code;
 }
 
+#endif
 
 
 /* find controlling uid for a process. Linux procfs. Obviously only works with Linux */
@@ -729,13 +690,22 @@ void getuids() {
 	uident.key = uidbuf;
 	// if uid isn't in the hash, put it there
 	if (hsearch(uident, FIND) == NULL) {
-	  // need a new entry, now malloc space for the uid
-	  uident.key = malloc(strlen(uidbuf) + 1);
-	  strcpy(uident.key, uidbuf);
+	  // need a new entry
+	  struct uid_info *new_entry = malloc(sizeof(struct uid_info));
 	  // point to previous entry in the list
-	  uident.data = uidlist;
+	  new_entry->next_item = uidlist;
+	  new_entry->primary_cc = NULL;
+	  new_entry->key = malloc(strlen(uidbuf) + 1);
+	  strcpy(new_entry->key, uidbuf);
+
+	  uident.key = new_entry->key;
+	  uident.data = (void *)new_entry;
+
 	  // this is now the new tail of the list
-	  uidlist = hsearch(uident, ENTER);
+	  uidlist = new_entry;
+	  // need to save the entry so we can free it
+	  new_entry->entry = hsearch(uident, ENTER);
+
 	}
       }
     }
@@ -746,41 +716,61 @@ void getuids() {
 // free malloced uids from hash
 void freeuids() {
   while (uidlist) {
-    ENTRY *next = (ENTRY *)uidlist->data;
+    struct uid_info *next = uidlist->next_item;
     free(uidlist->key);
+    if (uidlist->primary_cc)
+      free(uidlist->primary_cc);
+    //    free(uidlist->entry);
+    free(uidlist);
     uidlist = next;
   }
   hdestroy();
 }
 
 // go through all uids that are active and renew the primary cache for that uid if necessary
-void renewpall(krb5_context ctx, time_t minleft) {
-  ENTRY *uident = uidlist;
+void renewallpass1(krb5_context ctx, time_t minleft) {
+  struct uid_info *uident = uidlist;
+  int i;
+
+  numdirs = scandir("/tmp", &namelist, NULL, alphasort);
+  if (numdirs < 0) {
+    mylog(LOG_ERR, "Couldn't scan /tmp");
+    namelist = NULL;
+  }
+
   while (uident) {
     uid_t uid;
     uid = atol(uident->key);
     seteuid(uid);
-    renewp(ctx, uid, minleft);
+    renewpass1(ctx, uid, minleft, uident);
     seteuid(0L);
-    uident = (ENTRY *)uident->data;
+    uident = uident->next_item;
   }
+
+  if (namelist) {
+    for (i = 0; i < numdirs; i++) {
+      free(namelist[i]);
+    }
+    free(namelist);
+  }
+
 }
 
-// go through all uids that are active and renew caches other than the ones we created if necessary
-// There's one special case to worry about. Suppose the user just did kinit. That created a cache. If it's the
-// first one it will be primary. Suppose renewp found it didn't need renewing. But this is called 2 min later.
-// In theory it could now need renewing. That's a problem because we don't want to do traditional renews on the
-// primary cache. At least not until we've copied it. FOr that reason, minleft should be enough less than
-// the value used for renewpall that if a primary cache wasn't renewed in pass 1 it won't be in pass 2 either.
-void renewall(krb5_context ctx, time_t minleft) {
-  ENTRY *uident = uidlist;
+// go through all uids that are active:
+// check all caches
+// if any except primary requires renewing, renew it
+// if primary requires renewing, save it in the uident and make
+//    another cache primary. if there is no other cache, create it
+
+void renewallpass2(krb5_context ctx, time_t minleft) {
+  struct uid_info *uident = uidlist;
   while (uident) {
     uid_t uid;
     uid = atol(uident->key);
     seteuid(uid);
-    renewalluser(ctx, uid, minleft);
+    renewpass2(ctx, uid, minleft, uident);
     seteuid(0L);
-    uident = (ENTRY *)uident->data;
+    uident = uident->next_item;
   }
 }
 
@@ -795,7 +785,7 @@ int main(int argc, char *argv[])
   extern char * optarg;
   char *progname;
   char ch;
-  unsigned long wait = 60; // 1 hour
+  unsigned long wait = 50; // 50 min, for key lifetime of 60
 
   krb5_context context;
   int err = 0;
@@ -877,19 +867,19 @@ int main(int argc, char *argv[])
 
     getuids(); // put uids of all procs into the hash
 
-    renewpall(context, 60 * (wait + 10));
+    renewallpass1(context, 60 * (wait + 10));
 
-    // wait 2 min for pass 2
+    // wait 1 min for pass 2; deletes temporary caches
 
-    sleep(120);
+    sleep(60);
 
     // pass 2. renew all caches we didn't create
 
-    mylog(LOG_DEBUG, "renew normal caches");
+    mylog(LOG_DEBUG, "removing temporary caches");
 
     // See comments on renewall for why we use 6 rather than
     // 10 here.
-    renewall(context, 60 * (wait + 6));
+    renewallpass2(context, 60 * (wait + 6));
     freeuids();
 
     now = time(0);

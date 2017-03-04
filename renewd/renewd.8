@@ -7,42 +7,53 @@ renewd \- renew Kerberos credentials for all users automatically
 .SH DESCRIPTION
 .I  renewd
 renews credentials for all users with processes currently active.
-Commonly users remain logged in for days, and want Kerberized NFS
-mounts to continuing working. Ticket expiration should be no more 
-than a few hours, in order to allow the ticket to be reclaimed fairly
-quickly after they logout. 
+It is part of a specific strategy to keep users from losing credentials
+or NFS access. The design of sshd, login, libkrb5 and rpc.gssd do
+not allow for completely transparent use of Kerberos with agreeing on
+some rules.
+.PP 
+Because multiple login sessions (particularly via sshd) can share the 
+same credemtials, you don't do kdestroy on logout, nor can you allow sshd
+to do it via GSSAPICleanupCredentials. To avoid having credentials hang
+out too long, we are going to set ticket_lifetime in krb5.conf fairly short.
+The default parameters for renewd assume it's about an hour. That way
+credentials will go away without an hour after logout, but will be renewed
+automatically while you're logged in.
+.PP 
+If we can be sure that credentaisl won't be destroyed, then renewd
+can simply keep renewing all active credentials while the user still
+has a session alive, with one exception: 
 .PP
-WARNING: This only looks at credential caches in KEYRING:persistent:%{uid}. This should
-be the default for Linux. A special strategy is used to avoid race conditions
-that can occur in other related daemons (e.g. kstart). That strategy depends
-upon the implementation of KEYRING.
+Because reading and writing credential files is not atomic, there is
+a period during renewal when the credentials are not valid. In principle
+that could cause trouble to NFS. In practice it probably won't, because
+NFS only reevaluates the credentials when they expire. However for safety's
+sake, before renewing the first cache for a given user, we create
+a temporary cache in /tmp/krb5cc_NNN-renew, with renewed credentials.
+That temporary cache is deleted 1 minute after renewd finishes its renewals.
 .PP
-As noted, the goal of this daemon is to renew credentials as long as they
-are logged in. It actually performs two slightly different jobs.
+For NFS to work reliably I suggest the following conventions:
 .PP
-1. For each user with a current process, it will check their primary
-credential cache. This is the one that will be used to authenticate NFS
-access. If it doesn't have at least (waittime + 10 min) left, the
-credentials will be renewed if possible. To avoid race conditions, a
-new credentials cache is created and made primary. The old one will be removed by the
-kernel when it expires.
+All interactive should use the default,
+which is KEYRING:persistent:UID. That will mean they all share one
+credential file, the primary. They should not do kdestroy or otherwise
+destroy the file at logout unless you're sure there's only one sessoin.
 .PP
-2. Two minutes later, for each user with a curent process, it will check all credential
-caches that it did not create. If they do not have at least (waittime + 6 min) 
-left, the credentials will be renewed if possible. This will be a normal
-renewal, done the same way as kinit -R. It is subject to race conditions if
-another process is attempting to use the cache at the exact moment it is
-being renewed. Normal renewal is used because ssh and other ways into the system
-often set an environment variable with a specific credentials cache. Thus it won't
-work to create a new cache. The author is not aware of any way to renew a cache
-without creating a brief time period when the cache is not valid (or having the
-cache grow in size without limit).
+Cron jobs can share this. The easiest way is to start them
+with kgetcred without setting KRB5CCNAME. However if you want
+a cron job (or even a session) to use a different credential file,
+it should be in /tmp, named /tmp/krb5cc_NNN
+or /tmp/krb5cc_NNN_XXX, where NNN is the user's UID. XXX can be anything
+(including the normal 6-character random sequence). Credentials in
+/tmp should be kdestroyed at the end of the session or job.
 .PP
-Also, can create and renews credentials for use in armoring a request.
-However this is currently commented out, because it's cleaner to do
-it in pam_krb5.
+For this to work, renewd has to renew the primary cache in KEYRING,
+and all caches matching /tmp/krb5cc_NNN[_XXX].
+Initially we're not going to remove expired caches (though I'm 
+considering that), but a normal /tmp file pruner can do that.
 .PP
-waittime is the amount of time between successive runs of 1.
+waittime is the amount of time between successive runs. It defaults
+to 50 minutes, which is appropriate for a default ticket lifetime of 1 hour.
 .PP
 renewd normally detaches from the terminal, and logs to syslog.
 If -d is supplied it remains attached to the terminal, and prints
