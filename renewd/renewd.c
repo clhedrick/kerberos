@@ -208,17 +208,6 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
 
     memset(&creds, 0, sizeof(creds));
 
-    /*
-    code = krb5_cc_resolve(ctx, cachename, &ccache);
-    if (code != 0) {
-      mylog(LOG_ERR, "error opening ticket cache %s", error_message(code));
-      goto done;
-    }
-    */
-
-    if (!needs_renew(ctx, ccache, minleft))
-      goto done;
-
     code = krb5_cc_get_principal(ctx, ccache, &user);
     if (code != 0) {
       // file is probably empty. Can't renew if there's no principal
@@ -356,23 +345,24 @@ renewpass1(krb5_context kcontext, uid_t uid, time_t minleft, struct uid_info *ui
   // get primary cache for this user
   krb5_cc_set_default_name(kcontext, namebuf);
   code = krb5_cc_default(kcontext, &cache);
+  // this may be OK. A user could have no default cache but still have caches in /tmp
   if (code != 0) {
-    mylog(LOG_ERR, "can't get default cache %s", error_message(code));
-    goto done;
+    mylog(LOG_DEBUG, "can't get default cache %s", error_message(code));
+  } else {
+
+    if (debug > 1)
+      mylog(LOG_ERR, "Considering primary %lu", (unsigned long)uid);
+
+    if (needs_renew(kcontext, cache, minleft)) {
+      // if this the first renewal for this user, create the temporary cache
+      if (!uident->primary_cc)
+	newrenewed(kcontext, cache, minleft, uid, uident);
+      renew(kcontext, cache, minleft);
+    }
+
+    krb5_cc_close(kcontext, cache);
+    cache = NULL;
   }
-
-  if (debug > 1)
-    mylog(LOG_ERR, "Considering primary %lu", (unsigned long)uid);
-
-  if (needs_renew(kcontext, cache, minleft)) {
-    // if this the first renewal for this user, create the temporary cache
-    if (!uident->primary_cc)
-      newrenewed(kcontext, cache, minleft, uid, uident);
-    renew(kcontext, cache, minleft);
-  }
-
-  krb5_cc_close(kcontext, cache);
-  cache = NULL;
 
   // now look in /tmp
 
