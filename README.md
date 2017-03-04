@@ -47,8 +47,9 @@ Policies need to be chosen carefully to support our goals. In particular, Kerber
 
 Many users stay logged in more or less forever. We don't want long ticket lifetimes, because that leaves their NFS
 connections exposed after they logout. So instead the plan is to expire in 1 hour, but have a daemon that
-renews tickets for anyone with a job currently running. The code currently supports only Linux KEYRING, because
-it's easier to make the process race-free that way. It could be extended to support other types with a bit of work
+renews tickets for anyone with a job currently running. The code currently supports the primary cache in KEYRING, and /tmp, because
+that's where rpc.gssd looks for tickets for use with NFS.
+
 
 ## credserv and kgetcred
 
