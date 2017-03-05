@@ -722,12 +722,17 @@ void renewallpass1(krb5_context ctx, time_t minleft) {
   struct uid_info *uident = uidlist;
   int i;
 
+  // it seems most efficient to build a list of everthing in /tmp
+  // once. Processing each UID picks out different files, but no
+  // need to do the directory read again for each UID.
+
   numdirs = scandir("/tmp", &namelist, NULL, alphasort);
   if (numdirs < 0) {
     mylog(LOG_ERR, "Couldn't scan /tmp");
     namelist = NULL;
   }
 
+  // now for each active UID, renew caches for that UID
   while (uident) {
     uid_t uid;
     uid = atol(uident->key);
@@ -737,6 +742,7 @@ void renewallpass1(krb5_context ctx, time_t minleft) {
     uident = uident->next_item;
   }
 
+  // and free files in /tmp
   if (namelist) {
     for (i = 0; i < numdirs; i++) {
       free(namelist[i]);
@@ -836,7 +842,7 @@ int main(int argc, char *argv[])
   }
 
   chdir("/tmp"); // should be irrelevant. but just in case
-  umask(027); // just to get something known, we shouldn't actually create any files
+  umask(077); // just to get something known; we don't create any files
 
   err = krb5_init_context(&context);
   if (err) {
