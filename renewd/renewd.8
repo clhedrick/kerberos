@@ -9,7 +9,7 @@ renewd \- renew Kerberos credentials for all users automatically
 renews credentials for all users with processes currently active.
 It is part of a specific strategy to keep users from losing credentials
 or NFS access. The design of sshd, login, libkrb5 and rpc.gssd do
-not allow for completely transparent use of Kerberos with agreeing on
+not allow for completely transparent use of Kerberos without agreeing on
 some rules.
 .PP 
 Because multiple login sessions (particularly via sshd) can share the 
@@ -17,7 +17,7 @@ same credemtials, you don't do kdestroy on logout, nor can you allow sshd
 to do it via GSSAPICleanupCredentials. To avoid having credentials hang
 out too long, we are going to set ticket_lifetime in krb5.conf fairly short.
 The default parameters for renewd assume it's about an hour. That way
-credentials will go away without an hour after logout, but will be renewed
+credentials will go away within an hour after logout, but will be renewed
 automatically while you're logged in.
 .PP 
 If we can be sure that credentaisl won't be destroyed, then renewd
@@ -57,7 +57,8 @@ to 50 minutes, which is appropriate for a default ticket lifetime of 1 hour.
 .PP
 renewd normally detaches from the terminal, and logs to syslog.
 If -d is supplied it remains attached to the terminal, and prints
-debug and error messasges there.
+debug and error messasges there. -d can be given more than once
+to increase the level of debugging.
 .PP
 renewd must run as root. Most Kerberos operations are performed as
 the user that owns the cache.
