@@ -53,7 +53,7 @@ that's where rpc.gssd looks for tickets for use with NFS.
 
 ## credserv and kgetcred
 
-What do we do abotu users who need to run cron jobs or daemons? Our students often have assignments that require
+What do we do about users who need to run cron jobs or daemons? Our students often have assignments that require
 this. THe usual answer is a keytable. But if someone becomes root, they can take anyone's keytable. And having a user's key table permanetly exposes them on all systems.
 
 So instead the plan is to have them register a keytab on a central server (through a web application) and specify the
@@ -63,6 +63,8 @@ I can think of.
 
 kgetcred -a also simulations kinit -n. It gets credentials for an unprivileged user. This can be used for kinit -T,
 to support two factor kinit.
+
+[As of March 8 the protocol changes, to support administrative operations for setting up credentials and authorizations on the server. This is a substantial change in both program.]
 
 ## skinit
 
