@@ -3,7 +3,7 @@
 kgetcred \- get Kerberos credentials from keytab stored on credserv server
 .SH SYNOPSIS
 .B kgetcred
-[ -d | -a]
+[ -d | -a | -l | -r] [principal]
 .SH DESCRIPTION
 .I  kgetcred
 is designed for cron jobs or services that need access to Kerberos
@@ -26,5 +26,16 @@ print debugging messages
 .B \-a
 get credentials for anonymous.user. Primarily intended for kinit -T, until IPA supports kinit -n.
 Requires a keytable for anonymous.user on the server.
+.B \-l
+list the hosts and principals that can be used by this user. Currently not supported for root, so the principal will
+always be the current user's primary one. User must be logged in with Kerberos credential.
+.B \-r
+register this current user to be able to use kgetcred on this host.
+To do this function, user must be logged in with Kerberos credential.
+.B \-u
+unregister this current user to be able to use kgetcred on this host.
+To do this function, user must be logged in with Kerberos credential.
+.B principal
+for root, a principal must be specified. Root can have multiple principals available for a host.
 .SH "SEE ALSO"
 credserv(8)

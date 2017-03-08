@@ -9,12 +9,21 @@ credserv \- provide Kerberos credentials from keytab stored to remote client
 is designed for cron jobs or services that need access to Kerberos
 credentials, but don't have an interactive user to supply them.
 Kgetcred sends a request to a credserv server. The server looks
-for a standard Kerberos keytab stores in a file of the form
-/var/credserv/user-host.cs.rutgers.edu.keytab, where the username
-is sent by kgetcred and the hostname is the host from which the
-request comes. (The name is normalized by a DNS lookup.) If a keytab
-exists and credentials can be built from it, they are returned to
-kgetcred, which puts them into the user's default credential cache.
+for a standard Kerberos keytab stores in a directory of the form
+/var/credserv/USER
+In each directory /var/credserv/USER there's a file INDEX with lines
+that look like
+.PP
+host:principal:flags
+.PP
+where flags is optional. Currently the only supported option is F, for
+forwardable. Each line indicatest that the user is permitted to 
+get credentials for that principal on that host. The F option indicates
+that the credentials should be forwardable. 
+.PP
+Each distinct principal will have a corresponding keytab in the same directory.
+The keytab will be in a file whose name is the whole principal, including domain.
+There's no extension on the file, just the principal name.
 .PP
 Because anonymous kinit isn't supported on all systems yet, and it's
 needed to armor requests for one-time passwords, this service
@@ -24,24 +33,9 @@ This user should be added to the system with a random password. It should
 not have any privileges, and shouldn't be allowed to login anywhere.
 (This username is built into both kgetcred and credserv.)
 .PP
-Normally the keytab must contain credentials for the specific user.
-However for root, the principal is taken from the keytab itself.
-The assumption is that root cronjobs will run with a principal
-that has just those privileges needed for jobs on that host.
-Obviously whatever process you use to store keytabs for this service
-should make sure that root keytabs aren't set up by unauthorized people.
-.PP
-There's one subtle difference between credentials returned for root
-and non-root. For non-root users the credentials are not forwardable.
-We intend this to be used primarily to get access to files over
-Kerberized NFS, in cron jobs. That doesn't require forwardable credentials, 
-and making them forwardable would let someone who becomes root use the
-credentials to get access to other systems. However for root, the credentials
-are forwardable. That's because we use root cron jobs to do things with
-freeipa, and they require forwardable credentials. They are for a principal
-that can't login, so you can't use ssh to forward them to another system.
-In the future we'll probably make handling of root credentials more
-configurable.
+The code currently assumes that only root can request a specific
+principal. Normal users just get their corresponding principal in the default realm.
+Root must specific a particular principal, since more than one can be authorized.
 .PP
 Credserv normally detaches from the terminal, and logs to syslog.
 If -d is supplied it remains attached to the terminal, and prints
