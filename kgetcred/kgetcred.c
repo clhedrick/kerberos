@@ -128,13 +128,14 @@ main(int argc, char *argv[])
     char *service = "credserv";
     krb5_creds ** creds = NULL;
     krb5_replay_data replay;
-    char hostname[1024];
+    char realhost[1024];
+    char *hostname = NULL;
     char *principal = NULL;
     char princbuf[1024];
     struct hostent* host;
     krb5_keytab hostkeytab;
     krb5_creds hostcreds;
-    char *username;
+    char *username = NULL;
     long written;
     FILE *conffile;
     char *serverhost = NULL;
@@ -146,13 +147,16 @@ main(int argc, char *argv[])
     unsigned debug = 0;
     int anonymous = 0;
     int ch;
+    char *clientname = NULL;
+    int prived = 0;
+    char *flags = "";
 
     /*
      * Parse command line arguments
      *
      */
     opterr = 0;
-    while ((ch = getopt(argc, argv, "dalru")) != -1) {
+    while ((ch = getopt(argc, argv, "dalruPU:F:H:")) != -1) {
         switch (ch) {
         case 'd':
             debug++;
@@ -169,8 +173,20 @@ main(int argc, char *argv[])
         case 'u':
             op = 'U';
             break;
+        case 'P':
+            prived = 1;
+            break;
+        case 'U':
+            username = optarg;
+            break;
+        case 'F':
+            flags = optarg;
+            break;
+        case 'H':
+            hostname = optarg;
+            break;
         default:
-            printf("-d debug, -a get anonymous ticket\n");
+            printf("-d debug, -a get anonymous ticket, -l list, -r register, -u unregister; -P prived user, -U user to operate on, -F flags, -H hostname for entry\n");
             exit(1);
             break;
         }
@@ -228,20 +244,39 @@ main(int argc, char *argv[])
         exit(1);
     }
 
-    hostname[sizeof(hostname)-1] = '\0';
-    gethostname(hostname, sizeof(hostname)-1);
-    host = gethostbyname(hostname);
+    realhost[sizeof(realhost)-1] = '\0';
+    gethostname(realhost, sizeof(realhost)-1);
+    host = gethostbyname(realhost);
     if (host == NULL) {
         fprintf(stderr, "hostname %s not found\n", hostname);
         exit(1);
     }
     
+    if (hostname == NULL)
+        hostname = realhost;
+
     if ((retval = krb5_get_default_realm(context, &default_realm))) {
         com_err(NULL, retval, "unable to get default realm");
         exit(1);
     }
 
-    if (op == 'G' || getuid() == 0) {
+    pwd = getpwuid(getuid());
+    if (!pwd) {
+        fprintf(stderr, "Can't find current user\n");
+        exit(1);
+    }
+
+    // username user the action applies to, not necesarily the one we will authenticate as
+    if (!username) {
+        if (anonymous)
+            username = "anonymous.user";
+        else
+            username = pwd->pw_name;
+    }
+
+    if (op == 'G') {
+        // use host credentials
+
         // FQ hostname is now host->h_name
 
         if ((retval = krb5_build_principal(context, &client, strlen(default_realm), default_realm, "host", host->h_name, NULL))) {
@@ -274,8 +309,50 @@ main(int argc, char *argv[])
             exit(1);
         }
 
-    } else {
+    } else if (op != 'L' && !prived) {
+        // for prived user we have to use existing credentials, because they will be one-time and we can't deal with that
+        krb5_get_init_creds_opt *opts = NULL;
+        krb5_creds usercreds;
 
+        if (!clientname)
+            clientname = pwd->pw_name;
+
+        if ((retval = krb5_build_principal(context, &client, strlen(default_realm), default_realm, clientname, NULL))) {
+            com_err(NULL, retval, "unable to make principal from your username");
+            exit(1);
+        }
+
+        if ((retval = krb5_get_init_creds_opt_alloc(context, &opts))) {
+            com_err(NULL, retval, "unable to set up to get your password");
+            exit(1);
+        }
+
+        krb5_get_init_creds_opt_set_tkt_life(opts, 60); // no need to keep them around for long
+        krb5_get_init_creds_opt_set_renew_life(opts, 0);
+        krb5_get_init_creds_opt_set_forwardable(opts, 0);
+        krb5_get_init_creds_opt_set_proxiable(opts, 0);
+
+        if ((retval = krb5_get_init_creds_password(context, &usercreds, client, NULL, krb5_prompter_posix, NULL,
+                                                   0, NULL, opts))) {
+            if (retval == KRB5KRB_AP_ERR_BAD_INTEGRITY)
+                com_err(NULL, 0, "Password incorrect -- note that if you are using a one-time password this utility can't work");
+            else
+                com_err(NULL, retval, "getting initial ticket");
+            exit(1);
+        }
+
+        if ((retval = krb5_cc_new_unique(context, "MEMORY", "/tmp/kkkk", &ccache))) {
+            com_err(NULL, retval, "unable to make credentials file for host");
+            exit(1);
+        }
+
+        if ((retval = krb5_cc_store_cred(context, ccache, &usercreds))) { 
+            com_err(NULL, retval, "unable to store your credentials in cache");
+            exit(1);
+        }
+
+    } else {
+        // L in default cause. use existing ccache
         if ((retval = krb5_cc_default(context, &ccache))) {
             com_err(NULL, retval, "can't get your Kerberos credentials");
             exit(1);
@@ -284,24 +361,13 @@ main(int argc, char *argv[])
         if ((retval = krb5_cc_get_principal(context, ccache, &client))) {
             com_err(NULL, retval, "can't get principal from your Kerberos credentials");
             exit(1);
-        }        
-
+        }
     }
 
     // drop privs as soon as possible
     // we ignore all user input so it's not clear how you'd exploit this program, but still, be safe
     setregid(getgid(), getgid());
     setreuid(getuid(), getuid());
-
-    pwd = getpwuid(getuid());
-    if (!pwd) {
-        fprintf(stderr, "Can't find current user\n");
-        exit(1);
-    }
-    if (anonymous)
-        username = "anonymous.user";
-    else
-        username = pwd->pw_name;
 
     (void) signal(SIGPIPE, SIG_IGN);
 
@@ -443,6 +509,7 @@ main(int argc, char *argv[])
         snprintf(princbuf, sizeof(princbuf) -1, "%s@%s", principal, default_realm);
         principal = princbuf;        
     }
+
     xmitlen = htons(strlen(principal));
     if ((written = write(sock, (char *)&xmitlen,
                         sizeof(xmitlen))) < 0) {
@@ -460,6 +527,40 @@ main(int argc, char *argv[])
     if (debug)
         fprintf(stderr, "write %lu\n", strlen(principal));
 
+    xmitlen = htons(strlen(flags));
+    if ((written = write(sock, (char *)&xmitlen,
+                        sizeof(xmitlen))) < 0) {
+        fprintf(stderr, "write failed 1\n");
+        exit(1);
+    }
+    if (debug)
+        fprintf(stderr, "write %lu\n", sizeof(xmitlen));
+    if ((written = write(sock, (char *)flags,
+                                 strlen(flags))) < 0) {
+        fprintf(stderr, "write failed 2\n");
+        exit(1);
+    }
+
+    if (debug)
+        fprintf(stderr, "write %lu\n", strlen(hostname));
+
+    xmitlen = htons(strlen(hostname));
+    if ((written = write(sock, (char *)&xmitlen,
+                        sizeof(xmitlen))) < 0) {
+        fprintf(stderr, "write failed 1\n");
+        exit(1);
+    }
+    if (debug)
+        fprintf(stderr, "write %lu\n", sizeof(xmitlen));
+    if ((written = write(sock, (char *)hostname,
+                                 strlen(hostname))) < 0) {
+        fprintf(stderr, "write failed 2\n");
+        exit(1);
+    }
+
+    if (debug)
+        fprintf(stderr, "write %lu\n", strlen(hostname));
+
     krb5_free_principal(context, server);       /* finished using it */
     krb5_free_principal(context, client);
 
@@ -467,7 +568,10 @@ main(int argc, char *argv[])
     //    if (auth_context) krb5_auth_con_free(context, auth_context);
 
     if (retval && retval != KRB5_SENDAUTH_REJECTED) {
-        com_err(argv[0], retval, "while using sendauth");
+        if (retval == KRB5KRB_AP_ERR_BADADDR)
+            fprintf(stderr, "The official error message is \"Incorrect net address\", but this is usuallly caused when you don't have valid kerberos credentials\n");
+        else
+            com_err(argv[0], retval, "while using sendauth");
         exit(1);
     }
 

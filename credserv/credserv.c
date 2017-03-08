@@ -55,12 +55,16 @@
 #include <netdb.h>
 #include <syslog.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 
 #include "sample.h"
+
+#define CONFFILE "/etc/credserv.conf"
+// contains privileged principals
 
 extern krb5_deltat krb5_clockskew;
 
@@ -137,9 +141,66 @@ void mylog (int level, const char *format, ...) {
     va_end(args);
 }
 
+int isprived(char *principal);
+
+// read the file here, since this is only called once per
+// transaction, for transactions that aren't expected to be
+// very common.
+int isprived(char *principal) {
+    FILE *conffile;
+    char line[1024];
+
+    conffile = fopen(CONFFILE, "r");
+    if (!conffile) {
+        mylog(LOG_ERR, "can't read %s", CONFFILE);
+        return 0;
+    }
+
+    while (fgets(line, sizeof(line), conffile)) {
+        if (line[strlen(line)-1] == '\n')
+            line[strlen(line)-1] = '\0';
+        if (strcmp(principal, line) == 0) {
+            mylog(LOG_DEBUG, "%s is privileged", principal);
+            fclose(conffile);
+            return 1;
+        }
+    }
+    fclose(conffile);
+    return 0;
+}
+
+int isrecent(krb5_ticket *ticket);
+
+int isrecent(krb5_ticket *ticket) {
+    time_t now;
+
+    krb5_ticket_times times;
+
+    if (ticket->enc_part2 == NULL) {
+        mylog(LOG_ERR, "decrypted ticket not available");
+        return 1;
+    }
+
+    now = time(0);
+    times = ticket->enc_part2->times;
+
+    // we want to make sure that the user got fresh credentials,
+    // so root can't use something lying around. 30 sec allows
+    // for some clock skew and processing time. Shorter might be
+    // better.
+    if ((now - times.authtime) > 30) {
+        mylog(LOG_ERR, "ticket is too old");
+        return 0;
+    }
+
+    return 1;
+
+}
+
 char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *data);
 char *listcreds(krb5_context context, krb5_auth_context  auth_context, char * username, char *principal, char *hostname, krb5_data *data, char *cname);
-char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *outdata, char *clientp);
+char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char * flags);
+char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket);
 
 int
 main(int argc, char *argv[])
@@ -170,6 +231,8 @@ main(int argc, char *argv[])
     char *username;
     char *principal;
     char *hostname;
+    char *flags;
+    char *realhost;
     krb5_creds usercreds;
     krb5_data data;
     char *errmsg = GENERIC_ERR;
@@ -396,6 +459,50 @@ main(int argc, char *argv[])
     }
     principal[xmitlen] = '\0';
 
+    // flags
+    if ((retval = net_read(sock, (char *)&xmitlen,
+                           sizeof(xmitlen))) <= 0) {
+        if (retval == 0)
+            errno = ECONNABORTED;
+        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
+        exit(1);
+    }
+    xmitlen = ntohs(xmitlen);
+    if (!(flags = (char *)malloc((size_t) xmitlen + 1))) {
+        mylog(LOG_ERR, "no memory while allocating buffer to read from client");
+        exit(1);
+    }
+    if (xmitlen > 0) {
+        if ((retval = net_read(sock, (char *)flags,
+                               xmitlen)) <= 0) {
+            mylog(LOG_ERR, "connection abort while reading data from client");
+            exit(1);
+        }
+    }
+    flags[xmitlen] = '\0';
+
+    // hostname
+    if ((retval = net_read(sock, (char *)&xmitlen,
+                           sizeof(xmitlen))) <= 0) {
+        if (retval == 0)
+            errno = ECONNABORTED;
+        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
+        exit(1);
+    }
+    xmitlen = ntohs(xmitlen);
+    if (!(hostname = (char *)malloc((size_t) xmitlen + 1))) {
+        mylog(LOG_ERR, "no memory while allocating buffer to read from client");
+        exit(1);
+    }
+    if (xmitlen > 0) {
+        if ((retval = net_read(sock, (char *)hostname,
+                               xmitlen)) <= 0) {
+            mylog(LOG_ERR, "connection abort while reading data from client");
+            exit(1);
+        }
+    }
+    hostname[xmitlen] = '\0';
+
     mylog(LOG_DEBUG, "operation %c for user %s principal %s from host %s", op, username, principal, inet_ntoa(peername.sin_addr));
 
     /* Get client name */
@@ -452,23 +559,25 @@ main(int argc, char *argv[])
         *hostend = '@';  // put back punctuation so we have the whole principal again
         *hoststart = '/';
         // normalized name
-        hostname = host->h_name;
+        realhost = host->h_name;
     } else {
         //all we have is an ip address. just do reverse lookup
         if (getnameinfo((struct sockaddr *)&peername, namelen, hostbuf, sizeof(hostbuf), NULL, 0, NI_NAMEREQD)) {
             mylog(LOG_ERR, "can't find hostname from IP %m");
             goto cleanup;
         }        
-        hostname = hostbuf;
+        realhost = hostbuf;
     }
     // end principal check
 
     if (op == 'G') 
-        errmsg = getcreds(context, auth_context, username, principal, hostname, &data);
+        errmsg = getcreds(context, auth_context, username, principal, realhost, &data);
     else if (op == 'L') 
-        errmsg = listcreds(context, auth_context, username, principal, hostname, &data, cname);
+        errmsg = listcreds(context, auth_context, username, principal, realhost, &data, cname);
     else if (op == 'R') 
-        errmsg = registercreds(context, auth_context, username, principal, hostname, &data, cname);
+        errmsg = registercreds(context, auth_context, username, principal, hostname, realhost, &data, cname, ticket, flags);
+    else if (op == 'U') 
+        errmsg = unregistercreds(context, auth_context, username, principal, hostname, realhost, &data, cname, ticket);
 
     if (errmsg == NULL) {
         char status[1];
@@ -752,7 +861,9 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
     // moment is that principal in the default realm;
 
     snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
-    if (strcmp("root", username) == 0) {
+    if (isprived(clientp)) {
+        ;  // allow anything
+    } else if (strcmp("root", username) == 0) {
         // at some point we'll verify that the user is authenticated as an admin
         // without that I think it's a bad idea to let root on any user see what root
         // can do, particularly on all machines
@@ -863,6 +974,9 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
         }
     }
     
+    if (strlen(outstring) == 0)
+        outstring = "\n";
+
     outdata->data = outstring;
     outdata->length = strlen(outstring);
     return NULL;
@@ -874,7 +988,7 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
 // in the long run, privileged principals can see anyone.
 
 char *
-registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *outdata, char *clientp) {
+registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char *flags) {
 
     char *default_realm = NULL;
     char buffer[1024];
@@ -894,7 +1008,9 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     // The only valid principal to request it for the moment is that principal in the default realm;
 
     snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
-    if (strcmp("root", username) == 0) {
+    if (isprived(clientp)) {
+        ;  // allow anything
+    } else if (strcmp("root", username) == 0) {
         // at some point we'll verify that the user is authenticated as an admin
         // without that I think it's a bad idea to let root on any user see what root
         // can do, particularly on all machines
@@ -903,8 +1019,14 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         // non-root, user must agree with authenticated principal
         mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
         return GENERIC_ERR;
+    } else if (!isrecent(ticket)) {
+        mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
+        return "Your credentials are too old. Is your computer not synchronized?";
     } else {
-        // everything matches
+        // normal user can't set flags
+        flags = "";
+        // and they get the real host
+        hostname = realhost;
     }
 
     // file containing authorizations
@@ -948,6 +1070,8 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     }
 
     if (!found) {
+        int wrote;
+
         mylog(LOG_DEBUG, "user %s principal %s host %s not in INDEX, adding", username, principal, hostname);
         // just in case. these will fail silently if the directories exist
         mkdir("/var/credserv", 0755);
@@ -963,7 +1087,11 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
             mylog(LOG_DEBUG, "unable to open INDEX file for %s to add entry", username);
             return "unable to open INDEX file for user";
         }
-        if (fprintf(indexf, "%s:%s\n", hostname, principal) <= 0) {
+        if (strcmp(flags, "") != 0)
+            wrote = fprintf(indexf, "%s:%s:%s\n", hostname, principal, flags);
+        else
+            wrote = fprintf(indexf, "%s:%s\n", hostname, principal);
+        if (wrote <= 0) {
             mylog(LOG_DEBUG, "unable to write new entry in INDEX file for %s", username);
             return "unable to add entry ton INDEX file";
         }
@@ -1016,6 +1144,175 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     }
 
     mylog(LOG_ERR, "added %s %s to INDEX of %s, with new keytab", hostname, principal, username);
+
+    outdata->data = "ok\n";
+    outdata->length = 3;
+    return NULL;
+
+}
+
+// register credentials for user username.
+// cname is the principal that they are authenticated as. For the moment just support principal and username match
+// in the long run, privileged principals can see anyone.
+
+char *
+unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket) {
+
+    char *default_realm = NULL;
+    char buffer[1024];
+    char newname[1024];
+    char line[1024];
+    char removeline[1024];
+    int r;
+    FILE *indexf;
+    FILE *newf;
+    int found = 0;
+    int principal_found = 0;
+
+    if ((r = krb5_get_default_realm(context, &default_realm))) {
+        mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
+        return GENERIC_ERR;
+    }
+    
+    // user has asked to register credentials for username and principal on host they came from.
+    // The only valid principal to request it for the moment is that principal in the default realm;
+
+    snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
+    if (isprived(clientp)) {
+        ;  // allow anything
+    } else if (strcmp("root", username) == 0) {
+        // at some point we'll verify that the user is authenticated as an admin
+        // without that I think it's a bad idea to let root on any user see what root
+        // can do, particularly on all machines
+        return "Currently we don't support this function for root";
+    } else if (strcmp(buffer, clientp) != 0 || strcmp(buffer, principal) != 0) {
+        // non-root, user must agree with authenticated principal
+        mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
+        return GENERIC_ERR;
+    } else if (!isrecent(ticket)) {
+        mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
+        return "Your credentials are too old. Is your computer not synchronized?";
+        // everything matches
+    } else {
+        // normal user gets real host
+        hostname = realhost;
+    }
+
+    // file containing authorizations
+    snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/INDEX", username);
+    indexf = fopen(buffer, "r");
+
+    // see if it already exists
+    if (indexf) {
+        while (fgets(line, sizeof(line), indexf)) {
+            char *ch, *princp;
+        
+            // if ends in \n, kill the \n
+            if (line[strlen(line)-1] == '\n')
+                line[strlen(line)-1] = '\0';
+
+            // first item is host
+            ch = strchr(line, ':');
+            if (!ch)
+                continue;
+            *ch = '\0';
+            // line is now host
+
+            princp = ch+1;
+            // next item is principal
+            ch = strchr(princp, ':');
+            // end of line is OK
+            if (ch)
+                *ch = '\0';
+            // princp is now principal
+        
+            if (strcmp(princp,principal) != 0)
+                continue;
+            
+            if (strcmp(line,hostname) != 0) {
+                // principal found for something other than specified host
+                // that means we still need it
+                principal_found = 1;
+                continue;
+            }
+
+            // both principal and host match. found the actual entry
+            found = 1;
+            break;
+        }
+        fclose(indexf);
+    }
+
+    if (found) {
+        // need to delete entry. copying index to new location then rename
+
+        snprintf(removeline, sizeof(removeline)-1, "%s:%s", hostname, principal);
+        // buffer still has real index name
+        indexf = fopen(buffer, "r");
+        if (!indexf) {
+            mylog(LOG_ERR, "unable to open INDEX file for %s to remove entry", username);
+            return "unable to open INDEX file for user";
+        }
+        snprintf(newname, sizeof(buffer)-1, "/var/credserv/%s/INDEX.%lu", username, (unsigned long) getpid());
+        newf = fopen(newname, "w");
+        if (!indexf) {
+            mylog(LOG_ERR, "unable to open new copy of INDEX file for %s to remove entry", username);
+            unlink(newname);
+            return "unable to open new copy of INDEX file for user";
+        }
+        while (fgets(line, sizeof(line), indexf)) {
+            char *cp;
+            int colons = 0;
+            
+            int length = strlen(line);
+        
+            // for this loop, we can't change the line because we're going to have
+            // to write it back out
+
+            if (line[length-1] == '\n')
+                length--;
+            
+            // if we have a third : just compare up to it
+            for (cp = line; *cp; cp++) {
+                if (*cp == ':') {
+                    colons ++;
+                }
+                if (colons == 2) {
+                    length = (cp - line);
+                    break;
+                }
+            }
+            
+            if (strncmp(line, removeline, length) != 0) {
+                if (fputs(line, newf) <= 0) {
+                    unlink(newname);
+                    mylog(LOG_ERR, "write to new copy of INDEX file failed");
+                    return "error writing new INDEX file, removal has not happened";
+                }
+            }
+        }
+        fclose(indexf);
+        fclose(newf);
+
+        if (rename(newname, buffer)) {
+            unlink(newname);
+            mylog(LOG_ERR, "rename of %s to %s failed", newname, buffer);
+            return "unable to put new INDEX file into position; removal has not happened";
+        }
+
+        mylog(LOG_DEBUG, "removed INDEX entry user %s principal %s host %s", username, principal, hostname);
+
+    } else {
+        mylog(LOG_DEBUG, "user %s principal %s host %s not in INDEX, no need to remove", username, principal, hostname);
+    }
+
+    if (!principal_found) {
+        // principal not in use by other hosts
+        snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/%s", username, principal);
+        unlink(buffer);
+        mylog(LOG_DEBUG, "removed keytab for %s", principal);
+        // failure isn't fatal, just leaves a file aroudn
+    }
 
     outdata->data = "ok\n";
     outdata->length = 3;

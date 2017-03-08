@@ -21,6 +21,8 @@ forwardable. Each line indicatest that the user is permitted to
 get credentials for that principal on that host. The F option indicates
 that the credentials should be forwardable. 
 .PP
+* in the host field will apply to all hosts
+.PP
 Each distinct principal will have a corresponding keytab in the same directory.
 The keytab will be in a file whose name is the whole principal, including domain.
 There's no extension on the file, just the principal name.
@@ -33,30 +35,42 @@ This user should be added to the system with a random password. It should
 not have any privileges, and shouldn't be allowed to login anywhere.
 (This username is built into both kgetcred and credserv.)
 .PP
-The code currently assumes that only root can request a specific
-principal. Normal users just get their corresponding principal in the default realm.
-Root must specific a particular principal, since more than one can be authorized.
-.PP
 Credserv normally detaches from the terminal, and logs to syslog.
 If -d is supplied it remains attached to the terminal, and prints
 debug and error messasges there.
 .PP
-Kgetcred must authenticate itself to the server using the client's
-host principal, from /etc/krb5.keytab. (To read it, kgetcred must
-run setuid root. It drops privileges as soon as it has read that file.)
+Kgetcred can authenticate itself in several ways: for getting
+credentials (the default operation), it uses the client's
+host principal, from /etc/krb5.keytab. For other operations it uses the the user's own credentials. Privileged
+users may kinit as an admin principal.
 .PP
-Credserv verifies that the hostname in the principal matches the IP
+Where host prnicipals are used, 
+credserv verifies that the hostname in the principal matches the IP
 address from which the request came.
 .PP
-We assume that key tables are stored on the server in some separate 
-process, e.g. a web application.
+Kgetcred can also register and unregister principals. Privileged
+users (principals listed in /etc/credserv.conf) may change any
+user. The protocol allows user, principal and flags to be passed.
+But unprivileged users must have user and principal match the
+principal by which they are authenticated, and they may not
+specify flags.
 .PP
 NOTE: You must make a service principal for credserv/HOST on the server
 and add it to /etc/krb5.keytab.
-.SH OPTIONS
+.SH "OPTIONS"
 .TP
 .B \-d
 do not detach, and print debugging messages
 .SH "SEE ALSO"
 kgetcred(1)
+.SH "IMPLEMENTATION NOTES"
+Currently the code isn't designed to handle a redundant server. That would be
+easy to add, but you'd need to synchronize data on the two servers.
+.PP
+Currently credserv must be run on the Kerberos server, because it uses
+kadmin.local to generate keytabs. This restriction could be removed if the
+client sent the user's password to the server. Then ktutil could be
+used to make keytabs. However the password would need to be encrypted,
+and I'm not convinced I'm competent to do that design.
+
 
