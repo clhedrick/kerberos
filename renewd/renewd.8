@@ -6,8 +6,13 @@ renewd \- renew Kerberos credentials for all users automatically
 [-w waittime][ -d ]
 .SH DESCRIPTION
 .I  renewd
-renews credentials for all users with processes currently active.
-It is part of a specific strategy to keep users from losing credentials
+renews credentials. It only watches credentials that have been
+specifically registered. pam_reg_cc can be used to register 
+credentials. Registration is done using a session key (with keyctl).
+Thus when the session is finished, the credentials are automatically
+removed from being watched.
+.PP
+This is part of a specific strategy to keep users from losing credentials
 or NFS access. The design of sshd, login, libkrb5 and rpc.gssd do
 not allow for completely transparent use of Kerberos without agreeing on
 some rules.
@@ -24,33 +29,10 @@ If we can be sure that credentaisl won't be destroyed, then renewd
 can simply keep renewing all active credentials while the user still
 has a session alive, with one exception: 
 .PP
-Because reading and writing credential files is not atomic, there is
-a period during renewal when the credentials are not valid. In principle
-that could cause trouble to NFS. In practice it probably won't, because
-NFS only reevaluates the credentials when they expire. However for safety's
-sake, before renewing the first cache for a given user, we create
-a temporary cache in /tmp/krb5cc_NNN-renew, with renewed credentials.
-That temporary cache is deleted 1 minute after renewd finishes its renewals.
-.PP
-For NFS to work reliably I suggest the following conventions:
-.PP
-All interactive should use the default,
-which is KEYRING:persistent:UID. That will mean they all share one
-credential file, the primary. They should not do kdestroy or otherwise
-destroy the file at logout unless you're sure there's only one sessoin.
-.PP
-Cron jobs can share this. The easiest way is to start them
-with kgetcred without setting KRB5CCNAME. However if you want
-a cron job (or even a session) to use a different credential file,
-it should be in /tmp, named /tmp/krb5cc_NNN
-or /tmp/krb5cc_NNN_XXX, where NNN is the user's UID. XXX can be anything
-(including the normal 6-character random sequence). Credentials in
-/tmp should be kdestroyed at the end of the session or job.
-.PP
-For this to work, renewd has to renew the primary cache in KEYRING,
-and all caches matching /tmp/krb5cc_NNN[_XXX].
-Initially we're not going to remove expired caches (though I'm 
-considering that), but a normal /tmp file pruner can do that.
+For NFS to work reliably credentials must be either the primary
+credential in KEYRING:persistebt:UID, or they must be in a file
+in /tmp owned by the user. We're currently using KEYRING for
+interaction logins, and files in /tmp for cron jobs.
 .PP
 waittime is the amount of time between successive runs. It defaults
 to 50 minutes, which is appropriate for a default ticket lifetime of 1 hour.

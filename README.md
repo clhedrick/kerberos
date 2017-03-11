@@ -47,22 +47,28 @@ Policies need to be chosen carefully to support our goals. In particular, Kerber
 
 Many users stay logged in more or less forever. We don't want long ticket lifetimes, because that leaves their NFS
 connections exposed after they logout. So instead the plan is to expire in 1 hour, but have a daemon that
-renews tickets for anyone with a job currently running. The code currently supports the primary cache in KEYRING, and /tmp, because
-that's where rpc.gssd looks for tickets for use with NFS.
-
+renews tickets for anyone with a job currently running. The code currently renews only caches that have been registered
+in the session keyring using either pam_reg_cc (whose only purpose is register the current cache) or pam_kgetcred (which
+is intended for use with cron to get a credential cache and register it). The session keyring is automatically deleted
+at the end of the session, so this saves us from having to track sessions.
 
 ## credserv and kgetcred
 
 What do we do abotu users who need to run cron jobs or daemons? Our students often have assignments that require
 this. THe usual answer is a keytable. But if someone becomes root, they can take anyone's keytable. And having a user's key table permanetly exposes them on all systems.
 
-So instead the plan is to have them register a keytab on a central server (through a web application) and specify the
+So instead the plan is to have them register a keytab on a central server, using the administrative
+functions of kgetcred, specifyibg the
 host where they'll be using a cron job. credserv / kgetcred will generate credentials based on the keytab and
 put it on their system. They will be locked to an ip address and not forwardable. This is about the best protection
 I can think of.
 
 kgetcred -a also simulations kinit -n. It gets credentials for an unprivileged user. This can be used for kinit -T,
 to support two factor kinit.
+
+In most cases users won't need to call kgetcred to get credentials. We expect that pam_kgetcred will be used
+for crond.
+
 
 ## skinit
 
@@ -73,6 +79,15 @@ and uses it to armor
 the request. Arguments are just passed on to the main kinit call. 
 
 If your setup supports kinit -n, you might prefer to use that rather than kgetcred -a.
+
+## pam_kgetcred
+
+This effectively calls kgetcred with default arguments, using a cache name of /tmp/krb5cc_UID_cron.
+It also sets KRB5CCNAME to the cache name, and registers it for renewd
+
+## pam_reg_cc
+
+This registers the value of KRB5CCNAME (if any) so that renewd will renew it. 
 
 ## pam
 

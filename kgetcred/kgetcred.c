@@ -45,6 +45,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <syslog.h>
+#include <wait.h>
 
 #include <signal.h>
 
@@ -63,6 +65,27 @@
 #ifdef MAC
 extern char** environ;
 #endif
+
+#ifdef PAM
+#include <security/pam_ext.h>
+static pam_handle_t *pam_handle;
+#endif
+
+static void mylog (int level, const char *format, ...)  __attribute__ ((format (printf, 2, 3)));
+static void mylog (int level, const char *format, ...) {
+  va_list args;
+  va_start (args, format);
+
+#ifdef PAM
+  pam_vsyslog(pam_handle, level, format, args);
+#else
+  vprintf(format, args);
+  printf("\n");
+#endif
+
+  va_end(args);
+}
+
 
 static int
 net_read(int fd, char *buf, int len)
@@ -106,9 +129,19 @@ net_read(int fd, char *buf, int len)
 */
 
 
-int
-main(int argc, char *argv[])
+#ifdef PAM
+int pam_kgetcred(char *krb5ccname, struct passwd * pwd);
+
+int pam_kgetcred(char *krb5ccname, struct passwd * pwd)
 {
+#else
+int main(int argc, char *argv[])
+{
+    char *krb5ccname = NULL;
+    int ch;
+    struct passwd * pwd;
+#endif
+
     struct addrinfo *ap, aihints, *apstart;
     int aierr;
     int sock;
@@ -131,7 +164,10 @@ main(int argc, char *argv[])
     char realhost[1024];
     char *hostname = NULL;
     char *principal = NULL;
+    int needrename = 0;
     char princbuf[1024];
+    char realname[1024];
+    char tempname[1024];
     struct hostent* host;
     krb5_keytab hostkeytab;
     krb5_creds hostcreds;
@@ -139,79 +175,79 @@ main(int argc, char *argv[])
     long written;
     FILE *conffile;
     char *serverhost = NULL;
-    size_t serverhostsize = 0;
-    char *cp;
-    struct passwd * pwd;
-    char *default_realm = NULL;
-    char *krb5ccname = NULL;
-    unsigned debug = 0;
-    int anonymous = 0;
-    int ch;
-    char *clientname = NULL;
-    int prived = 0;
-    char *flags = "";
+     size_t serverhostsize = 0;
+     char *cp;
+     char *default_realm = NULL;
+     unsigned debug = 0;
+     int anonymous = 0;
+     char *clientname = NULL;
+     int prived = 0;
+     char *flags = "";
 
-    /*
-     * Parse command line arguments
-     *
-     */
-    opterr = 0;
-    while ((ch = getopt(argc, argv, "dalruPU:F:H:")) != -1) {
-        switch (ch) {
-        case 'd':
-            debug++;
-            break;
-        case 'a':
-            anonymous++;
-            break;
-        case 'l':
-            op = 'L';
-            break;
-        case 'r':
-            op = 'R';
-            break;
-        case 'u':
-            op = 'U';
-            break;
-        case 'P':
-            prived = 1;
-            break;
-        case 'U':
-            username = optarg;
-            break;
-        case 'F':
-            flags = optarg;
-            break;
-        case 'H':
-            hostname = optarg;
-            break;
-        default:
-            printf("-d debug, -a get anonymous ticket, -l list, -r register, -u unregister; -P prived user, -U user to operate on, -F flags, -H hostname for entry\n");
-            exit(1);
-            break;
-        }
-    }
+     /*
+      * Parse command line arguments
+      *
+      */
+     opterr = 0;
+ #ifndef PAM
+     while ((ch = getopt(argc, argv, "dalruPU:F:H:")) != -1) {
+         switch (ch) {
+         case 'd':
+             debug++;
+             break;
+         case 'a':
+             anonymous++;
+             break;
+         case 'l':
+             op = 'L';
+             break;
+         case 'r':
+             op = 'R';
+             break;
+         case 'u':
+             op = 'U';
+             break;
+         case 'P':
+             prived = 1;
+             break;
+         case 'U':
+             username = optarg;
+             break;
+         case 'F':
+             flags = optarg;
+             break;
+         case 'H':
+             hostname = optarg;
+             break;
+         default:
+             mylog(LOG_ERR, "-d debug, -a get anonymous ticket, -l list, -r register, -u unregister; -P prived user, -U user to operate on, -F flags, -H hostname for entry");
+             exit(1);
+             break;
+         }
+     }
 
-    argc -= optind;
-    argv += optind;
+     argc -= optind;
+     argv += optind;
 
-    if (argc > 0)
-        principal = argv[0];
+     if (argc > 0)
+         principal = argv[0];
+ #endif
 
-    //    if (argc != 2 && argc != 3 && argc != 4) {
-    //        fprintf(stderr, "usage: %s <hostname> [port] [service]\n",argv[0]);
-    //        exit(1);
-    //    }
+     //    if (argc != 2 && argc != 3 && argc != 4) {
+     //        fprintf(stderr, "usage: %s <hostname> [port] [service]\n",argv[0]);
+     //        exit(1);
+     //    }
 
-    // do the stuff that needs privs first, then drop them
+     // do the stuff that needs privs first, then drop them
 
-    // Because we're setuid, get rid of anything the user has set up.
-    // The one exception is KRB5CCNAME, which we want
-    // because if he's got a cache it would be confusing to set up a
-    // different one. His programs probably wouldn't use it.
-    // Values will be put into the cache after changing to the user's 
+     // Because we're setuid, get rid of anything the user has set up.
+     // The one exception is KRB5CCNAME, which we want
+     // because if he's got a cache it would be confusing to set up a
+     // different one. His programs probably wouldn't use it.
+     // Values will be put into the cache after changing to the user's 
     // uid, so it should be safe.
 
+#ifndef PAM
     krb5ccname = getenv("KRB5CCNAME");
 #ifdef MAC
     environ = malloc(sizeof(char *));
@@ -219,18 +255,21 @@ main(int argc, char *argv[])
 #else
     clearenv();
 #endif
-    if (krb5ccname)
+    if (krb5ccname) {
         setenv("KRB5CCNAME", krb5ccname, 1);
+        krb5ccname = NULL;  // let environment variable handle it
+    }
+#endif
 
     conffile = fopen("/etc/kgetcred.conf", "r");
     if (conffile == NULL) {
-        fprintf(stderr, "Can't find /etc/kgetcred.conf\n");
+        mylog(LOG_ERR, "Can't find /etc/kgetcred.conf");
         exit(1);
     }
 
     getline(&serverhost, &serverhostsize, conffile);
     if (serverhost == NULL) {
-        fprintf(stderr, "/etc/kgetcred.conf is empty\n");
+        mylog(LOG_ERR, "/etc/kgetcred.conf is empty");
         exit(1);
     }
 
@@ -240,7 +279,7 @@ main(int argc, char *argv[])
 
     retval = krb5_init_context(&context);
     if (retval) {
-        com_err(argv[0], retval, "while initializing krb5");
+        mylog(LOG_ERR, "while initializing krb5 %s", error_message(retval));
         exit(1);
     }
 
@@ -248,7 +287,7 @@ main(int argc, char *argv[])
     gethostname(realhost, sizeof(realhost)-1);
     host = gethostbyname(realhost);
     if (host == NULL) {
-        fprintf(stderr, "hostname %s not found\n", hostname);
+        mylog(LOG_ERR, "hostname %s not found", hostname);
         exit(1);
     }
     
@@ -256,15 +295,17 @@ main(int argc, char *argv[])
         hostname = realhost;
 
     if ((retval = krb5_get_default_realm(context, &default_realm))) {
-        com_err(NULL, retval, "unable to get default realm");
+        mylog(LOG_ERR, "unable to get default realm %s", error_message(retval));
         exit(1);
     }
 
+#ifndef PAM    
     pwd = getpwuid(getuid());
     if (!pwd) {
-        fprintf(stderr, "Can't find current user\n");
+        mylog(LOG_ERR, "Can't find current user");
         exit(1);
     }
+#endif
 
     // username user the action applies to, not necesarily the one we will authenticate as
     if (!username) {
@@ -280,32 +321,31 @@ main(int argc, char *argv[])
         // FQ hostname is now host->h_name
 
         if ((retval = krb5_build_principal(context, &client, strlen(default_realm), default_realm, "host", host->h_name, NULL))) {
-            com_err(NULL, retval, "unable to make principal for this host");
+            mylog(LOG_ERR,"unable to make principal for this host %s", error_message(retval));
             exit(1);
         }
 
         if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &hostkeytab))) {
-            com_err(NULL, retval, "unable to get keytab for this host");
+            mylog(LOG_ERR, "unable to get keytab for this host %s", error_message(retval));
             exit(1);
         }
 
         if ((retval = krb5_get_init_creds_keytab(context, &hostcreds, client, hostkeytab, 0,  NULL, NULL))) {
-            com_err(NULL, retval, "unable to make credentials for host from keytab");
+            mylog(LOG_ERR, "unable to make credentials for host from keytab %s", error_message(retval));
             exit(1);
         }
 
         if ((retval = krb5_cc_new_unique(context, "MEMORY", "/tmp/jjjjj", &ccache))) {
-            com_err(NULL, retval, "unable to make credentials file for host");
+            mylog(LOG_ERR, "unable to make credentials file for host %s", error_message(retval));
             exit(1);
         }
 
         if ((retval = krb5_cc_initialize(context, ccache, client))) {
-            com_err(NULL, retval, "unable to initialized credentials file for host");                                                 
+            mylog(LOG_ERR, "unable to initialized credentials file for host %s", error_message(retval));
             exit(1);
         }                                                                                                                        
 
-        if ((retval = krb5_cc_store_cred(context, ccache, &hostcreds))) {                                                             
-            com_err(NULL, retval, "unable to store host credentials in cache");
+        if ((retval = krb5_cc_store_cred(context, ccache, &hostcreds))) {                                                                  mylog(LOG_ERR, "unable to store host credentials in cache %s", error_message(retval));
             exit(1);
         }
 
@@ -318,12 +358,12 @@ main(int argc, char *argv[])
             clientname = pwd->pw_name;
 
         if ((retval = krb5_build_principal(context, &client, strlen(default_realm), default_realm, clientname, NULL))) {
-            com_err(NULL, retval, "unable to make principal from your username");
+            mylog(LOG_ERR, "unable to make principal from your username %s", error_message(retval));
             exit(1);
         }
 
         if ((retval = krb5_get_init_creds_opt_alloc(context, &opts))) {
-            com_err(NULL, retval, "unable to set up to get your password");
+            mylog(LOG_ERR, "unable to set up to get your password %s", error_message(retval));
             exit(1);
         }
 
@@ -335,39 +375,41 @@ main(int argc, char *argv[])
         if ((retval = krb5_get_init_creds_password(context, &usercreds, client, NULL, krb5_prompter_posix, NULL,
                                                    0, NULL, opts))) {
             if (retval == KRB5KRB_AP_ERR_BAD_INTEGRITY)
-                com_err(NULL, 0, "Password incorrect -- note that if you are using a one-time password this utility can't work");
+                mylog(LOG_ERR, "Password incorrect -- note that if you are using a one-time password this utility can't work %s", error_message(retval));
             else
-                com_err(NULL, retval, "getting initial ticket");
+                mylog(LOG_ERR, "getting initial ticket %s", error_message(retval));
             exit(1);
         }
 
         if ((retval = krb5_cc_new_unique(context, "MEMORY", "/tmp/kkkk", &ccache))) {
-            com_err(NULL, retval, "unable to make credentials file for host");
+            mylog(LOG_ERR, "unable to make credentials file for host %s", error_message(retval));
             exit(1);
         }
 
         if ((retval = krb5_cc_store_cred(context, ccache, &usercreds))) { 
-            com_err(NULL, retval, "unable to store your credentials in cache");
+            mylog(LOG_ERR, "unable to store your credentials in cache %s", error_message(retval));
             exit(1);
         }
 
     } else {
         // L in default cause. use existing ccache
         if ((retval = krb5_cc_default(context, &ccache))) {
-            com_err(NULL, retval, "can't get your Kerberos credentials");
+            mylog(LOG_ERR, "can't get your Kerberos credentials %s", error_message(retval));
             exit(1);
         }
 
         if ((retval = krb5_cc_get_principal(context, ccache, &client))) {
-            com_err(NULL, retval, "can't get principal from your Kerberos credentials");
+            mylog(LOG_ERR, "can't get principal from your Kerberos credentials %s", error_message(retval));
             exit(1);
         }
     }
 
     // drop privs as soon as possible
     // we ignore all user input so it's not clear how you'd exploit this program, but still, be safe
+#ifndef PAM   
     setregid(getgid(), getgid());
     setreuid(getuid(), getuid());
+#endif
 
     (void) signal(SIGPIPE, SIG_IGN);
 
@@ -381,14 +423,14 @@ main(int argc, char *argv[])
     aihints.ai_flags = AI_ADDRCONFIG;
     aierr = getaddrinfo(serverhost, portstr, &aihints, &ap);
     if (aierr) {
-        fprintf(stderr, "%s: error looking up host '%s' port '%s'/tcp: %s\n",
-                argv[0], serverhost, portstr, gai_strerror(aierr));
+        mylog(LOG_ERR, "error looking up host '%s' port '%s'/tcp: %s",
+                serverhost, portstr, gai_strerror(aierr));
         exit(1);
     }
     if (ap == 0) {
         /* Should never happen.  */
-        fprintf(stderr, "%s: error looking up host '%s' port '%s'/tcp: no addresses returned?\n",
-                argv[0], serverhost, portstr);
+        mylog(LOG_ERR,"error looking up host '%s' port '%s'/tcp: no addresses returned?",
+                serverhost, portstr);
         exit(1);
     }
 
@@ -399,8 +441,8 @@ main(int argc, char *argv[])
     retval = krb5_sname_to_principal(context, serverhost, service,
                                      KRB5_NT_SRV_HST, &server);
     if (retval) {
-        com_err(argv[0], retval, "while creating server name for host %s service %s",
-                serverhost, service);
+        mylog(LOG_ERR, "Error while creating server name for host %s service %s %s", 
+              serverhost, service, error_message(retval));
         exit(1);
     }
 
@@ -424,11 +466,11 @@ main(int argc, char *argv[])
         strncat(mbuf, pbuf, sizeof(mbuf) - strlen(mbuf) - 1);
         sock = socket(ap->ai_family, SOCK_STREAM, 0);
         if (sock < 0) {
-            fprintf(stderr, "%s: socket: %s\n", mbuf, strerror(errno));
+            mylog(LOG_ERR, "%s: socket: %s", mbuf, strerror(errno));
             continue;
         }
         if (connect(sock, ap->ai_addr, ap->ai_addrlen) < 0) {
-            fprintf(stderr, "%s: connect: %s\n", mbuf, strerror(errno));
+            mylog(LOG_ERR, "%s: connect: %s", mbuf, strerror(errno));
             close(sock);
             sock = -1;
             continue;
@@ -439,7 +481,7 @@ main(int argc, char *argv[])
         /* Already printed error message above.  */
         exit(1);
     if (debug)
-        fprintf(stderr, "connected %d\n", sock);
+        mylog(LOG_ERR, "connected %d", sock);
 
     cksum_data.data = serverhost;
     cksum_data.length = strlen(serverhost);
@@ -447,13 +489,13 @@ main(int argc, char *argv[])
 
     //retval = krb5_cc_default(context, &ccdef);
     //if (retval) {
-    //    com_err(argv[0], retval, "while getting default ccache");
+    //    mylog(LOG_ERRval, "while getting default ccache %s", error_message(retval));
     //    exit(1);
     //}
 
     //retval = krb5_cc_get_principal(context, ccdef, &client);
     //if (retval) {
-    //    com_err(argv[0], retval, "while getting client principal name");
+    //    mylog(LOG_ERRval, "while getting client principal name %s", error_message(retval));
     //    exit(1);
     //}
 
@@ -467,7 +509,7 @@ main(int argc, char *argv[])
     if (op == 'G') {
         retval2 = krb5_cc_destroy(context, ccache);
         if (retval2) {
-            com_err(argv[0], retval2, "deleting temporary cache");
+            mylog(LOG_ERR, "deleting temporary cache %s", error_message(retval2));
             exit(1);
         }
     }
@@ -475,29 +517,29 @@ main(int argc, char *argv[])
     // operatoin. currently just get
     if ((written = write(sock, (char *)&op,
                          1)) < 0) {
-        fprintf(stderr, "write failed 1\n");
+        mylog(LOG_ERR, "write failed 1");
         exit(1);
     }        
     if (debug)
-        fprintf(stderr, "write %c %ld\n", op, written);
+        mylog(LOG_DEBUG, "write %c %ld", op, written);
 
     // username
     xmitlen = htons(strlen(username));
     if ((written = write(sock, (char *)&xmitlen,
                         sizeof(xmitlen))) < 0) {
-        fprintf(stderr, "write failed 1\n");
+        mylog(LOG_ERR, "write failed 1");
         exit(1);
     }
     if (debug)
-        fprintf(stderr, "write %lu\n", written);
+        mylog(LOG_DEBUG, "write %lu", written);
     if ((written = write(sock, (char *)username,
                                  strlen(username))) < 0) {
-        fprintf(stderr, "write failed 2\n");
+        mylog(LOG_ERR, "write failed 2");
         exit(1);
     }
 
     if (debug)
-        fprintf(stderr, "write %lu\n", written);
+        mylog(LOG_DEBUG, "write %lu", written);
 
     // principal - if not specified by user
     if (!principal) {
@@ -513,53 +555,53 @@ main(int argc, char *argv[])
     xmitlen = htons(strlen(principal));
     if ((written = write(sock, (char *)&xmitlen,
                         sizeof(xmitlen))) < 0) {
-        fprintf(stderr, "write failed 1\n");
+        mylog(LOG_ERR, "write failed 1");
         exit(1);
     }
     if (debug)
-        fprintf(stderr, "write %lu\n", sizeof(xmitlen));
+        mylog(LOG_DEBUG, "write %lu", sizeof(xmitlen));
     if ((written = write(sock, (char *)principal,
                                  strlen(principal))) < 0) {
-        fprintf(stderr, "write failed 2\n");
+        mylog(LOG_ERR, "write failed 2");
         exit(1);
     }
 
     if (debug)
-        fprintf(stderr, "write %lu\n", strlen(principal));
+        mylog(LOG_DEBUG, "write %lu", strlen(principal));
 
     xmitlen = htons(strlen(flags));
     if ((written = write(sock, (char *)&xmitlen,
                         sizeof(xmitlen))) < 0) {
-        fprintf(stderr, "write failed 1\n");
+        mylog(LOG_ERR, "write failed 1");
         exit(1);
     }
     if (debug)
-        fprintf(stderr, "write %lu\n", sizeof(xmitlen));
+        mylog(LOG_DEBUG, "write %lu", sizeof(xmitlen));
     if ((written = write(sock, (char *)flags,
                                  strlen(flags))) < 0) {
-        fprintf(stderr, "write failed 2\n");
+        mylog(LOG_ERR, "write failed 2");
         exit(1);
     }
 
     if (debug)
-        fprintf(stderr, "write %lu\n", strlen(hostname));
+        mylog(LOG_DEBUG, "write %lu", strlen(hostname));
 
     xmitlen = htons(strlen(hostname));
     if ((written = write(sock, (char *)&xmitlen,
                         sizeof(xmitlen))) < 0) {
-        fprintf(stderr, "write failed 1\n");
+        mylog(LOG_ERR, "write failed 1");
         exit(1);
     }
     if (debug)
-        fprintf(stderr, "write %lu\n", sizeof(xmitlen));
+        mylog(LOG_DEBUG, "write %lu", sizeof(xmitlen));
     if ((written = write(sock, (char *)hostname,
                                  strlen(hostname))) < 0) {
-        fprintf(stderr, "write failed 2\n");
+        mylog(LOG_ERR, "write failed 2");
         exit(1);
     }
 
     if (debug)
-        fprintf(stderr, "write %lu\n", strlen(hostname));
+        mylog(LOG_DEBUG, "write %lu", strlen(hostname));
 
     krb5_free_principal(context, server);       /* finished using it */
     krb5_free_principal(context, client);
@@ -569,15 +611,15 @@ main(int argc, char *argv[])
 
     if (retval && retval != KRB5_SENDAUTH_REJECTED) {
         if (retval == KRB5KRB_AP_ERR_BADADDR)
-            fprintf(stderr, "The official error message is \"Incorrect net address\", but this is usuallly caused when you don't have valid kerberos credentials\n");
+            mylog(LOG_ERR, "The official error message is \"Incorrect net address\", but this is usuallly caused when you don't have valid kerberos credentials");
         else
-            com_err(argv[0], retval, "while using sendauth");
+            mylog(LOG_ERR, "while using sendauth %s", error_message(retval));
         exit(1);
     }
 
     if (retval == KRB5_SENDAUTH_REJECTED) {
         /* got an error */
-        fprintf(stderr, "sendauth rejected, error reply is:\n\t\"%*s\"\n",
+        mylog(LOG_ERR, "sendauth rejected, error reply is:\n\t\"%*s\"",
                err_ret->text.length, err_ret->text.data);
     } else if (rep_ret) {
         int isError = 0;
@@ -587,11 +629,11 @@ main(int argc, char *argv[])
         krb5_free_ap_rep_enc_part(context, rep_ret);
 
         if (debug)
-            fprintf(stderr, "sendauth succeeded, reply is:\n");
+            mylog(LOG_DEBUG, "sendauth succeeded, reply is:");
         if ((retval = net_read(sock, (char *)status, 1)) <= 0) {
             if (retval == 0)
                 errno = ECONNABORTED;
-            com_err(argv[0], errno, "while reading data from server");
+            mylog(LOG_ERR, "while reading data from server %s", error_message(retval));
             exit(1);
         }
         if (status[0] == 'e')
@@ -601,27 +643,27 @@ main(int argc, char *argv[])
                                sizeof(xmitlen))) <= 0) {
             if (retval == 0)
                 errno = ECONNABORTED;
-            com_err(argv[0], errno, "while reading data from server");
+            mylog(LOG_ERR, "while reading data from server %s", error_message(retval));
             exit(1);
         }
         recv_data.length = ntohs(xmitlen);
         if (!(recv_data.data = (char *)malloc((size_t) recv_data.length + 1))) {
-            com_err(argv[0], ENOMEM,
-                    "while allocating buffer to read from server");
+            mylog(LOG_ERR, "No memory while allocating buffer to read from server");
             exit(1);
         }
         if ((retval = net_read(sock, (char *)recv_data.data,
                                recv_data.length)) <= 0) {
             if (retval == 0)
                 errno = ECONNABORTED;
-            com_err(argv[0], errno, "while reading data from server");
+            mylog(LOG_ERR, "error while reading data from server");
             exit(1);
         }
 
         recv_data.data[recv_data.length] = '\0';
 
         if (isError) {
-            fprintf(stderr, "Error: %s\n", recv_data.data);
+            // need username to help reading syslog messages
+            mylog(LOG_ERR, "Error for %s: %s", pwd->pw_name, recv_data.data);
             exit(1);
         }
 
@@ -631,43 +673,83 @@ main(int argc, char *argv[])
 
             retval = krb5_rd_cred(context, auth_context, &recv_data, &creds, &replay);
             if (retval) {
-                com_err(NULL, retval, "unable to read returned credentials");
+                mylog(LOG_ERR, "unable to read returned credentials %s", error_message(retval));
                 exit(1);
             }
 
-            if ((retval = krb5_cc_default(context, &ccache))) {
-                com_err(NULL, retval, "unable to get default credentials cache");
-                exit(1);
+            if (krb5ccname) {
+                if ((retval = krb5_cc_resolve(context, krb5ccname, &ccache))) {
+                    mylog(LOG_ERR, "unable to get credentials cache %s %s", krb5ccname, error_message(retval));
+                    exit(1);
+                }
+            } else {
+                if ((retval = krb5_cc_default(context, &ccache))) {
+                    mylog(LOG_ERR, "unable to get default credentials cache %s", error_message(retval));
+                    exit(1);
+                }
             }
 
             if (krb5_cc_get_principal(context, ccache, &defcache_princ)) {
                 // cache not set up
                 retval = krb5_cc_initialize(context, ccache, creds[0]->client);
                 if (retval) {
-                    com_err(NULL, retval, "unable to initialize credentials file");
+                    mylog(LOG_ERR, "unable to initialize credentials file %s", error_message(retval));
                     exit(1);
                 }
+            } else if (strcmp(krb5_cc_get_type(context, ccache), "FILE") == 0) {
+                // cc exists; in KEYRING we can just store, but in /tmp create a new one and rename it
+                // have to copy names, because cc_get_name is invalid after close
+                // fortunately FILE: is the default, so we can just use the name for cc_resolv
+                strncpy(realname, krb5_cc_get_name(context, ccache), sizeof(realname));
+                snprintf(tempname, sizeof(tempname) - 1, "%s.%lu", realname, (unsigned long) getpid());
+
+                krb5_cc_close(context, ccache);
+                ccache = NULL;
+
+                retval = krb5_cc_resolve(context, tempname, &ccache);
+                if (retval) {
+                    mylog(LOG_ERR, "unable to initialize credentials file %s %s", tempname, error_message(retval));
+                    exit(1);
+                }
+
+                retval = krb5_cc_initialize(context, ccache, creds[0]->client);
+                if (retval) {
+                    mylog(LOG_ERR, "unable to initialize credentials file %s", error_message(retval));
+                    exit(1);
+                }
+                needrename = 1;
             }
 
             if ((retval = krb5_cc_store_cred(context, ccache, creds[0]))) {
-                com_err(NULL, retval, "unable to store credentials in cache");
+                mylog(LOG_ERR, "unable to store credentials in cache %s", error_message(retval));
                 exit(1);
             } 
 
             // output will be used in scripts to set KRB5CCNAME
-            printf("%s:%s\n",krb5_cc_get_type(context, ccache),krb5_cc_get_name(context, ccache));
-            krb5_cc_close(context, ccache);
+            if (needrename)
+                mylog(LOG_DEBUG, "%s:%s",krb5_cc_get_type(context, ccache),realname);
+            else
+                mylog(LOG_DEBUG, "%s:%s",krb5_cc_get_type(context, ccache),krb5_cc_get_name(context, ccache));
 
+            krb5_cc_close(context, ccache);
             krb5_free_tgt_creds(context, creds);
+
+            if (needrename) {
+                if (rename(tempname, realname)) {
+                    mylog(LOG_ERR, "Can't rename %s to %s %m", tempname, realname);
+                }
+
+            }
+            
 
         } else {
             // list -- just print the data
-            printf("%s\n", recv_data.data);
+            mylog(LOG_DEBUG, "%s", recv_data.data);
         }
 
         free(recv_data.data);
     } else {
-        com_err(argv[0], 0, "no error or reply from sendauth!");
+        mylog(LOG_ERR, "no error or reply from sendauth!");
         exit(1);
     }
     // no attempt to free everything, since the program is about to exit
@@ -675,3 +757,87 @@ main(int argc, char *argv[])
     krb5_free_context(context);
     exit(0);
 }
+
+#ifdef PAM
+
+#define PAM_SM_SESSION
+
+#include <security/pam_appl.h>
+#include <security/pam_modules.h>
+#include <keyutils.h>
+
+PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, const char **argv) {
+
+  char ccput[1024];
+  char *ccname;
+  const char *username;
+  struct passwd * pwd;
+  pid_t child;
+  int status;
+  key_serial_t serial;
+
+  if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) {
+      mylog(LOG_ERR, "pam_kgetcred unable to determine username");
+      return PAM_SUCCESS; // go ahead and do the login anyway
+  }
+
+  pwd = getpwnam(username);
+  if (!pwd) {
+      mylog(LOG_ERR, "pam_kgetcred can't get information on current user");
+      return PAM_SUCCESS; // go ahead and do the login anyway
+  }
+
+  snprintf(ccput, sizeof(ccput)-1, "KRB5CCNAME=FILE:/tmp/krb5cc_%lu_cron", (unsigned long)pwd->pw_uid);
+  ccname = ccput + strlen("KRB5CCNAME=");
+
+  // this is pretty stupid, but the code above was written without any concern for releasing
+  // memory. For the moment, fork it.
+
+  child = fork();
+
+  if (child == 0) {
+      // in child
+      // have to pass this globally to avoid changing all syslog calls to having this as arg
+      pam_handle = pamh;
+
+      pam_kgetcred(ccname, pwd);
+      // return value will come from exit status
+      mylog(LOG_ERR, "fork failed");
+      return PAM_SUCCESS; // go ahead and do the login anyway
+  }
+
+  // in parent
+  waitpid(child, &status, 0);
+
+  if (WEXITSTATUS(status)) {
+      // error should already have been logged
+      return PAM_SUCCESS; // go ahead and do the login anyway      
+  }
+
+  chown(ccname + strlen("FILE:"), pwd->pw_uid, pwd->pw_gid);
+
+  pam_putenv(pamh, ccput);
+
+  serial = add_key("user", "krbrenewd:ccname", ccname, strlen(ccname) + 1, KEY_SPEC_SESSION_KEYRING);
+  if (serial == -1) {
+      mylog(LOG_ERR, "pam_kgetcred can't register credential file");
+      return PAM_SUCCESS; // go ahead and do the login anyway
+  }
+
+  // we are presumably root at this point, but have to change permission to allow
+  // it to be read by a different root session
+  
+  if (keyctl_setperm(serial, 0x3f3f0000)) {
+      mylog(LOG_ERR, "pam_kgetcred: Problem setting permissiosn for your Kerberos credentials. They may expire during your session");
+      return PAM_SUCCESS;
+  }
+
+  return PAM_SUCCESS;
+
+}
+
+PAM_EXTERN int pam_sm_close_session(pam_handle_t *pamh, int flags, int argc, const char **argv) {
+  return PAM_SUCCESS;
+} 
+
+#endif

@@ -1,0 +1,18 @@
+.TH PAM_REG_CC 8
+.SH NAME
+pam_reg_cc \- register credential caches for renewd
+.SH DESCRIPTION
+.I  pam_reg_cc
+checks the current value of KRB5CCNAME in the environment that
+PAM is preparing for the user process. If it is defined, 
+pam_reg_cc registers it on the session keyring, with the description
+krbrenewd:ccname.
+.PP
+Renewd checks all keys with this description, and renews the
+credential caches as needed. 
+.PP
+Session keyrings are automatically deleted at the end of the session,
+so that means that renewd will stop renewing credentials when there
+are no more sessions registerd for them.
+.PP
+It implements only session start (and a no-op session end).

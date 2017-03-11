@@ -1,0 +1,23 @@
+.TH PAM_KGETCRED 8
+.SH NAME
+pam_kgetcred \- sets up Kerberos credentials for cron jobs
+.SH DESCRIPTION
+.I  pam_kgetcred
+sets up a Kerberos credential cache. It's intended for use
+with cron, because pam_sss or pam_krb5 is more appropriate
+for interactive sessions.
+.PP
+See kgetcred for details on how the process works. (pam_kgetcred
+shares most of its code with kgetcred.)P
+To protect users' credentials, they must register using
+kgetcred -r. That authorizes credserv to give 
+kgetcred and pam_kgetcred credentials for them on the
+current host when requested by root. (Root is authenticated
+using a host credential generated fron  /etc/krb5.keytab.)
+.PP
+Pam_kgetcred sets KRB5CCNAME to the name of the credentials
+file, and registers it for renewd. (This is the same function
+performed by pam_reg_cc, so it doesn't make sense to use them
+both for the same service.)
+.PP
+It implements only session start (and a no-op session end).

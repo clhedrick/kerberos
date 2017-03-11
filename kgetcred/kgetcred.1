@@ -19,6 +19,10 @@ In case of error, a message is printed and exit with code 1.
 .PP
 Kgetcred must be installed setuid, because it has to read /etc/krb5.keytab to authenticate.
 It will drop privileges as soon as it's read the key table.
+.PP
+Note that there is a pam version of this, pam_kgetcred. We expect that this will be installed
+for cron. In that case most users won't need to call kgetcred from their jobs. They'll just
+need the -r and -u options to register keytables on the server.
 .SH OPTIONS
 .TP
 .B \-d
