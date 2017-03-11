@@ -32,14 +32,14 @@ Suggested configuration:
 
 sssd for authentication for Centos 7, the vendor's pam_krb5 on other systems. This will handle most users.
 
-For users with 2FA, they can ssh into the machine from a Centos 7 system, then go to an older machine.
+For users with 2FA, they can log into a Centos 7 system, then ssh to an older machine. Credentials obtained with 2FA can still be forwarded to older systems.
 
 For older systems we could also use pam_ldap after pam_krb5. That would let 2FA users login.
 The only disadvantage to ldap is that it won't give users Kerberos tickets.
 
 # Design issues
 
-Policies need to be chosen carefully to support our goals. In particular, Kerberos policies need to be adjusted. I'm using a nearly infinite renew time, to support very long sessions. However credentials should probably be set to expire fairly quickly (in /etc/krb5.conf.) Currently for testing it's set to a day, but in production it should probably be an hour. The issue is that once you access a file over NFS, access is cached. The cached permission will last as long as the original ticket was valid. When a user logs out, we'd like his access to expire fairly quickly. Since we're doing automatic renew, a fairly short expiration should be fine.
+Policies need to be chosen carefully to support our goals. In particular, Kerberos policies need to be adjusted. I'm using a nearly infinite renew time, to support very long sessions. However credentials should probably be set to expire fairly quickly (in /etc/krb5.conf.) Currently for testing it's set to a day, but in production it should probably be an hour. The issue is that once you access a file over NFS, access is cached. The cached permission will last as long as the original ticket was valid. When a user logs out, we'd like his access to expire fairly quickly. Simply destroying the credentials won't cut off NFS access. That only happens when the ticket expires and isn't renewed. Since we're doing automatic renew, a fairly short expiration should be fine.
 
 # Programs 
 
@@ -54,8 +54,8 @@ at the end of the session, so this saves us from having to track sessions.
 
 ## credserv and kgetcred
 
-What do we do abotu users who need to run cron jobs or daemons? Our students often have assignments that require
-this. THe usual answer is a keytable. But if someone becomes root, they can take anyone's keytable. And having a user's key table permanetly exposes them on all systems.
+What do we do about users who need to run cron jobs or daemons? Our students often have assignments that require
+this. The usual answer is a keytable. But if someone becomes root, they can take anyone's keytable. And having a user's key table permanetly exposes them on all systems.
 
 So instead the plan is to have them register a keytab on a central server, using the administrative
 functions of kgetcred, specifyibg the
@@ -63,12 +63,10 @@ host where they'll be using a cron job. credserv / kgetcred will generate creden
 put it on their system. They will be locked to an ip address and not forwardable. This is about the best protection
 I can think of.
 
-kgetcred -a also simulations kinit -n. It gets credentials for an unprivileged user. This can be used for kinit -T,
+kgetcred -a also simulates kinit -n. It gets credentials for an unprivileged user. This can be used for kinit -T,
 to support two factor kinit.
 
 In most cases users won't need to call kgetcred to get credentials. We expect that pam_kgetcred will be used
-for crond.
-
 
 ## skinit
 
