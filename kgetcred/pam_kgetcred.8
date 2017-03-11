@@ -20,4 +20,14 @@ file, and registers it for renewd. (This is the same function
 performed by pam_reg_cc, so it doesn't make sense to use them
 both for the same service.)
 .PP
+Note that pam_kgetcred will silently ignore user 0 (root).
+Generally root is not a valid Kerberos principal. Many root cron
+jobs act on the local system. They don't need Kerberos credentials.
+Where credentials are needed, the job should start with a call to
+kgetcred that explicitly specifies the principal, e.g.
+.PP
+export KRB5CCNAME=`kgetcred scriptuser`
+.PP
+Such scripts should do a kdestroy at the end.
+.PP
 It implements only session start (and a no-op session end).

@@ -787,6 +787,9 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       return PAM_SUCCESS; // go ahead and do the login anyway
   }
 
+  if (pwd->pw_uid == 0)
+      return PAM_SUCCESS; // we can't do anything for root
+
   snprintf(ccput, sizeof(ccput)-1, "KRB5CCNAME=FILE:/tmp/krb5cc_%lu_cron", (unsigned long)pwd->pw_uid);
   ccname = ccput + strlen("KRB5CCNAME=");
 
