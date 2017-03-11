@@ -101,3 +101,11 @@ I also made a minor patch to avoid an unnecessary second password prompt.
 
 However we are probably going to use sssd rather than this. By the time we roll this out for users, the systems
 should be updated to at least Centos 7.
+
+# TODO
+
+Kerberized service to create home directories, with the client being a pam module.
+
+pam_mkhomedir isn't useful in a Kerberized environment.
+
+
