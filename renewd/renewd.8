@@ -34,6 +34,11 @@ credential in KEYRING:persistebt:UID, or they must be in a file
 in /tmp owned by the user. We're currently using KEYRING for
 interaction logins, and files in /tmp for cron jobs.
 .PP
+In addition to renewing, renewd removes files matching /tmp/krb5cc_*
+if they don't have an unexpired ticket-granting ticket. For the moment
+that means that files that aren't Kerberos credential caches at all
+will be removed. That may change if it causes issues.
+.PP
 waittime is the amount of time between successive runs. It defaults
 to 50 minutes, which is appropriate for a default ticket lifetime of 1 hour.
 .PP
