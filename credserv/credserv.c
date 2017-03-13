@@ -56,6 +56,7 @@
 #include <syslog.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <grp.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -83,6 +84,9 @@ struct princlist {
     struct hostlist *hosts;
     struct princlist *next;
 };
+
+char *admingroup = NULL;
+
 
 #ifndef GETPEERNAME_ARG3_TYPE
 #define GETPEERNAME_ARG3_TYPE int
@@ -143,29 +147,33 @@ void mylog (int level, const char *format, ...) {
 
 int isprived(char *principal);
 
-// read the file here, since this is only called once per
-// transaction, for transactions that aren't expected to be
-// very common.
+// if user is in group defined in admingroup
 int isprived(char *principal) {
-    FILE *conffile;
-    char line[1024];
+    char *cp;
+    struct group *g;
+    int i;
 
-    conffile = fopen(CONFFILE, "r");
-    if (!conffile) {
-        mylog(LOG_ERR, "can't read %s", CONFFILE);
+    if (!admingroup)
         return 0;
-    }
 
-    while (fgets(line, sizeof(line), conffile)) {
-        if (line[strlen(line)-1] == '\n')
-            line[strlen(line)-1] = '\0';
-        if (strcmp(principal, line) == 0) {
-            mylog(LOG_DEBUG, "%s is privileged", principal);
-            fclose(conffile);
+    // need a username, not a principal. stop at @
+    cp = strchr(principal, '@');
+    if (!cp)
+        return 0;
+
+    // get group
+    g = getgrnam(admingroup);
+    if (!g)
+        return 0;
+
+    *cp = '\0';  // stop at @; need to restore @ afterwards
+    for (i = 0; g->gr_mem[i]; i++) {
+        if (strcmp(principal, g->gr_mem[i]) == 0) {
+            *cp = '@';            
             return 1;
         }
     }
-    fclose(conffile);
+    *cp = '@';            
     return 0;
 }
 
@@ -239,6 +247,8 @@ main(int argc, char *argv[])
     int i;
     int found = 0;
     struct in_addr **addr_list;
+    krb5_data realm_data;
+    char *default_realm = NULL;
 
     // in case we're run by a user from the command line, get a known environment
     clearenv();
@@ -332,6 +342,19 @@ main(int argc, char *argv[])
             exit(2);
         }
     }
+
+    if ((retval = krb5_get_default_realm(context, &default_realm))) {
+        mylog(LOG_ERR, "unable to get default realm %s", error_message(retval));
+        exit(1);
+    }
+
+    realm_data.data = default_realm;
+    realm_data.length = strlen(default_realm);
+
+    krb5_appdefault_string(context, "credserv", &realm_data, "admingroup", "", &admingroup);
+    if (strlen(admingroup) == 0)
+        admingroup = NULL;
+
 
     retval = krb5_sname_to_principal(context, NULL, service,
                                      KRB5_NT_SRV_HST, &server);

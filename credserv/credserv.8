@@ -49,11 +49,28 @@ credserv verifies that the hostname in the principal matches the IP
 address from which the request came.
 .PP
 Kgetcred can also register and unregister principals. Privileged
-users (principals listed in /etc/credserv.conf) may change any
+users (users in the admin group; see below) may change any
 user. The protocol allows user, principal and flags to be passed.
 But unprivileged users must have user and principal match the
 principal by which they are authenticated, and they may not
 specify flags.
+.PP
+If you want to be able to do privileged operations, put the
+users who are authorized into a group, and then add the name of the group to
+/etc/krb5.conf, e.g.
+.PP
+.nf
+[appdefaults]
+credserv = {
+     admingroup = credadmin
+}
+.fi
+.PP
+Note that credserv will actually check the Kerberos principal sent
+by kgetcred for the user, not the user's uid. So if you are logged
+in as user and kinit as user.admin, credserv will check user.admin.
+Because full principals can't appear in groups, you'll want to use
+user.admin, not user/admin.
 .PP
 NOTE: You must make a service principal for credserv/HOST on the server
 and add it to /etc/krb5.keytab.
