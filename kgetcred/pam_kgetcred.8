@@ -31,3 +31,15 @@ export KRB5CCNAME=`kgetcred scriptuser`
 Such scripts should do a kdestroy at the end.
 .PP
 It implements only session start (and a no-op session end).
+.PP
+The hostname of a server running credserv must be registered in /etc/krb5.conf, e.g.
+.PP
+.nf
+[appdefaults]
+kgetcred = {
+     server = myserver.domain.edu
+}
+.fi
+.PP
+kgetcred is used for the key rather than pam_kgetcred, because kgetcred and pam_kgetcred
+use the same service.

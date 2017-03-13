@@ -173,16 +173,14 @@ int main(int argc, char *argv[])
     krb5_creds hostcreds;
     char *username = NULL;
     long written;
-    FILE *conffile;
     char *serverhost = NULL;
-     size_t serverhostsize = 0;
-     char *cp;
      char *default_realm = NULL;
      unsigned debug = 0;
      int anonymous = 0;
      char *clientname = NULL;
      int prived = 0;
      char *flags = "";
+     krb5_data realm_data;
 
      /*
       * Parse command line arguments
@@ -261,25 +259,24 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    conffile = fopen("/etc/kgetcred.conf", "r");
-    if (conffile == NULL) {
-        mylog(LOG_ERR, "Can't find /etc/kgetcred.conf");
-        exit(1);
-    }
-
-    getline(&serverhost, &serverhostsize, conffile);
-    if (serverhost == NULL) {
-        mylog(LOG_ERR, "/etc/kgetcred.conf is empty");
-        exit(1);
-    }
-
-    cp = strchr(serverhost, '\n');
-    if (cp)
-        *cp = '\0';
-
     retval = krb5_init_context(&context);
     if (retval) {
         mylog(LOG_ERR, "while initializing krb5 %s", error_message(retval));
+        exit(1);
+    }
+
+    if ((retval = krb5_get_default_realm(context, &default_realm))) {
+        mylog(LOG_ERR, "unable to get default realm %s", error_message(retval));
+        exit(1);
+    }
+
+    realm_data.data = default_realm;
+    realm_data.length = strlen(default_realm);
+
+    krb5_appdefault_string(context, "kgetcred", &realm_data, "server", "", &serverhost);
+
+    if (strlen(serverhost) == 0) {
+        mylog(LOG_ERR, "Please define server in the [appdefaults] section, e.g. \nkgetcred = {\n     server=hostname\n}");
         exit(1);
     }
 
@@ -294,10 +291,6 @@ int main(int argc, char *argv[])
     if (hostname == NULL)
         hostname = realhost;
 
-    if ((retval = krb5_get_default_realm(context, &default_realm))) {
-        mylog(LOG_ERR, "unable to get default realm %s", error_message(retval));
-        exit(1);
-    }
 
 #ifndef PAM    
     pwd = getpwuid(getuid());
