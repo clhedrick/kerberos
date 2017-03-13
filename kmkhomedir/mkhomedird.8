@@ -1,0 +1,54 @@
+.TH MKHOMEDIRD 8
+.SH NAME
+mkhomedird \- service to create home directories
+.SH SYNOPSIS
+.B mkhomedird
+[ -d ]
+.SH DESCRIPTION
+.I  mkhomedird
+works with pam_kmkhomedir to create home directories in Kerberized
+environments. With Kerberized NFS, no one can create home directories on 
+clients, since root has no special access to the file system.
+So mkhomedird is run on a server with a conventional mount of the
+file system, e.g. the file server. pam_kmkhomedir then talks to
+mkhomedird to request home directories to me created.
+.PP
+pam_kmkhomedir sends mkhomedird the username and directory to be
+created. The user must exist, and the directory must be in the
+form prefix/username. Prefix is checked against a list in
+/etc/krb5.conf, e.g.
+.PP
+.nf
+[appdefaults]
+mkhomedird = {
+     homedirs=/home1,/home2
+}
+.fi
+.PP
+Where NFS mounts aren't reliable, sometimes a user will login when the file system isn't
+mounted. To avoid creating directories on top of the mount point,
+you can configure a "test file." If this file doesn't exist on the file system,
+no attenpt will be made to create the home directory. The user will be given an explanation.
+To configure this, use the testfile option in appdefaults. E.g.
+.PP
+.nf
+[appdefaults]
+mkhomedird = {
+     homedirs=/home1,/home2
+     testfile = MOUNTED
+}
+.fi
+.PP
+The testfile shouldn't have a directory in front of it. It will be assumed to be
+present anywhere that has user home directories. This feature is present in both
+the server and pam_kmkhomedir. It makes sense to configure it both places.
+.SH "SEE ALSO"
+pam_kmkhomedir(8)
+.SH "NOTES"
+.PP
+/etc/krb5.keytab must have an entry for the service principal, which
+will normally have the form mkhomedird/HOST@DOMAIN
+.PP
+The service currently uses TCP port 756.
+
+

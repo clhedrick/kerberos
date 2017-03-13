@@ -87,6 +87,12 @@ It also sets KRB5CCNAME to the cache name, and registers it for renewd
 
 This registers the value of KRB5CCNAME (if any) so that renewd will renew it. 
 
+## mkhomedird and pam_kmkhomedir
+
+In an NFS environment, pam_mkhomedir won't work, because root won't be able to change ownership of
+new directories to the user. I have created a server, which should run on the file server, and a
+pam client to create home directories when necessary. They use a Kerberized protocol between them.
+
 ## pam
 
 The issue here is two factor authentication. Freeipa doesn't currently support anonymous credentials with PKINIT.

@@ -1,0 +1,50 @@
+.TH PAM_KMKHOMEDIR 8
+.SH NAME
+pam_kmkhomedir \- module to create home directories
+.SH DESCRIPTION
+.I  pam_kmkhomedir
+works with service mkhomedird to create home directories in Kerberized
+environments. With Kerberized NFS, no one can create home directories on 
+clients, since root has no special access to the file system.
+So mkhomedird is run on a server with a conventional mount of the
+file system, e.g. the file server. pam_kmkhomedir then talks to
+mkhomedird to request home directories to me created.
+.PP
+pam_kmkhomedir sends mkhomedird the username and directory to be
+created. The user must exist. The directory is the user's home directory,
+from the passwd entry.
+.PP
+mkhomedird will be called only if the directory doesn't exist.
+.PP
+The server hostname must be configured in krb5.conf, e.g.
+.PP
+.nf
+[appdefaults]
+pam_kmkhomedir = {
+     server = myserver.domain.edu
+}
+.fi
+.PP
+Where NFS mounts aren't reliable, sometimes a user will login when the file system isn't
+mounted. To avoid making lots of bogus calls on the server asking to create home directories
+in this case, you can configure a "test file." If this file doesn't exist on the file system,
+no attenpt will be made to create the home directory. The user will be given an explanation.
+To configure this, use the testfile option in appdefaults. E.g.
+.PP
+.nf
+[appdefaults]
+pam_kmkhomedir = {
+     server = myserver.domain.edu
+     testfile = MOUNTED
+}
+.fi
+.PP
+The testfile shouldn't have a directory in front of it. It will be assumed to be
+present anywhere that has user home directories. This feature is present both
+here and in the server. It makes sense to configure it both places.
+.PP
+.SH "SEE ALSO"
+mkhomedird(8)
+.SH "NOTES"
+The service currently uses TCP port 756.
+
