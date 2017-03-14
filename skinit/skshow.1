@@ -3,7 +3,7 @@
 skshow \- show the right cache to use for a given principal
 .SH SYNOPSIS
 .B skshow
-[ principal ]
+[ principal | -l]
 .SH DESCRIPTION
 In an environment where KEYRING is being used, there can be
 multiple caches with different principals. This lets you
@@ -13,6 +13,10 @@ paste to set KRB5CCNAME to the cache containing that principal.
 Initially one might think that kswitch would be used for that.
 But if you use kswitch to choose anything other than the principal
 based on the user's username, it will break NFS.
+.PP
+with "-l", lists all caches and their principals. The difference between
+then and calling klist directly is that if KRB5CCNAME is set to a specific
+cache, klist -l will show only that cache, while this will give the expected listing.
 .PP
 You should probably use skinit rather than kinit.
 .SH "SEE ALSO"

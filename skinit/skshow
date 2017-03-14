@@ -21,6 +21,15 @@ if test -n "$KRB5CCNAME"
   fi
 fi  
 
+# the difference between doign this and calling klist -l directly is that we've
+# set KRB5CCNAME so we'll always see the list. klist -l will normally just chow
+# the current cache
+if test "$1" = "-l"
+  then
+  klist -l
+  exit 0
+fi
+
 # normalize the argument
 PRINC="$1"
 # if it's missing, use the current user
