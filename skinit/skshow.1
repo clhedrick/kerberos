@@ -1,0 +1,21 @@
+.TH SKSHOW 1
+.SH NAME
+skshow \- show the right cache to use for a given principal
+.SH SYNOPSIS
+.B skshow
+[ principal ]
+.SH DESCRIPTION
+In an environment where KEYRING is being used, there can be
+multiple caches with different principals. This lets you
+look up a principal, and gives you a command you can cut and
+paste to set KRB5CCNAME to the cache containing that principal.
+.PP
+Initially one might think that kswitch would be used for that.
+But if you use kswitch to choose anything other than the principal
+based on the user's username, it will break NFS.
+.PP
+You should probably use skinit rather than kinit.
+.SH "SEE ALSO"
+skinit(1)
+
+

@@ -14,8 +14,17 @@ credentials cache, which it uses to encrypt ("armor") the request. It doesn't
 matter what credentials are in the initial cache. This script uses credentials
 for a user "anonymous.user," who has no permissions to do anything.
 .PP
+Also, this script is designed for an environment where KEYRING is being used,
+and Kerberized NFS. Normally, kinit will change the primary cache, so that the
+user uses the cache they just set up. Unfortunately, NFS only sees the primary
+cache. So if the user has kinit'ed something like an administrative principal,
+it would break NFS. To deal with this, we use kswitch to go back to the user's
+normal principal. If that isn't what was just kinit'ed, we give them a message
+with a command they can cut and paste to set KRB5CCNAME to use the new cache.
+.PP
 Technical note: This script uses kgetcred -a to get the credentials for anonymous.user.
 Credserv has to be set up, and have a keytable for anonymous.user.
 .SH "SEE ALSO"
 kinit(1)
+skshow(1)
 
