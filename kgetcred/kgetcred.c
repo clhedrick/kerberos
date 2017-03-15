@@ -49,6 +49,7 @@
 #include <syslog.h>
 #include <wait.h>
 #include <sys/stat.h>
+#include <keyutils.h>
 
 #include <signal.h>
 
@@ -169,6 +170,7 @@ int main(int argc, char *argv[])
     int needrename = 0;
     char princbuf[1024];
     char realname[1024];
+    char realccname[1024];
     char tempname[1024];
     struct hostent* host;
     krb5_keytab hostkeytab;
@@ -183,6 +185,7 @@ int main(int argc, char *argv[])
      int prived = 0;
      char *flags = "";
      krb5_data realm_data;
+     key_serial_t serial;
 
      /*
       * Parse command line arguments
@@ -725,18 +728,25 @@ int main(int argc, char *argv[])
                 exit(1);
             } 
 
-            // output will be used in scripts to set KRB5CCNAME
+            snprintf(realccname, sizeof(realccname), "%s:%s", 
+                     krb5_cc_get_type(context, ccache),
+                     (needrename ? realname : krb5_cc_get_name(context, ccache)));
+
 #ifdef PAM
-            if (needrename)
-                printf("%s:%s\n",krb5_cc_get_type(context, ccache),realname);
-            else
-                printf("%s:%s\n",krb5_cc_get_type(context, ccache),krb5_cc_get_name(context, ccache));
+            printf("%s\n", realccname);
 #else
-            if (needrename)
-                mylog(LOG_DEBUG, "%s:%s",krb5_cc_get_type(context, ccache),realname);
-            else
-                mylog(LOG_DEBUG, "%s:%s",krb5_cc_get_type(context, ccache),krb5_cc_get_name(context, ccache));
+            mylog(LOG_DEBUG, "%s", realccname);
 #endif
+
+            serial = add_key("user", "krbrenewd:ccname", realccname, strlen(realccname), KEY_SPEC_SESSION_KEYRING);
+            if (serial == -1) {
+                mylog(LOG_ERR, "kgetcred can't register credential file");
+            }
+
+            // others must be able to view and read, for renewd to see it
+            if (keyctl_setperm(serial, 0x3f000003)) {
+                mylog(LOG_ERR, "kgetcred can't set permissions for credential file");
+            }
 
             krb5_cc_close(context, ccache);
             krb5_free_tgt_creds(context, creds);
@@ -772,7 +782,6 @@ int main(int argc, char *argv[])
 
 #include <security/pam_appl.h>
 #include <security/pam_modules.h>
-#include <keyutils.h>
 
 PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, const char **argv) {
 
@@ -782,7 +791,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   struct passwd * pwd;
   pid_t child;
   int status;
-  key_serial_t serial;
   krb5_context context;
   int retval;
   char *specified_name = NULL; // ccache name specified by user
@@ -935,21 +943,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   close(pipefd[0]); // close read side
 
   pam_putenv(pamh, ccput);
-
-  ccname = ccput + strlen("KRB5CCNAME=");
-
-  serial = add_key("user", "krbrenewd:ccname", ccname, strlen(ccname), KEY_SPEC_SESSION_KEYRING);
-  if (serial == -1) {
-      mylog(LOG_ERR, "pam_kgetcred can't register credential file");
-  }
-
-  // we are presumably root at this point, but have to change permission to allow
-  // it to be read by a different root session
-  
-  if (keyctl_setperm(serial, 0x3f3f0000)) {
-      mylog(LOG_ERR, "pam_kgetcred: Problem setting permissiosn for your Kerberos credentials. They may expire during your session");
-      return PAM_SUCCESS;
-  }
 
   return PAM_SUCCESS;
 
