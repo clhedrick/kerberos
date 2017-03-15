@@ -20,6 +20,26 @@ file, and registers it for renewd. (This is the same function
 performed by pam_reg_cc, so it doesn't make sense to use them
 both for the same service.)
 .PP
+By default, pam_kgetcred uses the default credentials from
+krb5.conf. You may wish to use a different credentials file
+for cron jobs, to isolate them from anything that happens
+in an interactive session. To do that you can specify the
+credentials using the ccname parameter in krb5.conf, e.g.
+.PP
+.nf
+[appdefaults]
+kgetcred = {
+     server = myserver.domain.edu
+     ccname=FILE:/tmp/krb5cc_%{uid}_XXXXXX
+}
+.fi
+.PP
+%{uid} will be replaced by the user's uid. (No other
+replacements are recognized.) If the credentials
+are in /tmp, and the pattern ends in XXXXXX, mkstemp will be
+used to generate a unique filename, replacing XXXXXX with
+random characters.
+.PP
 Note that pam_kgetcred will silently ignore user 0 (root).
 Generally root is not a valid Kerberos principal. Many root cron
 jobs act on the local system. They don't need Kerberos credentials.
