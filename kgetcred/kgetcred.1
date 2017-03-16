@@ -3,7 +3,7 @@
 kgetcred \- get Kerberos credentials from keytab stored on credserv server
 .SH SYNOPSIS
 .B kgetcred
-[ -d | -a | -l | -r | -P | -U user] [principal]
+[ -d | -a | -l | -r | -w waittime | -P | -U user] [principal]
 .SH DESCRIPTION
 .I  kgetcred
 is designed for cron jobs or services that need access to Kerberos
@@ -45,6 +45,9 @@ print debugging messages
 .B \-a
 get credentials for anonymous.user. Primarily intended for kinit -T, until IPA supports kinit -n.
 Requires a keytable for anonymous.user on the server.
+.TP
+.B \-w waittime
+amount of time to wait for a response from the server, in seconds. Default is 30 seconds.
 .TP
 .B principal
 for root, a principal must be specified. Root can have multiple principals available for a host.

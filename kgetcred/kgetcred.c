@@ -89,6 +89,14 @@ static void mylog (int level, const char *format, ...) {
   va_end(args);
 }
 
+void catch_alarm (int sig);
+
+// called on timeout. The only reason for using this is to get logging
+void catch_alarm (int sig)
+{
+    mylog(LOG_ERR, "unable to reach server");
+    exit(1);
+}
 
 static int
 net_read(int fd, char *buf, int len)
@@ -186,6 +194,7 @@ int main(int argc, char *argv[])
      char *flags = "";
      krb5_data realm_data;
      key_serial_t serial;
+     unsigned int waitsec = 30;
 
      /*
       * Parse command line arguments
@@ -193,7 +202,7 @@ int main(int argc, char *argv[])
       */
      opterr = 0;
 #ifndef PAM
-     while ((ch = getopt(argc, argv, "dalruPU:F:H:")) != -1) {
+     while ((ch = getopt(argc, argv, "dalruPU:F:H:w:")) != -1) {
          switch (ch) {
          case 'd':
              debug++;
@@ -210,6 +219,9 @@ int main(int argc, char *argv[])
          case 'u':
              op = 'U';
              break;
+         case 'w':
+             waitsec = atoi(optarg);
+             break;
          case 'P':
              prived = 1;
              break;
@@ -223,7 +235,7 @@ int main(int argc, char *argv[])
              hostname = optarg;
              break;
          default:
-             mylog(LOG_ERR, "-d debug, -a get anonymous ticket, -l list, -r register, -u unregister; -P prived user, -U user to operate on, -F flags, -H hostname for entry");
+             mylog(LOG_ERR, "-d debug, -a get anonymous ticket, -l list, -r register, -u unregister -w waittime; -P prived user, -U user to operate on, -F flags, -H hostname for entry");
              exit(1);
              break;
          }
@@ -413,6 +425,9 @@ int main(int argc, char *argv[])
     setregid(getgid(), getgid());
     setreuid(getuid(), getuid());
 #endif
+
+    signal (SIGALRM, catch_alarm);
+    alarm(waitsec);  // this should be enough. we don't want to hang web processes that depend upon this too long
 
     (void) signal(SIGPIPE, SIG_IGN);
 
