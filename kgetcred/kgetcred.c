@@ -841,22 +841,46 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   if (strcmp("", specified_name) != 0) {
       int fd;
-      char *cp;
+      char *cpin, *cpout, *cpend;
+      char ch;
 
-      snprintf(ccput, sizeof(ccput)-1, "KRB5CCNAME=%s", specified_name);
+      strcpy(ccput, "KRB5CCNAME=");
       ccname = ccput + strlen("KRB5CCNAME=");
+
+      cpin = specified_name;
+      cpout = ccname;
+      cpend = ccput + sizeof(ccput) - 1;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-overflow"
+      while ((cpout < cpend) && (ch = *cpin)) {
+#pragma GCC diagnostic pop
+          if (ch == '%') {
+              if (strncmp(cpin, "%{uid}", strlen("%{uid}")) == 0) {
+                  int chars;
+                  chars = snprintf(cpout, cpend - cpout, "%lu", (unsigned long)pwd->pw_uid);
+                  if (chars < 0)
+                      break;
+                  cpout += chars;
+                  cpin += strlen("%(uid}");
+              } else if (strncmp(cpin, "%{username}", strlen("%{username}")) == 0) {
+                  int chars;
+                  chars = snprintf(cpout, cpend - cpout, "%s", pwd->pw_name);
+                  if (chars < 0)
+                      break;
+                  cpout += chars;
+                  cpin += strlen("%(username}");
+              } else 
+                  *cpout++ = *cpin++;
+          } else
+              *cpout++ = *cpin++;
+      }
+      // cpend is defined so there's always a place for the terminating NUL
+      *cpout = '\0'; 
+
       // if name starts with FILE:, skip it to get real file name
       if (strncmp(ccname, "FILE:", 5) == 0)
           ccname += 5;
-
-      // if %{uid} replace it in ccput buffer, but not specified_name
-      cp = strstr(ccname, "%{uid}");
-      if (cp) {
-          // find string in original. Has to be there since it's in the copy
-          char *cp2 = strstr(specified_name, "%{uid}");
-          snprintf(cp, sizeof(ccput) - (cp - ccput), "%lu", (unsigned long)pwd->pw_uid);
-          strncat(cp, cp2 + 6, sizeof(ccput) - (cp-ccput));
-      }
 
       // if it's a temp file with XXXXXX, use mkstemp. It will alter its caller, so
       // ccname will be updated
@@ -939,6 +963,9 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       mylog(LOG_ERR, "read from fork failed %m");
   }      
   *cp3 = '\0';
+
+  printf("ccput after %s\n", ccput);
+
 
   close(pipefd[0]); // close read side
 

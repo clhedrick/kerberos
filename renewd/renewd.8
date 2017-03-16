@@ -33,27 +33,41 @@ For NFS to work reliably credentials must be either the primary
 credential in KEYRING:persistebt:UID, or they must be in a file
 in /tmp owned by the user. We're currently using KEYRING for
 interaction logins, and files in /tmp for cron jobs.
+.SH DELETION
 .PP
-In addition to renewing, renewd removes files matching /tmp/krb5cc_*
+In addition to renewing, renewd can remove out of date credential
+files in /tmp. By detault, it will remove files matching /tmp/krb5cc_*
 if they don't have an unexpired ticket-granting ticket. For the moment
 that means that files that aren't Kerberos credential caches at all
-will be removed. That may change if it causes issues.
+will be removed.
 .PP
 You can change the pattern of files that renewd examines for removal
 by using the pattern argument. E.g. to look at both /tmp/krb5cc_* and
 /tmp/tkt*, in krb5.conf, specify the following. Note that regcomp is
 called with no arguments, so this is a "basic regexp." That's why the
-\ is needed before the |
+\\ is needed before the |
 .PP
 .nf
 [appdefaults]
 renewd = {
-    pattern = ^krb5cc_\|^tkt
+    pattern = ^krb5cc_\\|^tkt
 }
+.fi
 .PP
-Make sure you choose a pettern that will only match Kerberos credential
-caches. If the file isn't an unexpired credential cache, it will be
-deleted.
+By default, renewd removes all files matching the pattern that aren't
+valid credential files. You can use the "delete" parameter to change
+this. E.g. the following will cause only valid (but expired) 
+credential files to be removed:
+.PP
+.nf
+[appdefaults]
+renewd = {
+    delete = valid
+}
+.fi
+.PP
+delete = none can be used to disable deletion.
+.SH OPTIONS
 .PP
 waittime is the amount of time between successive runs. It defaults
 to 50 minutes, which is appropriate for a default ticket lifetime of 1 hour.
@@ -65,3 +79,23 @@ to increase the level of debugging.
 .PP
 renewd must run as root. Most Kerberos operations are performed as
 the user that owns the cache.
+.SH IMPLEMENTATTION
+.PP
+To do its work, renewd needs to know which credentials are still in 
+use. Renewing all credential files in /tmp would probably lead to a
+never-ending increae in files there. Renewd currently expects programs
+that create tickets to register them by creating a pointer in the
+session keyring. That keyring will last as long as there are any 
+processes still in existence from the original session. That includes
+detached servers that may be started from the session, even after the
+interactive part is finished. There is no other mechanism that quite
+as clearly has the right lifetime.
+.PP
+To register credentials you should use pam_reg_cc after any authentication
+modules that create Kerberos tickets. Note that pam_kgetcred does its 
+own registration, so pam_reg_cc is not needed for services that use
+pam_kgetcred (typically cron).
+.PP
+The keyring implementation is specific to Linux. To implement renewd
+for other operating systems you would need to find another way to track all
+processes started from a session.

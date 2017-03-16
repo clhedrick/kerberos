@@ -464,7 +464,7 @@ void renewall(krb5_context ctx, time_t minleft) {
    name is just the file name assume it's got /tmp in front of it
 */
 void
-maybe_delete(krb5_context kcontext, char *name) {
+maybe_delete(krb5_context kcontext, char *name, int only_valid) {
     krb5_error_code code;
     krb5_cc_cursor cur;
     krb5_creds creds;
@@ -494,6 +494,19 @@ maybe_delete(krb5_context kcontext, char *name) {
 
     if (!code)
       code = krb5_cc_get_principal(kcontext, cache, &princ);
+
+    if (code && only_valid) {
+      // not a valid cache, user has asked us to delete only valid ones
+      if (debug > 1)
+	mylog(LOG_DEBUG, "Not valid: %s", filename);	
+      if (princ)
+	krb5_free_principal(kcontext, princ);
+      if (cache)
+	krb5_cc_close(kcontext, cache);
+      return;
+    }
+      
+
 
     if (!code)
       code = krb5_cc_start_seq_get(kcontext, cache, &cur);
@@ -550,7 +563,7 @@ int myfilter (const struct dirent *d) {
 }
   
 
-void delete_old(krb5_context kcontext) {
+void delete_old(krb5_context kcontext, int only_valid) {
   struct dirent **namelist;
   int numdirs;
   int i;
@@ -565,8 +578,8 @@ void delete_old(krb5_context kcontext) {
   // that aren't well defined if you delete files
   for (i = 0; i < numdirs; i++) {
     if (debug > 2)
-      mylog(LOG_DEBUG, "checking %s\n", namelist[i]->d_name);
-    maybe_delete(kcontext, namelist[i]->d_name);
+      mylog(LOG_DEBUG, "checking %s", namelist[i]->d_name);
+    maybe_delete(kcontext, namelist[i]->d_name, only_valid);
     free(namelist[i]);
   }
 
@@ -593,6 +606,7 @@ int main(int argc, char *argv[])
   int err = 0;
   krb5_data realm_data;
   char *pattern;
+  char *delete_mode;
 
 
   progname = *argv;
@@ -668,6 +682,7 @@ int main(int argc, char *argv[])
   realm_data.length = strlen(default_realm);
 
   krb5_appdefault_string(context, "renewd", &realm_data, "pattern", "^krb5cc_", &pattern);
+  krb5_appdefault_string(context, "renewd", &realm_data, "delete", "all", &delete_mode);
 
   // if we just want to look at ones we create:
   // if(regcomp(&regex, "^krb5cc_.*_cron$", 0)) {
@@ -691,7 +706,8 @@ int main(int argc, char *argv[])
 
     renewall(context, 60 * (wait + 10));
 
-    delete_old(context);
+    if (strcmp(delete_mode, "none") != 0)
+      delete_old(context, strcmp(delete_mode, "valid") == 0);
 
     freeccs();
 

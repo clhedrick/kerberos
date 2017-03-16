@@ -34,8 +34,9 @@ kgetcred = {
 }
 .fi
 .PP
-%{uid} will be replaced by the user's uid. (No other
-replacements are recognized.) If the credentials
+%{uid} will be replaced by the user's uid. %{username}
+will be replaced by the username. No other replacements
+are recognized. If the credentials
 are in /tmp, and the pattern ends in XXXXXX, mkstemp will be
 used to generate a unique filename, replacing XXXXXX with
 random characters.
