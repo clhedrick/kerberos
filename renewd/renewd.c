@@ -564,6 +564,8 @@ void delete_old(krb5_context kcontext) {
   // this is safer than opendir because the semantics of
   // that aren't well defined if you delete files
   for (i = 0; i < numdirs; i++) {
+    if (debug > 2)
+      mylog(LOG_DEBUG, "checking %s\n", namelist[i]->d_name);
     maybe_delete(kcontext, namelist[i]->d_name);
     free(namelist[i]);
   }
@@ -587,7 +589,11 @@ int main(int argc, char *argv[])
   unsigned long wait = 50; // 50 min, for key lifetime of 60
 
   krb5_context context;
+  char *default_realm = NULL;
   int err = 0;
+  krb5_data realm_data;
+  char *pattern;
+
 
   progname = *argv;
 
@@ -653,9 +659,19 @@ int main(int argc, char *argv[])
     exit(1);
   }
   
+  if ((err = krb5_get_default_realm(context, &default_realm))) {
+    mylog(LOG_ERR, "unable to get default realm %s", error_message(err));
+    exit(1);
+  }
+
+  realm_data.data = default_realm;
+  realm_data.length = strlen(default_realm);
+
+  krb5_appdefault_string(context, "renewd", &realm_data, "pattern", "^krb5cc_", &pattern);
+
   // if we just want to look at ones we create:
   // if(regcomp(&regex, "^krb5cc_.*_cron$", 0)) {
-  if(regcomp(&regex, "^krb5cc_.*$", 0)) {
+  if(regcomp(&regex, pattern, 0)) {
     mylog(LOG_ERR, "Couldn't compile regex");
     exit(1);
   }

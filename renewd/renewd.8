@@ -39,6 +39,18 @@ if they don't have an unexpired ticket-granting ticket. For the moment
 that means that files that aren't Kerberos credential caches at all
 will be removed. That may change if it causes issues.
 .PP
+You can change the pattern of files that renewd examines for removal
+by using the pattern argument. E.g. to look at both /tmp/krb5cc_* and
+/tmp/tkt*, in krb5.conf, specify the following. Note that regcomp is
+called with no arguments, so this is a "basic regexp." That's why the
+\ is needed before the |
+.PP
+.nf
+[appdefaults]
+renewd = {
+    pattern = ^krb5cc_\|^tkt
+}
+.PP
 waittime is the amount of time between successive runs. It defaults
 to 50 minutes, which is appropriate for a default ticket lifetime of 1 hour.
 .PP
