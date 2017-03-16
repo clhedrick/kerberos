@@ -692,8 +692,9 @@ int main(int argc, char *argv[])
                 }
             }
 
-            if (krb5_cc_get_principal(context, ccache, &defcache_princ)) {
-                // cache not set up
+            if (krb5_cc_get_principal(context, ccache, &defcache_princ) != 0 || 
+                !krb5_principal_compare(context, creds[0]->client, defcache_princ)) {
+                // cache not set up or wrong principal
                 retval = krb5_cc_initialize(context, ccache, creds[0]->client);
                 if (retval) {
                     mylog(LOG_ERR, "unable to initialize credentials file 1 %s", error_message(retval));
@@ -963,9 +964,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       mylog(LOG_ERR, "read from fork failed %m");
   }      
   *cp3 = '\0';
-
-  printf("ccput after %s\n", ccput);
-
 
   close(pipefd[0]); // close read side
 
