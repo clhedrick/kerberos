@@ -582,7 +582,8 @@ main(int argc, char *argv[])
         *hostend = '@';  // put back punctuation so we have the whole principal again
         *hoststart = '/';
         // normalized name
-        realhost = host->h_name;
+        strncpy(hostbuf, host->h_name, sizeof(hostbuf));
+        realhost = hostbuf;
     } else {
         //all we have is an ip address. just do reverse lookup
         if (getnameinfo((struct sockaddr *)&peername, namelen, hostbuf, sizeof(hostbuf), NULL, 0, NI_NAMEREQD)) {
