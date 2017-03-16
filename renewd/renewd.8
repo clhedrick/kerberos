@@ -51,6 +51,10 @@ renewd = {
     pattern = ^krb5cc_\|^tkt
 }
 .PP
+Make sure you choose a pettern that will only match Kerberos credential
+caches. If the file isn't an unexpired credential cache, it will be
+deleted.
+.PP
 waittime is the amount of time between successive runs. It defaults
 to 50 minutes, which is appropriate for a default ticket lifetime of 1 hour.
 .PP
