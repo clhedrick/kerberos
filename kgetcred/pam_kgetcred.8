@@ -20,7 +20,8 @@ file, and registers it for renewd. (This is the same function
 performed by pam_reg_cc, so it doesn't make sense to use them
 both for the same service.)
 .PP
-By default, pam_kgetcred uses the default credentials from
+By default, pam_kgetcred uses the default credentials name
+from
 krb5.conf. You may wish to use a different credentials file
 for cron jobs, to isolate them from anything that happens
 in an interactive session. To do that you can specify the
@@ -34,6 +35,7 @@ kgetcred = {
 }
 .fi
 .PP
+(This is actually the pattern we'd recommend.)
 %{uid} will be replaced by the user's uid. %{username}
 will be replaced by the username. No other replacements
 are recognized. If the credentials
@@ -43,8 +45,10 @@ random characters.
 .PP
 If you are using NFS, the only credentials that make sense
 are the primary cache in the KEYRING, indicated by KEYRING:persistent:%{uid},
-or a file in /tmp. If you are using renewd, files in /tmp should be
-/tmp/krb5cc_%{uid} or /tmp/krb5cc_%{uid}_something.
+or a file in /tmp. If you are using renewd, the pattern
+it looks it for deletion of expired caches should match
+the pattern of credentials created here. By default
+renewd looks at all files starting with /tmp/krb5cc_%{uid}
 .PP
 Note that pam_kgetcred will silently ignore user 0 (root).
 Generally root is not a valid Kerberos principal. Many root cron
@@ -56,9 +60,9 @@ export KRB5CCNAME=`kgetcred scriptuser`
 .PP
 Such scripts should do a kdestroy at the end.
 .PP
-It implements only session start (and a no-op session end).
+pam_kgetcred implements only session start (and a no-op session end).
 .PP
-The hostname of a server running credserv must be registered in /etc/krb5.conf, e.g.
+The hostname of a server running credserv must be specified in /etc/krb5.conf, e.g.
 .PP
 .nf
 [appdefaults]

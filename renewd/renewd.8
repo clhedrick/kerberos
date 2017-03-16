@@ -37,9 +37,10 @@ interaction logins, and files in /tmp for cron jobs.
 .PP
 In addition to renewing, renewd can remove out of date credential
 files in /tmp. By detault, it will remove files matching /tmp/krb5cc_*
-if they don't have an unexpired ticket-granting ticket. For the moment
-that means that files that aren't Kerberos credential caches at all
-will be removed.
+if they don't have an unexpired ticket-granting ticket. 
+Regular files that aren't Kerberos credential caches at all but match that
+name pattern will be removed.
+(This can be changed.)
 .PP
 You can change the pattern of files that renewd examines for removal
 by using the pattern argument. E.g. to look at both /tmp/krb5cc_* and
@@ -54,7 +55,8 @@ renewd = {
 }
 .fi
 .PP
-By default, renewd removes all files matching the pattern that aren't
+By default, renewd removes all regular files (i.e. not directories,
+pipes, etc) matching the pattern that aren't
 valid credential files. You can use the "delete" parameter to change
 this. E.g. the following will cause only valid (but expired) 
 credential files to be removed:

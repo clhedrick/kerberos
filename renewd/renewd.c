@@ -544,6 +544,13 @@ maybe_delete(krb5_context kcontext, char *name, int only_valid) {
     if (stat(filename, &statbuf)) 
       return; // can't find it, nothing useful to do
 
+    if (!S_ISREG(statbuf.st_mode)) {
+      // not a file, don't try to unlink other stuff
+      if (debug > 1)
+	mylog(LOG_DEBUG, "Not a regular file: %s", filename);	
+      return; 
+    }
+
     if ((now - statbuf.st_mtime) < (5 * 60)) {
       if (debug > 1)
 	mylog(LOG_DEBUG, "File recent: %s", filename);	
