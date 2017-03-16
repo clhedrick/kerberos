@@ -57,6 +57,8 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <grp.h>
+#include <signal.h>
+
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -102,6 +104,7 @@ usage(char *name)
             name);
 }
 
+
 static int
 net_read(int fd, char *buf, int len)
 {
@@ -143,6 +146,15 @@ void mylog (int level, const char *format, ...) {
         vsyslog(level, format, args);
 
     va_end(args);
+}
+
+void catch_alarm (int sig);
+
+// called on timeout. The only reason for using this is to get logging
+void catch_alarm (int sig)
+{
+    mylog(LOG_ERR, "timeout in credserv");
+    exit(1);
 }
 
 int isprived(char *principal);
@@ -420,7 +432,13 @@ main(int argc, char *argv[])
         sock = 0;
     }
 
+
     mylog(LOG_DEBUG, "connection from %s", inet_ntoa(peername.sin_addr));
+
+    // I'm not sure why this is needed, but we've seen hung forks
+
+    signal (SIGALRM, catch_alarm);
+    alarm(60);  // a minute is more than enough
 
     retval = krb5_recvauth(context, &auth_context, (krb5_pointer)&sock,
                            SAMPLE_VERSION, server,
