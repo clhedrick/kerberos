@@ -1007,12 +1007,12 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // we need to get back to root, or the rest of pam gets confused
   // pam_kgetcred frees context
   if ((mainret = pam_kgetcred(ccname, pwd, context, pamh)) == NULL) {
-      setresgid(oldgid, oldgid, -1);
       setresuid(olduid, olduid, -1);
+      setresgid(oldgid, oldgid, -1);
       return PAM_CRED_UNAVAIL; // go ahead and do the login anyway      
   }
-  setresgid(oldgid, oldgid, -1);
   setresuid(olduid, olduid, -1);
+  setresgid(oldgid, oldgid, -1);
 
   // got a ccname in mainret
 
