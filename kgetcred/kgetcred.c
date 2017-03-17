@@ -1,4 +1,21 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+
+/* portability notes:
+
+kgetcred uses setjmp/longjmp. Gcc/Intel/Linux has support in GCC to make it safe
+  For other architectures you may need special declarations to save all registers before
+  the call to setjmp
+There is a subtle portability issue in setresuid. This is used only in pam. We have to set
+  real uid, or temp files and keys get created with root as owner. But we can't set saved
+  uid, or we lose the ability to get back. It's not entirely clear what to do on systems
+  without setresuid. It depends upon the specific semantics of setruid and setuid. In the 
+  worst case you may have to create things as root and change ownership. But that opens
+  possible race conditions.
+If you don't have clearenv you'll need to use the MAC code
+
+*/
+
+
 /* appl/sample/sclient/sclient.c */
 /*
  * Copyright 1990,1991 by the Massachusetts Institute of Technology.
