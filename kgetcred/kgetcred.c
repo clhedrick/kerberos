@@ -183,6 +183,7 @@ int main(int argc, char *argv[])
     struct hostent* host;
     krb5_keytab hostkeytab;
     krb5_creds hostcreds;
+    int havecreds = 0;
     char *username = NULL;
     long written;
     char *serverhost = NULL;
@@ -195,6 +196,9 @@ int main(int argc, char *argv[])
      krb5_data realm_data;
      key_serial_t serial;
      unsigned int waitsec = 30;
+     krb5_get_init_creds_opt *opts = NULL;
+     krb5_creds usercreds;
+     int haveusercreds = 0;
 
      /*
       * Parse command line arguments
@@ -346,6 +350,7 @@ int main(int argc, char *argv[])
             mylog(LOG_ERR, "unable to make credentials for host from keytab %s", error_message(retval));
             exit(1);
         }
+        havecreds = 1;
 
         if ((retval = krb5_cc_new_unique(context, "MEMORY", "/tmp/jjjjj", &ccache))) {
             mylog(LOG_ERR, "unable to make credentials file for host %s", error_message(retval));
@@ -363,8 +368,6 @@ int main(int argc, char *argv[])
 
     } else if (op != 'L' && !prived) {
         // for prived user we have to use existing credentials, because they will be one-time and we can't deal with that
-        krb5_get_init_creds_opt *opts = NULL;
-        krb5_creds usercreds;
 
         if (!clientname)
             clientname = pwd->pw_name;
@@ -392,6 +395,7 @@ int main(int argc, char *argv[])
                 mylog(LOG_ERR, "getting initial ticket %s", error_message(retval));
             exit(1);
         }
+        haveusercreds = 1;
 
         if ((retval = krb5_cc_new_unique(context, "MEMORY", "/tmp/kkkk", &ccache))) {
             mylog(LOG_ERR, "unable to make credentials file for host %s", error_message(retval));
@@ -530,6 +534,7 @@ int main(int argc, char *argv[])
             mylog(LOG_ERR, "deleting temporary cache %s", error_message(retval2));
             exit(1);
         }
+        ccache = NULL;
     }
 
     // operatoin. currently just get
@@ -621,9 +626,6 @@ int main(int argc, char *argv[])
     if (debug)
         mylog(LOG_DEBUG, "write %lu", strlen(hostname));
 
-    krb5_free_principal(context, server);       /* finished using it */
-    krb5_free_principal(context, client);
-
     //    krb5_cc_close(context, ccdef);
     //    if (auth_context) krb5_auth_con_free(context, auth_context);
 
@@ -642,9 +644,6 @@ int main(int argc, char *argv[])
     } else if (rep_ret) {
         int isError = 0;
         char status[1];
-
-        /* got a reply */
-        krb5_free_ap_rep_enc_part(context, rep_ret);
 
         if (debug)
             mylog(LOG_DEBUG, "sendauth succeeded, reply is:");
@@ -689,12 +688,18 @@ int main(int argc, char *argv[])
             // replay protection doens't make sense for a client, and I don't want to set up a cache
             krb5_auth_con_setflags(context, auth_context, 0);
 
-            retval = krb5_rd_cred(context, auth_context, &recv_data, &creds, &replay);
+            retval = krb5_rd_cred(context, auth_context, &recv_data, &usercreds, &replay);
             if (retval) {
                 mylog(LOG_ERR, "unable to read returned credentials %s", error_message(retval));
                 exit(1);
             }
+            haveusercreds = 1;
 
+            if (ccache) {
+                // in case it was used above
+                krb5_cc_close(context,ccache);
+                ccache = NULL;
+            }
             if (krb5ccname) {
                 if ((retval = krb5_cc_resolve(context, krb5ccname, &ccache))) {
                     mylog(LOG_ERR, "unable to get credentials cache %s %s", krb5ccname, error_message(retval));
@@ -764,30 +769,54 @@ int main(int argc, char *argv[])
                 mylog(LOG_ERR, "kgetcred can't set permissions for credential file");
             }
 
-            krb5_cc_close(context, ccache);
-            krb5_free_tgt_creds(context, creds);
-
             if (needrename) {
                 if (rename(tempname, realname)) {
                     mylog(LOG_ERR, "Can't rename %s to %s %m", tempname, realname);
                 }
 
             }
-            
 
         } else {
             // list -- just print the data
             mylog(LOG_DEBUG, "%s", recv_data.data);
         }
-
-        free(recv_data.data);
     } else {
         mylog(LOG_ERR, "no error or reply from sendauth!");
         exit(1);
     }
-    // no attempt to free everything, since the program is about to exit
-    freeaddrinfo(apstart);
-    krb5_free_context(context);
+
+    if (creds)
+        krb5_free_tgt_creds(context, creds);
+    if (defcache_princ)
+        krb5_free_principal(context, defcache_princ);
+    if (recv_data.data)
+        free(recv_data.data);
+    if (rep_ret)
+        krb5_free_ap_rep_enc_part(context, rep_ret);
+    if (err_ret)
+        krb5_free_error(context, err_ret);
+    if (server)
+        krb5_free_principal(context, server);
+    if (apstart)
+        freeaddrinfo(ap);
+    else if (ap)
+        freeaddrinfo(ap);
+    if (haveusercreds)
+        krb5_free_cred_contents(context, &usercreds);
+    if (opts)
+        krb5_get_init_creds_opt_free(context,opts);
+    if (ccache)
+        krb5_cc_close(context,ccache);
+    if (havecreds)
+        krb5_free_cred_contents(context, &hostcreds);
+    if (hostkeytab)
+        krb5_kt_close(context, hostkeytab);
+    if (client)
+        krb5_free_principal(context, client);
+    if (default_realm)
+        krb5_free_default_realm(context, default_realm);
+    if (context)
+        krb5_free_context(context);
     exit(0);
 }
 
@@ -949,8 +978,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   // in parent
   waitpid(child, &status, 0);
-
-  krb5_free_context(context);  
 
   if (WEXITSTATUS(status)) {
       // error should already have been logged
