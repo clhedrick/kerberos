@@ -1,3 +1,35 @@
+/*
+ * Copyright 2017 by Rutgers, the State University of New Jersey
+ * All Rights Reserved.
+ *
+ * Export of this software from the United States of America may
+ *   require a specific license from the United States Government.
+ *   It is the responsibility of any person or organization contemplating
+ *   export to obtain such a license before exporting.
+ *
+ * WITHIN THAT CONSTRAINT, permission to use, copy, modify, and
+ * distribute this software and its documentation for any purpose and
+ * without fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright notice and
+ * this permission notice appear in supporting documentation, and that
+ * the name of Rutgers not be used in advertising or publicity pertaining
+ * to distribution of the software without specific, written prior
+ * permission.  Furthermore if you modify this software you must label
+ * your software as modified software and not distribute it in such a
+ * fashion that it might be confused with the original Rutgers software.
+ * Rutgers makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is" without express
+ * or implied warranty.
+ */
+
+/* 
+   daemon to renew Kerberos credentials of active sessions
+   The key is knowing which are active. For this, PAM and
+   other ways to generate credentials are expected to register
+   the credentials cache with the session keyring. This program
+   then checks all session keyrings and renews all credential
+   caches listed there.
+*/
 
 #include <krb5.h>
 #include <com_err.h>
@@ -29,19 +61,6 @@
 
 automatically renew tickets.
 
-For each user with current processes renews (where needed)
- - primary cache in KEYRING
- - all caches in /tmp/krb5cc_NNN and /tmp/krb5cc_NNN_*
-
-Because renewal isn't atomic, before the first renewal, creates a copy of
-renewed credentials in /tmp/krb5cc_NNN-renew. That is deleted after 2 minutes.
-
-rpc.gssd, which is used by NFS, looks first at the primary cache in KEYRING,
-then all caches in /tmp owned by the user. Hence if it happens to hit one
-during the process of renewal, it will eventually find /tmp/krb5cc_NNN-renew,
-and use that.
-
-
  **************************/
 
 /*
@@ -55,7 +74,7 @@ and use that.
 
 int debug = 0;
 
-// hash used to collect uids of all running processes
+// hash used to collect uids of all credential caches registered with session keyrings
 
 struct cc_entry {
   uid_t  uid;
@@ -65,11 +84,6 @@ struct cc_entry {
 };
 
 struct cc_entry *cclist = NULL;
-
-#define HOSTKT "/etc/krb5.keytab"
-#define ANONCC "/tmp/krb5_cc_host"
-#define ANONCCTEMP "/tmp/krb5_cc_host.new"
-#define ANONCCTEMPNAME "FILE:/tmp/krb5_cc_host.new"
 
 void mylog (int level, const char *format, ...)  __attribute__ ((format (printf, 2, 3)));
 void mylog (int level, const char *format, ...) {
@@ -90,6 +104,11 @@ void mylog (int level, const char *format, ...) {
 
   va_end(args);
 }
+
+// functions needed to check on status of
+// tickets. They are defined in the Kerberos library
+// but are not visible to user code. So we have to have
+// our own copy.
 
 static inline int
 data_eq(krb5_data d1, krb5_data d2)
@@ -133,17 +152,22 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
     now = time(0);
 
     if ((code = krb5_cc_get_principal(kcontext, cache, &princ))) {
-      // this is normal. user doesn't have a cache
+      // get princial from the cache. It's a bit odd that a 
+      // cache wouldn't have a principal. This could be either
+      // a cache that wasn't fully set up or (more likely)a file
+      // that isn't actually a cache.
       // return 0, but no need to print an error
       goto done;
     }
 
+    // have to check all the credentials. We need to check whether
+    // the TGT needs renewing.  This sets us up to iterate through the credentials
     if ((code = krb5_cc_start_seq_get(kcontext, cache, &cur))) {
       mylog(LOG_ERR, "can't start sequence for cache %s", error_message(code));
       goto done;
     }
-    found_tgt = FALSE;
-    found_current_tgt = FALSE;
+    found_tgt = FALSE;   // found a TGT that isn't current
+    found_current_tgt = FALSE;   // found a TGT that is current
     while (!(code = krb5_cc_next_cred(kcontext, cache, &cur, &creds))) {
       // only renewable creds are worth looking at. and must be TGT
       if ((creds.ticket_flags & TKT_FLG_RENEWABLE) && is_local_tgt(creds.server, &princ->realm)) {
@@ -180,6 +204,8 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
       goto done;
     }
 
+    // return the right value
+
     // tgt current, no renew
     if (found_current_tgt)
       goto done;
@@ -196,9 +222,12 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
 }
 
 /*
- * Renew the usual way: reiniting.
- * only renew if within minleft sec of expiration
- * closes ccache
+ * renew the cache. Note that this closes ccache.
+ * The code is designed to be free of race conditions. If the cache
+ * is in /tmp, create a temp file and rename it to the real location.
+ * If it's in the keyring, it doesn't need to be reinitialized. New tickets
+ * simply replace old ones. Those are the only two types that are supported.
+ * Other types will work, but the caches may grow each time they are renewed.
  */
 static krb5_error_code
 renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
@@ -221,6 +250,8 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
       mylog(LOG_ERR, "error reading ticket cache");
       goto done;
     }
+
+    // the actual renew operation
 
     code = krb5_get_renewed_creds(ctx, &creds, user, ccache, NULL);
     creds_valid = 1;
@@ -278,6 +309,9 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
       free(newname);
 
     } else {
+      // cache is a keyring, we hope. Anything other than a file will
+      // come here, but it's not clear that it will work right for
+      // things other than Linux keyring.
 
       code = krb5_cc_store_cred(ctx, ccache, &creds);
       if (code != 0) {
@@ -314,6 +348,9 @@ void getccs() {
   // max number of uids simulteaneously logged in 
   hcreate(10000);
   cclist = NULL;
+
+  // there's no system call to read keys from other sessions,
+  // so we have to read /proc/keys.
 
   keyfile = fopen("/proc/keys", "r");
   if (!keyfile) {
@@ -431,6 +468,7 @@ void renewall(krb5_context ctx, time_t minleft) {
     krb5_ccache cache;
     int code;
 
+    // we want to run as the owner of the cache.
     seteuid(entry->uid);
     
     code = krb5_cc_resolve(ctx, entry->name, &cache);
