@@ -1,5 +1,20 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
-/* appl/sample/sserver/sserver.c */
+
+/* 
+ * This code is based on the Kerberos sample server, which contains the 
+ * following license. There is, however, virtually none of the original 
+ * code left here without rewriting.
+ *
+ * The current code is Copyright 2017, by Rutgers, the State University of
+ * New Jersey. It is released under the same license as MIT's, with the obvious
+ * replacement of MIT by Rutgers.
+ */
+
+/* 
+ * Credserv, the service side of kgetcred/credserv. See the man page
+ * for specifics of function.
+ */
+
 /*
  * Copyright 1990,1991 by the Massachusetts Institute of Technology.
  * All Rights Reserved.
@@ -22,20 +37,6 @@
  * M.I.T. makes no representations about the suitability of
  * this software for any purpose.  It is provided "as is" without express
  * or implied warranty.
- */
-
-/*
- * Sample Kerberos v5 server.
- *
- * sample_server:
- * A sample Kerberos server, which reads an AP_REQ from a TCP socket,
- * decodes it, and writes back the results (in ASCII) to the client.
- *
- * Usage:
- * sample_server servername
- *
- * file descriptor 0 (zero) should be a socket connected to the requesting
- * client (this will be correct if this server is started by inetd).
  */
 
 #include "port-sockets.h"
@@ -65,9 +66,6 @@
 #endif
 
 #include "sample.h"
-
-#define CONFFILE "/etc/credserv.conf"
-// contains privileged principals
 
 extern krb5_deltat krb5_clockskew;
 
@@ -189,6 +187,11 @@ int isprived(char *principal) {
     return 0;
 }
 
+// we want to make sure that the user got fresh credentials,
+// so root can't use something lying around. 30 sec allows
+// for some clock skew and processing time. Shorter might be
+// better.
+
 int isrecent(krb5_ticket *ticket);
 
 int isrecent(krb5_ticket *ticket) {
@@ -204,10 +207,6 @@ int isrecent(krb5_ticket *ticket) {
     now = time(0);
     times = ticket->enc_part2->times;
 
-    // we want to make sure that the user got fresh credentials,
-    // so root can't use something lying around. 30 sec allows
-    // for some clock skew and processing time. Shorter might be
-    // better.
     if ((now - times.authtime) > 30) {
         mylog(LOG_ERR, "ticket is too old");
         return 0;
@@ -217,10 +216,18 @@ int isrecent(krb5_ticket *ticket) {
 
 }
 
+/* the actual operations */
+
 char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *data);
 char *listcreds(krb5_context context, krb5_auth_context  auth_context, char * username, char *principal, char *hostname, krb5_data *data, char *cname);
 char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char * flags);
 char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket);
+
+/* 
+   The sample was designed so it could be run directly or 
+   called from inetd. I haven't tested the current code with
+   inetd. It probably won't work.
+*/
 
 int
 main(int argc, char *argv[])
@@ -252,6 +259,7 @@ main(int argc, char *argv[])
     char *principal;
     char *hostname;
     char *flags;
+    // end of args
     char *realhost;
     krb5_creds usercreds;
     krb5_data data;
@@ -348,6 +356,9 @@ main(int argc, char *argv[])
     chdir("/tmp"); // should be irrelevant. but just in case
     umask(027); // just to get something known, we shouldn't actually create any files
 
+    // Mutual authentication, so we need credentials.
+    // Ours comes from /etc/krb5.conf
+
     if (keytab == NULL) {
         if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
             com_err(progname, retval, "while resolving keytab file /etc/krb5.keytab");
@@ -359,6 +370,8 @@ main(int argc, char *argv[])
         mylog(LOG_ERR, "unable to get default realm %s", error_message(retval));
         exit(1);
     }
+
+    // Get options from /etc/krb5.conf
 
     realm_data.data = default_realm;
     realm_data.length = strlen(default_realm);
@@ -440,6 +453,9 @@ main(int argc, char *argv[])
     signal (SIGALRM, catch_alarm);
     alarm(60);  // a minute is more than enough
 
+    // get authenticated connection from client. Returns
+    // client's credentials in ticket.  Our comes from keytab
+
     retval = krb5_recvauth(context, &auth_context, (krb5_pointer)&sock,
                            SAMPLE_VERSION, server,
                            0,   /* no flags */
@@ -450,7 +466,8 @@ main(int argc, char *argv[])
         exit(1);
     }
 
-    // get arguments from kgetcred: operation, username and principal
+    // Get arguments from kgetcred: operation, username, principal, flags, and hostname
+    // Not all operations use all three but it's easier to be uniform.
 
     // op
     if ((retval = net_read(sock, (char *)&op, 1)) <= 0) {
@@ -546,7 +563,9 @@ main(int argc, char *argv[])
 
     mylog(LOG_DEBUG, "operation %c for user %s principal %s from host %s", op, username, principal, inet_ntoa(peername.sin_addr));
 
-    /* Get client name */
+    // Get client name (i.e. principal by which client authenticated ) from ticket.
+    // This is typically the user running kgetcred, except that for the 'G' operation
+    // it's the host principal from /etc/krb5.keytab on the client side.
     repbuf[sizeof(repbuf) - 1] = '\0';
     retval = krb5_unparse_name(context, ticket->enc_part2->client, &cname);
     if (retval){
@@ -555,13 +574,17 @@ main(int argc, char *argv[])
     }
 
     if (op == 'G' || strncmp("host/", cname, 5) == 0)  {
-        // user is authenticated as a host. verify that the request came from that host
-        //otherwise we do a reverse lookup of IP. But if a host has
-        //more than one name, this is mostly ikely to produce the right answer
+        // User is authenticated as a host. verify that the request came from that host
+        // If a host has more than one name, this is more likely to produce the right answer
+        // than a simple lookup. (For alternatives where we don't have the host
+        // credentials, we just to a reverse lookup of the IP address it's coming from.
 
         char *hoststart;
         char *hostend;
     
+        // cname is the principal the client was authenticated as. In this
+        // case it's host/HOSTNAME@DOMAIN
+        // Isolate the HOSTNAME part
         hostend = index(cname, '@');
         if (!hostend) {
             mylog(LOG_ERR, "principal missing @ %s", cname);
@@ -574,10 +597,14 @@ main(int argc, char *argv[])
         }
         *hostend = '\0';  // terminate, to give us separate service and host
         *hoststart = '\0';
+        // Make sure it actually starts with host/
         if (strcmp("host", cname) != 0) {
             mylog(LOG_ERR, "request not from host %s", cname);
             goto cleanup;
         }
+        // now handle the hostname. Forward lookup on the name,
+        // then make sure the IP is on the list of addresses for
+        // that name.
         host = gethostbyname(hoststart+1);
         if (!host) {
             mylog(LOG_ERR, "can't find hostname %s", hoststart + 1);
@@ -612,6 +639,7 @@ main(int argc, char *argv[])
     }
     // end principal check
 
+    // do the real operations
     if (op == 'G') 
         errmsg = getcreds(context, auth_context, username, principal, realhost, &data);
     else if (op == 'L') 
@@ -621,6 +649,7 @@ main(int argc, char *argv[])
     else if (op == 'U') 
         errmsg = unregistercreds(context, auth_context, username, principal, hostname, realhost, &data, cname, ticket);
 
+    // return the results to the client
     if (errmsg == NULL) {
         char status[1];
         mylog(LOG_DEBUG, "returning data to client %s for user %s length %d", inet_ntoa(peername.sin_addr), username, data.length);
@@ -647,6 +676,7 @@ main(int argc, char *argv[])
             exit(1);
         }
     } else {
+        // error message. return the message
         char status[1];
         status[0] = 'e'; // error message
         mylog(LOG_DEBUG, "returning error to client %s for user %s %s", inet_ntoa(peername.sin_addr), username, errmsg);
@@ -676,6 +706,16 @@ main(int argc, char *argv[])
     exit(0);
 }
 
+/*
+ * Finally the actual operations
+ * Note that this code must check permissions
+ * of the caller.
+ */
+
+// getcreds is called with host authentication.
+// The host tells us who the user is
+// We return the credentials they have registered for that host.
+
 // returns NULL if OK, else error message
 char *
 getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *data) {
@@ -697,6 +737,10 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     krb5_creds usercreds;
     struct hostent* host;
 
+    // This is the one operation where we don't do permissions
+    // checking. The code in the main body verified that the caller
+    // authenticated with a host credential.
+
     if ((r = krb5_get_default_realm(context, &default_realm))) {
         mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
         return GENERIC_ERR;
@@ -709,18 +753,21 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     }
     else {
         // we'll give out any credentials authorized for this user and host.
-        // remember it's onlyt he host that is asserting that this is the user,
+        // remember it's only the host that is asserting that this is the user,
         // but that's the best we can do.  
-        // For a 'G' operationg The caling code has verified that caller is
-        // actually authenticated as the host, and the query is coming from that host.
-        // At the  moment, non-root users should only have entries for their own 
-        // principal.
+
+        // The caller can request a specific principal. If it's registered they can
+        // get it. But the registration code makes sure that non-root users can't
+        // register to get someone else's principal.
 
         // Root will be set up by admins. They should only have access to non-critical
         // principals, except on secure machines.
 
         char line[1024];
         int found = 0;
+
+        // Check the INDEX file for this user, to see that they are registered
+        // for this principal from this host.
 
         snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/%s/INDEX", username);
         indexf = fopen(repbuf, "r");
@@ -768,10 +815,13 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         if (!found)
             return NOKEYTAB_ERR;            
 
+        // Found 
+
         snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/%s/%s", username, principal);
 
     }
 
+    // request is authorized
     // now have filename of keytab in repbuf
 
     if (stat(repbuf, &statbuf) != 0) {
@@ -780,6 +830,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     }
 
     if ((r = krb5_kt_resolve(context, repbuf, &userkeytab))) {
+        // file is there but we can't read it as a keytab. Something odd
         mylog(LOG_ERR, "unable to get keytab for user %s %s", username, error_message(r));
         goto cleanup;
     }
@@ -806,7 +857,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         goto cleanup;
     }
 
-    // these credentials should be for us. The address will be adjusted when forwarding
+    // these credentials should use our IP address. The address will be adjusted when forwarding
 
     if ((r =krb5_os_localaddr(context, &addresses))) {
         mylog(LOG_ERR, "unable to get our addresses %s", error_message(r));
@@ -815,11 +866,13 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
 
     krb5_get_init_creds_opt_set_address_list(options, addresses);
 
+    // finally, get the credentials from the keytab that was registered
     if ((r = krb5_get_init_creds_keytab(context, &usercreds, userprinc, userkeytab, 0,  NULL, options))) {
         mylog(LOG_ERR, "unable to make credentials for user from keytab %s %s %s", username, repbuf, error_message(r));
         goto cleanup;
     }
 
+    // put it in a temporary cache, since we're just going to forward it
     if ((r = krb5_cc_new_unique(context, "MEMORY", "/tmp/jjjjj", &ccache))) {
         mylog(LOG_ERR, "unable to make credentials file for user %s %s", username, error_message(r));
         goto cleanup;
@@ -836,6 +889,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     }
 
     // get our hostname, normalized
+    // We're generating the local host principal needed for the forward call
     hostbuf[sizeof(hostbuf)-1] = '\0';
     gethostname(hostbuf, sizeof(hostbuf)-1);
     host = gethostbyname(hostbuf);
@@ -851,6 +905,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
       goto cleanup;
     }
 
+    // for the forward, we need the local IP addresses in auth_content.
     /* fd is always 0 because the real one gets put onto 0 by dup2 */
     if ((r = krb5_auth_con_genaddrs(context, auth_context, 0,
 			    KRB5_AUTH_CONTEXT_GENERATE_LOCAL_FULL_ADDR))) {
@@ -858,8 +913,12 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
       goto cleanup;
     }
 
-    // hack. for the moment, if root, make it forwardaable. Otherwise can't use IPA. The hope is that
-    // the script will do a kdestroy at the end.
+    // Now we've got all the info to generate the forwarded credential.
+    // This operation takes a credential appropriate for our system and
+    // turns it into one appropriate for hostname.
+    // Normally we don't want it forwardable, to minimze the damage if someone
+    // can become root on the client system. But sometimes we need it forwardable.
+    // So an admin user can set the "F" flag in the INDEX entry.
 
     if ((r = krb5_fwd_tgt_creds(context, auth_context, hostname, userprinc, serverp,
 			        ccache, (strchr(flags, 'F') != NULL), data))) {
@@ -867,7 +926,10 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
       goto cleanup;
     }
 
-    // good return, output is in data
+    // good return. The new, adjusted credential is in data. It's actually
+    // a KRB-CRED message, which has the most sensitive part encrypted
+    // in the session key. krb5_rd_cred in the client reads this message and
+    // produces the actual credential.
     return 0;
     // since we forked, we're not actually doign cleanup
  cleanup:
@@ -877,8 +939,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
 }
 
 // list credentials for user username.
-// cname is the principal that they are authenticated as. For the moment just support principal and username match
-// in the long run, privileged principals can see anyone.
+// cname is the principal that they are authenticated as.
 
 char *
 listcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *outdata, char *clientp) {
@@ -899,19 +960,19 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
         return GENERIC_ERR;
     }
     
-    // user has asked to see listing for username. The only valid principal to request it for the 
-    // moment is that principal in the default realm;
+    // Check permission
+    // privileged user can see anything.
+    // Root if it hasn't authenticated as a privileged user can't do anything.
+    // Otherwise, user can see only its own data.
 
     snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
     if (isprived(clientp)) {
         ;  // allow anything
     } else if (strcmp("root", username) == 0) {
-        // at some point we'll verify that the user is authenticated as an admin
-        // without that I think it's a bad idea to let root on any user see what root
-        // can do, particularly on all machines
+        // Root is generally not a valid credential
         return "Currently we don't support this function for root";
     } else if (strcmp(buffer, clientp) != 0) {
-        // non-root, user must agree with authenticated principal
+        // non-root, user they're requested info on must agree with authenticated principal
         mylog(LOG_ERR, "user %s asked to list user %s", username, clientp);
         return GENERIC_ERR;
     } else {
@@ -919,13 +980,17 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
         hostname = NULL;
     }
 
-    // file containing authorizations
+    // INDEX file for the requested user has the permissions to list
     snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/INDEX", username);
     indexf = fopen(buffer, "r");
     // probably nothing registered
     if (indexf == NULL) 
         return NOKEYTAB_ERR;
 
+    // parse the file and collect data. Since we want to be able
+    // to sort it, we put the data into a list of malloc'ed structures
+    // We also collect the sizes of the strings we'll eventually output,
+    // so we know how big a space to malloc for the final output.
     while (fgets(buffer, sizeof(buffer), indexf)) {
         char *ch, *princp, *flags;
         
@@ -996,6 +1061,8 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
      for each principal, size of principal + 2
      for each host, size of host + 2 */
 
+    // go through the list of data and print into a buffer
+
     outptr = malloc(printsize);
     outstring = outptr;
     
@@ -1026,8 +1093,7 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
 }
 
 // register credentials for user username.
-// cname is the principal that they are authenticated as. For the moment just support principal and username match
-// in the long run, privileged principals can see anyone.
+// cname is the principal that they are authenticated as.
 
 char *
 registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char *flags) {
@@ -1047,15 +1113,22 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     }
     
     // user has asked to register credentials for username and principal on host they came from.
-    // The only valid principal to request it for the moment is that principal in the default realm;
+    // Check permission. If they are authenticated as a privileged user let them
+    // do anything. Otherwise they can only authorize their own principal on the
+    // specific machine where they are coming from. (Otherwise if root found
+    // credentials lying around they could register the user for another system
+    // where the hacker has control.)
+
+    // There's one more protection. I'm concerned that a user who has a long-running
+    // session could be compromised by root getting to their credential. So the client
+    // gets a new ticket. I have no obvious way to know that the ticket they're presenting
+    // is that one, but I can check that it was obtained within the last 30 sec.
 
     snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
     if (isprived(clientp)) {
         ;  // allow anything
     } else if (strcmp("root", username) == 0) {
-        // at some point we'll verify that the user is authenticated as an admin
-        // without that I think it's a bad idea to let root on any user see what root
-        // can do, particularly on all machines
+        // root generally isn't a valid principal
         return "Currently we don't support this function for root";
     } else if (strcmp(buffer, clientp) != 0 || strcmp(buffer, principal) != 0) {
         // non-root, user must agree with authenticated principal
@@ -1067,11 +1140,11 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     } else {
         // normal user can't set flags
         flags = "";
-        // and they get the real host
+        // and they get data from the real host only
         hostname = realhost;
     }
 
-    // file containing authorizations
+    // file containing authorizations for the requested user
     snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/INDEX", username);
     indexf = fopen(buffer, "r");
 
@@ -1111,6 +1184,7 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         fclose(indexf);
     }
 
+    // if it's not there, add it
     if (!found) {
         int wrote;
 
@@ -1140,10 +1214,16 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         fclose(indexf);
     }
 
-    // now recreate the principal. do this even if index entry existed, just in case
-    // password changed
+    // now recreate the keytable. do this even if index entry existed. Because keytables
+    // are invalidated when the user changes their password, we need a way for them to
+    // update the keytable. So reregistering for a host will get the keytable again.
 
     snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/%s.%lu", username, principal, (unsigned long) getpid());
+
+    // for the moment the only way to generate a key table for another user is
+    // to be on the Kerberos server and use kadmin.local. This will change in new
+    // versions of kerberos, where kadmin can be authorized to do it remotely.
+    // But for now, we call kadmin.local in a fork.
 
     child = fork();
 
@@ -1178,6 +1258,10 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         return "unable to create key table -- kadmin failed";
     }
 
+    // to prevent race conditions while the new file is being build (or truncated
+    // files if something goes wrong), we generate a temp file and then rename
+    // it to the real one.
+
     snprintf(newname, sizeof(newname)-1, "/var/credserv/%s/%s", username, principal);
 
     if (rename(buffer, newname)) {
@@ -1193,9 +1277,8 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
 
 }
 
-// register credentials for user username.
-// cname is the principal that they are authenticated as. For the moment just support principal and username match
-// in the long run, privileged principals can see anyone.
+// unregister credentials for user username.
+// cname is the principal that they are authenticated as.
 
 char *
 unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket) {
@@ -1216,16 +1299,13 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
         return GENERIC_ERR;
     }
     
-    // user has asked to register credentials for username and principal on host they came from.
-    // The only valid principal to request it for the moment is that principal in the default realm;
+    // see register for a discussion of authorization
 
     snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
     if (isprived(clientp)) {
-        ;  // allow anything
+        ;  // allow anything for admin user
     } else if (strcmp("root", username) == 0) {
-        // at some point we'll verify that the user is authenticated as an admin
-        // without that I think it's a bad idea to let root on any user see what root
-        // can do, particularly on all machines
+        // root generally isn't a valid principal
         return "Currently we don't support this function for root";
     } else if (strcmp(buffer, clientp) != 0 || strcmp(buffer, principal) != 0) {
         // non-root, user must agree with authenticated principal
@@ -1236,7 +1316,7 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
         return "Your credentials are too old. Is your computer not synchronized?";
         // everything matches
     } else {
-        // normal user gets real host
+        // normal user can only unregister on host they're coming from
         hostname = realhost;
     }
 
@@ -1244,7 +1324,7 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
     snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/INDEX", username);
     indexf = fopen(buffer, "r");
 
-    // see if it already exists
+    // see if the entry to be removed is actually there
     if (indexf) {
         while (fgets(line, sizeof(line), indexf)) {
             char *ch, *princp;
@@ -1285,6 +1365,8 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
         fclose(indexf);
     }
 
+    // if so, write a new version of the file without that entry
+    // write into a temp file and rename it on top of the real one
     if (found) {
         // need to delete entry. copying index to new location then rename
 
@@ -1348,6 +1430,8 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
         mylog(LOG_DEBUG, "user %s principal %s host %s not in INDEX, no need to remove", username, principal, hostname);
     }
 
+    // if there's no references to this principal left in the file,
+    // remove the keytab
     if (!principal_found) {
         // principal not in use by other hosts
         snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/%s", username, principal);
