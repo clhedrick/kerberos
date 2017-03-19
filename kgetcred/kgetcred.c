@@ -1,5 +1,21 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 
+/* 
+ * This code is based on the Kerberos sample client, which contains the 
+ * license below. There is, however, virtually none of the original 
+ * code left here without rewriting.
+ *
+ * The current code is Copyright 2017, by Rutgers, the State University of
+ * New Jersey. It is released under the same license as MIT's, with the obvious
+ * replacement of MIT by Rutgers.
+ */
+
+/* 
+ * kgetcred, the clientside of kgetcred/credserv. See the man page
+ * for specifics of function.
+ */
+
+
 /* portability notes:
 
 kgetcred uses setjmp/longjmp. Gcc/Intel/Linux has support in GCC to make it safe
@@ -14,7 +30,6 @@ There is a subtle portability issue in setresuid. This is used only in pam. We h
 If you don't have clearenv you'll need to use the MAC code
 
 */
-
 
 /* appl/sample/sclient/sclient.c */
 /*
@@ -39,13 +54,6 @@ If you don't have clearenv you'll need to use the MAC code
  * M.I.T. makes no representations about the suitability of
  * this software for any purpose.  It is provided "as is" without express
  * or implied warranty.
- */
-
-/*
- *
- * Sample Kerberos v5 client.
- *
- * Usage: sample_client hostname
  */
 
 #include "port-sockets.h"
@@ -117,17 +125,15 @@ net_read(int fd, char *buf, int len)
 }
 
 /*
- This is setuid, so we have to think about security. The other end needs to be able to believe who we are.
+ The program is setuid, so we have to think about security. The other end needs to be able to believe who we are.
  That's why we use host/foo.cs.rutgers.edu as our principal. It lets the other end verify tht we have access
  to the keytab, which should mean we're root, and they will check to make sure we're actualy coming from that IP.
+ 
+ This program sends several parameters to the other end. However they are all checked on the server side
+ to make sure they are permissible.
 
- We don't allow any arguments.
+ The same source also produces a PAM module. That isn't setuid, but does run as root.
 
- We run setuid, read /etc/krb5.keytab and /etc/kgetcred.conf. kgetcred.conf has hostname and port. We don't want
- to allow the user to specify that, so he can't feed auth info to a system of his choice. If he's root, then he
- can read krb5.keytab anyway and protection doesn't accomplish much. In that case he can fake this program out, but
- all he can get from a user is an IP-locked non-forwardable ticket. So basically if you register a keytab for host,
- root can compromise you.
 */
 
 
@@ -208,16 +214,15 @@ int main(int argc, char *argv[])
 
      // Timeout for network I/O
      // NOTE: we only alarm network I/O that we do. We don't alarm any kerberos
-     // calls. We assume that Kerberos does its own timeouts. If we longjmp out
-     // of a Kerberos library, it is very likely that they will have allocated
-     // data structures, and we'll have a memory leak.
+     // library functions. We assume that Kerberos does its own timeouts. If we
+     // longjmp out of a Kerberos library, it is very likely that they will have 
+     // allocated data structures, and we'll have a memory leak.
      void catch_alarm (int sig) {
          mylog(LOG_ERR, "kgetcred timeout talking to server");
          longjmp(env, 1);
      }
 
      recv_data.data = NULL;
-
 
      /*
       * Parse command line arguments
@@ -270,8 +275,8 @@ int main(int argc, char *argv[])
      if (argc > 0)
          principal = argv[0];
 
-     // this is the one environment varible we need
-     // so save it before cleaning environment, then
+     // This is the one environment varible we need.
+     // So save it before cleaning environment, then
      // put it back
      krb5ccname = getenv("KRB5CCNAME");
 #ifdef MAC
@@ -300,16 +305,21 @@ int main(int argc, char *argv[])
         goto done;
     }
 
+    // get configuration info from krb5.conf. Both kgetcred and
+    // pam_kgetcred use the same configuration section.
+
     realm_data.data = default_realm;
     realm_data.length = strlen(default_realm);
 
     krb5_appdefault_string(context, "kgetcred", &realm_data, "server", "", &serverhost);
 
+    // address of credserv server
     if (strlen(serverhost) == 0) {
         mylog(LOG_ERR, "Please define server in the [appdefaults] section, e.g. \nkgetcred = {\n     server=hostname\n}");
         goto done;
     }
 
+    // our hostname
     realhost[sizeof(realhost)-1] = '\0';
     gethostname(realhost, sizeof(realhost)-1);
     host = gethostbyname(realhost);
@@ -318,10 +328,18 @@ int main(int argc, char *argv[])
         goto done;
     }
     
+    // Realhost is our actual host
+    // Hostname is the argument sent to the other end. For register
+    //  and unregister it's the hostname to register (only allowed for
+    //  admin users). Obviously hostname defaults to our real host
     if (hostname == NULL)
         hostname = realhost;
 
-
+    // user we're running as. This will be sent to the other
+    // end is the username to act on, though an admin user can
+    // override it. pwd is also used to change our userid
+    // back to the user when we've finished doing things that
+    // require setuid root.
     if (!pwd) {
         pwd = getpwuid(getuid());
         if (!pwd) {
@@ -331,6 +349,7 @@ int main(int argc, char *argv[])
     }
 
     // username user the action applies to, not necesarily the one we will authenticate as
+    // defaults to current user.
     if (!username) {
         if (anonymous)
             username = "anonymous.user";
@@ -338,8 +357,11 @@ int main(int argc, char *argv[])
             username = pwd->pw_name;
     }
 
+    // op is which command we're doing.
+    // G - get credentials for the current user.  For this
+    // we don't have user credentials, so we have to use the host's.
     if (op == 'G') {
-        // use host credentials
+        // use host credentials, from /etc/krb5.keytab
 
         // FQ hostname is now host->h_name
 
@@ -359,6 +381,10 @@ int main(int argc, char *argv[])
         }
         havecreds = 1;
 
+        // we have to make a credentials cache (remember we're using a keytab, so
+        // we don't have a credentias cache), for the call that sets up an
+        // authenticated connection. Use a temporary member CC, because no one
+        // else needs it.
         if ((retval = krb5_cc_new_unique(context, "MEMORY", "/tmp/jjjjj", &ccache))) {
             mylog(LOG_ERR, "unable to make credentials file for host %s", error_message(retval));
             goto done;
@@ -374,7 +400,13 @@ int main(int argc, char *argv[])
         }
 
     } else if (op != 'L' && !prived) {
-        // for prived user we have to use existing credentials, because they will be one-time and we can't deal with that
+        // for register and unregister if not privileged prompt for new
+        // credentials. This is based in the -P option. Clearly an unprivileged
+        // user can specify -P, but the other end will check that the credentials
+        // were obtained in the last 30 sec, so it won't do them much good.
+        //  The point of this is the this operation opens up your security.
+        // We don't want root to be able to find credentials lying around from
+        // a long-running job and use then to register the current host.
 
         if (!clientname)
             clientname = pwd->pw_name;
@@ -404,6 +436,10 @@ int main(int argc, char *argv[])
         }
         haveusercreds = 1;
 
+        // now have credentials for current user.
+        // put them in a credentials cache for library call that makes
+        // a secure connection.
+
         if ((retval = krb5_cc_new_unique(context, "MEMORY", "/tmp/kkkk", &ccache))) {
             mylog(LOG_ERR, "unable to make credentials file for host %s", error_message(retval));
             goto done;
@@ -415,7 +451,8 @@ int main(int argc, char *argv[])
         }
 
     } else {
-        // L in default cause. use existing ccache
+        // For list command, and for register and unregister if a privileged user
+        // Just use current default credentials
         if ((retval = krb5_cc_default(context, &ccache))) {
             mylog(LOG_ERR, "can't get your Kerberos credentials %s", error_message(retval));
             goto done;
@@ -426,6 +463,9 @@ int main(int argc, char *argv[])
             goto done;
         }
     }
+
+    // at this point ccache has credentials to be used
+    // for connection, and client has the principal for them.
 
     // drop privs as soon as possible
     // there's not much user input so it's not clear how you'd exploit this program, but still, be safe
@@ -439,12 +479,15 @@ int main(int argc, char *argv[])
     seteuid(pwd->pw_uid);
 #endif
 
+    // so we don't have to do wait for the subprocess
     (void) signal(SIGPIPE, SIG_IGN);
 
     //if (argc > 2)
     //        portstr = argv[2];
     //    else
-        portstr = "755";
+    portstr = "755";
+
+    // get a connection to the server
 
     memset(&aihints, 0, sizeof(aihints));
     aihints.ai_socktype = SOCK_STREAM;
@@ -466,6 +509,9 @@ int main(int argc, char *argv[])
     //        service = argv[3];
     //    }
 
+    // principal for the server. needed by the library call to make
+    // a secure connection
+
     retval = krb5_sname_to_principal(context, serverhost, service,
                                      KRB5_NT_SRV_HST, &server);
     if (retval) {
@@ -474,6 +520,7 @@ int main(int argc, char *argv[])
         goto done;
     }
 
+    // set timeout for opening the connection
     if (setjmp(env))
         goto done;
 
@@ -513,7 +560,7 @@ int main(int argc, char *argv[])
     }
 
     alarm(0);
-    // kerberos will do its own timeouts
+    // kerberos will do its own timeouts, so remove the timeout
 
     if (sock == -1)
         /* Already printed error message above.  */
@@ -524,18 +571,7 @@ int main(int argc, char *argv[])
     cksum_data.data = serverhost;
     cksum_data.length = strlen(serverhost);
 
-
-    //retval = krb5_cc_default(context, &ccdef);
-    //if (retval) {
-    //    mylog(LOG_ERRval, "while getting default ccache %s", error_message(retval));
-    //    goto done;
-    //}
-
-    //retval = krb5_cc_get_principal(context, ccdef, &client);
-    //if (retval) {
-    //    mylog(LOG_ERRval, "while getting client principal name %s", error_message(retval));
-    //    goto done;
-    //}
+    // have the socket, ask Kerberos to make a secure connection
 
     retval = krb5_sendauth(context, &auth_context, (krb5_pointer) &sock,
                            SAMPLE_VERSION, client, server,
@@ -543,6 +579,10 @@ int main(int argc, char *argv[])
                            &cksum_data,
                            NULL,
                            ccache, &err_ret, &rep_ret, NULL);
+
+    // for G operation, we are going to need to generate credentials
+    // from data that's returned. Destroy and deallocate the temporary
+    // cache to avoid memory leak when we reuse ccache below.
 
     if (op == 'G') {
         retval2 = krb5_cc_destroy(context, ccache);
@@ -553,8 +593,11 @@ int main(int argc, char *argv[])
         ccache = NULL;
     }
 
+    // set timeout. We're about to do network I/O
     signal (SIGALRM, catch_alarm);
     alarm(waitsec);  // this should be enough. we don't want to hang web processes that depend upon this too long
+
+    // send the parameters to the server
 
     // operatoin. currently just get
     if ((written = write(sock, (char *)&op,
@@ -648,6 +691,10 @@ int main(int argc, char *argv[])
     //    krb5_cc_close(context, ccdef);
     //    if (auth_context) krb5_auth_con_free(context, auth_context);
 
+
+    // now process any errors from the sendauth.
+
+
     if (retval && retval != KRB5_SENDAUTH_REJECTED) {
         if (retval == KRB5KRB_AP_ERR_BADADDR)
             mylog(LOG_ERR, "The official error message is \"Incorrect net address\", but this is usuallly caused when you don't have valid kerberos credentials");
@@ -661,20 +708,30 @@ int main(int argc, char *argv[])
         mylog(LOG_ERR, "sendauth rejected, error reply is:\n\t\"%*s\"",
                err_ret->text.length, err_ret->text.data);
     } else if (rep_ret) {
+
+        // if it worked, read the response and process it
+
         int isError = 0;
         char status[1];
 
         if (debug)
             mylog(LOG_DEBUG, "sendauth succeeded, reply is:");
+
+        // response can be credentials, error, or output to print
+        // the first byte indicates which
+
         if ((retval = net_read(sock, (char *)status, 1)) <= 0) {
             if (retval == 0)
                 errno = ECONNABORTED;
             mylog(LOG_ERR, "while reading data from server %s", error_message(retval));
             goto done;
         }
+
+        // error
         if (status[0] == 'e')
             isError = 1;
 
+        // now read response
         if ((retval = net_read(sock, (char *)&xmitlen,
                                sizeof(xmitlen))) <= 0) {
             if (retval == 0)
@@ -697,6 +754,10 @@ int main(int argc, char *argv[])
 
         recv_data.data[recv_data.length] = '\0';
 
+        // process response
+
+        // if it's an error, print it and exit
+
         if (isError) {
             // need username to help reading syslog messages
             mylog(LOG_ERR, "Error for %s: %s", pwd->pw_name, recv_data.data);
@@ -705,27 +766,40 @@ int main(int argc, char *argv[])
 
         alarm(0); // back to kerberos timeouts
 
+        // if it's Kerberos credentials, set them up for the user
+
         if (op == 'G') {
+
             // replay protection doens't make sense for a client, and I don't want to set up a cache
             krb5_auth_con_setflags(context, auth_context, 0);
 
+            // reads the special KRB-CRED message that has credentials in it. The 
+            // most sensitive part is encrypted with the session key
             retval = krb5_rd_cred(context, auth_context, &recv_data, &creds, &replay);
             if (retval) {
                 mylog(LOG_ERR, "unable to read returned credentials %s", error_message(retval));
                 goto done;
             }
 
+            // we're about to reuse the cache
             if (ccache) {
                 // in case it was used above
                 krb5_cc_close(context,ccache);
                 ccache = NULL;
             }
+
+            // krb5ccname is set if user has asked for a specific
+            // cache, either from environment variable or PAM
+            // configuration.
+
             if (krb5ccname) {
+                // for specific cache, open it
                 if ((retval = krb5_cc_resolve(context, krb5ccname, &ccache))) {
                     mylog(LOG_ERR, "unable to get credentials cache %s %s", krb5ccname, error_message(retval));
                     goto done;
                 }
             } else {
+                // otherwise use default
                 if ((retval = krb5_cc_default(context, &ccache))) {
                     mylog(LOG_ERR, "unable to get default credentials cache %s", error_message(retval));
                     goto done;
@@ -764,11 +838,17 @@ int main(int argc, char *argv[])
                 needrename = 1;
             }
 
+            // now we've got the cache open and initialized
+            // store the credentials in it
             if ((retval = krb5_cc_store_cred(context, ccache, creds[0]))) {
                 mylog(LOG_ERR, "unable to store credentials in cache %s", error_message(retval));
                 goto done;
             } 
 
+            // generate the name of the cache, for printing or
+            // return to PAM. If the cache is a temporary which
+            // will have to be renamed, use the real name, i.e.
+            // the one it will end up as.
             snprintf(realccname, sizeof(realccname), "%s:%s", 
                      krb5_cc_get_type(context, ccache),
                      (needrename ? realname : krb5_cc_get_name(context, ccache)));
@@ -777,9 +857,13 @@ int main(int argc, char *argv[])
             krb5_cc_close(context,ccache);
             ccache = NULL;
 
+            // final return is the name of the final cache
             mainret = realccname;
             mylog(LOG_DEBUG, "%s", realccname);
 
+            // register this credential in the session keyring.
+            // renewd uses this to check which credential caches are
+            // still active and so need to be renewed
             serial = add_key("user", "krbrenewd:ccname", realccname, strlen(realccname), KEY_SPEC_SESSION_KEYRING);
             if (serial == -1) {
                 mylog(LOG_ERR, "kgetcred can't register credential file");
@@ -790,7 +874,7 @@ int main(int argc, char *argv[])
                 mylog(LOG_ERR, "kgetcred can't set permissions for credential file");
             }
 
-
+            // do the rename for files in /tmp, from temporary to real file name
             if (needrename) {
                 if (rename(tempname, realname)) {
                     mylog(LOG_ERR, "Can't rename %s to %s %m", tempname, realname);
@@ -798,10 +882,9 @@ int main(int argc, char *argv[])
 
             }
 
-
-
         } else {
-            // list -- just print the data
+            // data returned was output (tagged with 'l' because it's a listing)
+            // just print it
             mylog(LOG_DEBUG, "%s", recv_data.data);
         }
     } else {
@@ -816,6 +899,9 @@ int main(int argc, char *argv[])
 
  done:
 
+    // if we got here from an error, might not have cancelled 
+    // an alarm.
+    alarm(0);
     if (sock >= 0)
         close(sock);
     if (creds)
