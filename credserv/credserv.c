@@ -1063,7 +1063,11 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
 
     // go through the list of data and print into a buffer
 
-    outptr = malloc(printsize);
+    if (printsize == 0) {
+        printsize = 1;  // will put a single newline
+    }        
+
+    outptr = malloc(printsize + 1);
     outstring = outptr;
     
     for (princitem = princs; princitem ; princitem = princitem->next) {
@@ -1083,8 +1087,10 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
         }
     }
     
-    if (strlen(outstring) == 0)
-        outstring = "\n";
+    // if there's output, the sprintf will have added the terminating null
+    // but if not the string is uninitialized
+    if (printsize == 1)
+        strcpy(outstring, "\n");
 
     outdata->data = outstring;
     outdata->length = strlen(outstring);
