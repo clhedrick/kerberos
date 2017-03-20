@@ -477,6 +477,7 @@ void renewall(krb5_context ctx, time_t minleft) {
       if (cache)
 	krb5_cc_close(ctx, cache);
       cache = NULL;
+      seteuid(0L);
       continue;
     }
 			   
