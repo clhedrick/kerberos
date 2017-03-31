@@ -108,10 +108,32 @@ I also made a minor patch to avoid an unnecessary second password prompt.
 However we are probably going to use sssd rather than this. By the time we roll this out for users, the systems
 should be updated to at least Centos 7.
 
-# TODO
+# Recommended setup
 
-Kerberized service to create home directories, with the client being a pam module.
+We want to support the concept of a cache collection, so we can have
+a primary cache with our normal credentials, but other caches with
+administrative credentials. Getting the right options is tricky, because
+of how NFS uses the KEYRING.
 
-pam_mkhomedir isn't useful in a Kerberized environment.
+NFS expects credentials for your normal username to be in whatever
+cache is named as the default in krb5.conf. If you set it to
+KEYRING:persistent:%{uid}, then if the user creates a new cache for
+administrative credentials, kinit will make it primary, and NFS will
+try to use those credentials rather than the user's normal ones.
+
+So we need the default in krb5.conf to be a specific cache, KEYRING:persistent:%{uid}:%{uid} for consistency with openssh.
+
+However KRB5CCNAME can't be set to that. If we do, and we kinit to admin,
+it will overwrite KEYRING:persistent:%{uid}:%{uid}. To do kinit to create
+a new cache, and allow kswitch to switch between then KRB5CCNAME must
+be set to KEYRING:persistent:%{uid}.
+
+Thus pam_reg_cc has an option "usecollection" that will update KRB5CCNAME
+from KEYRING:persistent:%{uid}:%{uid} to KEYRING:persistent:%{uid}.
+
+For cron jobs we recommend configuring pam_kgetcred to use ccname=FILE:/tmp/krb5cc_%{uid}_XXXXXX.
+That makes them independent of what's going on in interactive sessions.
+If the user kinits to admin, and changes their primary cache, you don't
+want it impacting any batch jobs that are running.
 
 
