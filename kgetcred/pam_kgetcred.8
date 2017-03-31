@@ -2,7 +2,7 @@
 .SH NAME
 pam_kgetcred \- sets up Kerberos credentials for cron jobs
 .SH DESCRIPTION
-.I  pam_kgetcred
+.I  pam_kgetcred [usecollection]
 sets up a Kerberos credential cache. It's intended for use
 with cron, because pam_sss or pam_krb5 is more appropriate
 for interactive sessions.
@@ -19,6 +19,18 @@ Pam_kgetcred sets KRB5CCNAME to the name of the credentials
 file, and registers it for renewd. (This is the same function
 performed by pam_reg_cc, so it doesn't make sense to use them
 both for the same service.)
+.PP
+If usecollecton is specified, and the cache is in KEYRING,
+KRB5CCNAME is set to the collection rather than that cache.
+E.g. if the cache is KEYRING:persistent:1003:1003, and
+usecollection is set KRB5CCNAME will be set to KEYRING:persistent:1003.
+This is for consistency with pam_reg_cc. 
+However we do not recommend using KEYRING collections for cron jobs.
+The problem is that the default cache can change if the user
+switches to a different cache during an interactive job. Cron jobs
+should probably have an independent environment. Thus we recommend
+using something like
+ccname=FILE:/tmp/krb5cc_%{uid}_XXXXXX. See below.
 .PP
 By default, pam_kgetcred uses the default credentials name
 from
@@ -44,7 +56,7 @@ used to generate a unique filename, replacing XXXXXX with
 random characters.
 .PP
 If you are using NFS, the only credentials that make sense
-are the primary cache in the KEYRING, indicated by KEYRING:persistent:%{uid},
+are the default cache in the KEYRING, as defined in krb5.conf,
 or a file in /tmp. If you are using renewd, the pattern
 it looks it for deletion of expired caches should match
 the pattern of credentials created here. By default

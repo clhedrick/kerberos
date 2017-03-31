@@ -975,6 +975,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *mainret = NULL;
   uid_t olduid;
   gid_t oldgid;
+  int i;
 
   // this has to be internal, because it needs pamh, which is a local
   void __attribute__ ((format (printf, 2, 3))) mylog (int level, const char *format, ...) {
@@ -1101,6 +1102,28 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   setresgid(oldgid, oldgid, -1);
 
   // got a ccname in mainret
+  // if we're supposed to use collection name, remove subsidiary
+
+  // mainret is our malloced memory. It's OK for us to stick a null
+  // in it.
+
+  for (i = 0; i < argc; i++) {
+    if (strcmp(argv[i], "usecollection") == 0 &&
+	strncmp(mainret, "KEYRING:", 8) == 0) {
+      // count colons in ccname
+      int numcolon = 0; 
+      char *cp;
+      for (cp = mainret; *cp; cp++) {
+	if (*cp == ':')
+	  numcolon++;
+	if (numcolon == 3) {
+            *cp = '\0';
+            break;
+        }
+      }
+    }
+    break;
+  }
 
   snprintf(ccput, sizeof(ccput)-1, "KRB5CCNAME=%s", mainret);
 

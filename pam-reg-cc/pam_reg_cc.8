@@ -2,11 +2,28 @@
 .SH NAME
 pam_reg_cc \- register credential caches for renewd
 .SH DESCRIPTION
-.I  pam_reg_cc
+.I  pam_reg_cc [usecollection]
 checks the current value of KRB5CCNAME in the environment that
 PAM is preparing for the user process. If it is defined, 
 pam_reg_cc registers it on the session keyring, with the description
 krbrenewd:ccname.
+.PP
+If usecollection is specified, and the cache is in KEYRING, strips
+any subsidiary name. E.g if it is KEYRING:persistent:1003:1003,
+although that name will be registered for renewd, the environment
+variable will be updated to KEYRING:persistent:1003. This will 
+allow kinit, klist, and kdestroy to work as intended with collections.
+.PP
+In general we recommend setting default_ccache_name in krb5.conf to
+KEYRING:persistent:%{uid}:%{uid}, and setting usecollection. For user
+1003, that will result in KEYRING:persistent:1003:1003 having a cache
+for the normal principal, and having NFS use that principal. They can
+then get additional principals with kinit, e.g. for administrative
+functions, without disturbing the functioning of NFS. This works
+because rpc.gssd looks at whatever cache is defined in krb5.conf.
+If KRB5CCNAME isn't set to the collection, then if they kinit with
+a different principal, it will overwrite their normal cache,
+possibly interfering with NFS.
 .PP
 Renewd checks all keys with this description, and renews the
 credential caches as needed. 

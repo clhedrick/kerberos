@@ -16,64 +16,8 @@ KRB5CCNAME="$ANONCC" kgetcred -a >/dev/null
 
 trap 'KRB5CCNAME="$ANONCC" kdestroy' 2
 
-# in case we're sudo'd to root, we're still dealign with
-# the user's credentials cache, so get their actual user info
-
-if test `id -u` = "0" -a -n "$SUDO_UID"
-  then
-    uid="$SUDO_UID"
-    user="$SUDO_USER"
-  else
-    uid=`id -u`
-    user=`id -nu`
-fi
-
-# save original value of KRB5CCNAME
-OCACHE="$KRB5CCNAME"
-
-# set KRB5CCNAME to KEYRING;persistent:NNN without the specific cache
-# if necessary, to avoid unexpected results in kinit and klist
-if test -n "$KRB5CCNAME"
-  then
-  if expr "$KRB5CCNAME" : "KEYRING:persistent:$uid:" >/dev/null
-    then KRB5CCNAME="KEYRING:persistent:$uid"
-  fi
-fi  
-
 # the actual kinit
-if kinit -T "$ANONCC" "$@" 
-  then
-
-  # if it worked, see if we need to warn the user that he  needs to switch to it  
-
-  # the new cache name. kinit will switch the primary cache to the one we
-  # just kinited, so this should always get it
-  NCACHE=`klist | head -1 | sed -e 's/Ticket cache: //'`
-
-  # put primary back to user's actual primary. If we don't do this,
-  # NFS fails.
-  kswitch -p "$user"
-
-  # now see what cache the user would see with the original KRB5CCNAME
-  export KRB5CCNAME="$OCACHE"
-  OCACHE=`klist | head -1 | sed -e 's/Ticket cache: //'`
-
-  # if it's not the new one, tell them how to switch to it.
-  if test "$OCACHE" != "$NCACHE"
-    then
-    echo
-    echo NOTE: The cache you just set up is not your current cache. To make it current,
-    echo
-    if test "$SHELL" = "/bin/tcsh" -o "$SHELL" = "/bin/csh"
-      then
-        echo setenv KRB5CCNAME "$NCACHE"
-      else
-        echo KRB5CCNAME="$NCACHE"  
-    fi
-    echo
-  fi
-
-fi
+kinit -T "$ANONCC" "$@" 
 
 KRB5CCNAME="$ANONCC" kdestroy
 
