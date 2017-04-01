@@ -212,6 +212,33 @@ int main(int argc, char *argv[])
          va_end(args);
      }
 
+     int write_item(int sockfd, char *item, short itemlen, int oldret) {
+         short xmitsize;
+         int wrote;
+         
+         // if already have an error, don't do any more
+         if (oldret < 0)
+             return oldret;
+         
+         xmitsize = htons(itemlen);
+         if ((wrote = write(sockfd, (char *)&xmitsize,
+                              sizeof(xmitsize))) < 0) {
+             mylog(LOG_ERR, "write failed length");
+             return 1;
+         }
+         if (debug)
+             mylog(LOG_DEBUG, "write %u", wrote);
+         
+         if ((wrote = write(sockfd, item, itemlen)) < 0) {
+             mylog(LOG_ERR, "write failed item");
+             return 1;
+         }
+         if (debug)
+             mylog(LOG_DEBUG, "write %u", wrote);
+         
+         return wrote;
+     }
+
      // Timeout for network I/O
      // NOTE: we only alarm network I/O that we do. We don't alarm any kerberos
      // library functions. We assume that Kerberos does its own timeouts. If we
@@ -599,7 +626,7 @@ int main(int argc, char *argv[])
 
     // send the parameters to the server
 
-    // operatoin. currently just get
+    // operation code
     if ((written = write(sock, (char *)&op,
                          1)) < 0) {
         mylog(LOG_ERR, "write failed 1");
@@ -608,23 +635,7 @@ int main(int argc, char *argv[])
     if (debug)
         mylog(LOG_DEBUG, "write %c %ld", op, written);
 
-    // username
-    xmitlen = htons(strlen(username));
-    if ((written = write(sock, (char *)&xmitlen,
-                        sizeof(xmitlen))) < 0) {
-        mylog(LOG_ERR, "write failed 1");
-        goto done;
-    }
-    if (debug)
-        mylog(LOG_DEBUG, "write %lu", written);
-    if ((written = write(sock, (char *)username,
-                                 strlen(username))) < 0) {
-        mylog(LOG_ERR, "write failed 2");
-        goto done;
-    }
-
-    if (debug)
-        mylog(LOG_DEBUG, "write %lu", written);
+    written = write_item(sock, username, strlen(username), 0);
 
     // principal - if not specified by user
     if (!principal) {
@@ -637,56 +648,12 @@ int main(int argc, char *argv[])
         principal = princbuf;        
     }
 
-    xmitlen = htons(strlen(principal));
-    if ((written = write(sock, (char *)&xmitlen,
-                        sizeof(xmitlen))) < 0) {
-        mylog(LOG_ERR, "write failed 1");
-        goto done;
-    }
-    if (debug)
-        mylog(LOG_DEBUG, "write %lu", sizeof(xmitlen));
-    if ((written = write(sock, (char *)principal,
-                                 strlen(principal))) < 0) {
-        mylog(LOG_ERR, "write failed 2");
-        goto done;
-    }
+    written = write_item(sock, principal, strlen(principal), written);
+    written = write_item(sock, flags, strlen(flags), written);
+    written = write_item(sock, hostname, strlen(hostname), written);
 
-    if (debug)
-        mylog(LOG_DEBUG, "write %lu", strlen(principal));
-
-    xmitlen = htons(strlen(flags));
-    if ((written = write(sock, (char *)&xmitlen,
-                        sizeof(xmitlen))) < 0) {
-        mylog(LOG_ERR, "write failed 1");
+    if (written < 0)
         goto done;
-    }
-    if (debug)
-        mylog(LOG_DEBUG, "write %lu", sizeof(xmitlen));
-    if ((written = write(sock, (char *)flags,
-                                 strlen(flags))) < 0) {
-        mylog(LOG_ERR, "write failed 2");
-        goto done;
-    }
-
-    if (debug)
-        mylog(LOG_DEBUG, "write %lu", strlen(hostname));
-
-    xmitlen = htons(strlen(hostname));
-    if ((written = write(sock, (char *)&xmitlen,
-                        sizeof(xmitlen))) < 0) {
-        mylog(LOG_ERR, "write failed 1");
-        goto done;
-    }
-    if (debug)
-        mylog(LOG_DEBUG, "write %lu", sizeof(xmitlen));
-    if ((written = write(sock, (char *)hostname,
-                                 strlen(hostname))) < 0) {
-        mylog(LOG_ERR, "write failed 2");
-        goto done;
-    }
-
-    if (debug)
-        mylog(LOG_DEBUG, "write %lu", strlen(hostname));
 
     //    krb5_cc_close(context, ccdef);
     //    if (auth_context) krb5_auth_con_free(context, auth_context);
