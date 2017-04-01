@@ -146,6 +146,44 @@ void mylog (int level, const char *format, ...) {
     va_end(args);
 }
 
+char * read_item(int sock, char *olditem);
+
+char * read_item(int sock, char *olditem) {
+    int retval;
+    short xmitlen;
+    char *item;
+
+    if (olditem == NULL)
+        return NULL;
+
+    if ((retval = net_read(sock, (char *)&xmitlen,
+                           sizeof(xmitlen))) <= 0) {
+        if (retval == 0)
+            errno = ECONNABORTED;
+        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
+        return NULL;
+    }
+
+    xmitlen = ntohs(xmitlen);
+    if (!(item = (char *)malloc((size_t) xmitlen + 1))) {
+        mylog(LOG_ERR, "no memory while allocating buffer to read from client");
+        return NULL;
+    }
+    if (xmitlen > 0) {
+        if ((retval = net_read(sock, (char *)item,
+                           xmitlen)) <= 0) {
+            mylog(LOG_ERR, "connection abort while reading data from client");
+            free(item);
+            return NULL;
+        }
+    }
+    item[xmitlen] = '\0';
+    if (debug > 1)
+        mylog(LOG_DEBUG, "parameter %s", item);
+    return item;
+
+}
+
 void catch_alarm (int sig);
 
 // called on timeout. The only reason for using this is to get logging
@@ -477,89 +515,14 @@ main(int argc, char *argv[])
         exit(1);
     }
 
-    // username
-    if ((retval = net_read(sock, (char *)&xmitlen,
-                           sizeof(xmitlen))) <= 0) {
-        if (retval == 0)
-            errno = ECONNABORTED;
-        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
-        exit(1);
-    }
-    xmitlen = ntohs(xmitlen);
-    if (!(username = (char *)malloc((size_t) xmitlen + 1))) {
-        mylog(LOG_ERR, "no memory while allocating buffer to read from client");
-        exit(1);
-    }
-    if ((retval = net_read(sock, (char *)username,
-                           xmitlen)) <= 0) {
-        mylog(LOG_ERR, "connection abort while reading data from client");
-        exit(1);
-    }
-    username[xmitlen] = '\0';
+    username = read_item(sock, (char *)&op);
+    principal = read_item(sock, (char *)username);
+    flags = read_item(sock, (char *)principal);
+    hostname = read_item(sock, (char *)flags);
 
-    // principal
-    if ((retval = net_read(sock, (char *)&xmitlen,
-                           sizeof(xmitlen))) <= 0) {
-        if (retval == 0)
-            errno = ECONNABORTED;
-        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
+    // if any previous reads failed, the later ones reeturn null
+    if (!hostname)
         exit(1);
-    }
-    xmitlen = ntohs(xmitlen);
-    if (!(principal = (char *)malloc((size_t) xmitlen + 1))) {
-        mylog(LOG_ERR, "no memory while allocating buffer to read from client");
-        exit(1);
-    }
-    if ((retval = net_read(sock, (char *)principal,
-                           xmitlen)) <= 0) {
-        mylog(LOG_ERR, "connection abort while reading data from client");
-        exit(1);
-    }
-    principal[xmitlen] = '\0';
-
-    // flags
-    if ((retval = net_read(sock, (char *)&xmitlen,
-                           sizeof(xmitlen))) <= 0) {
-        if (retval == 0)
-            errno = ECONNABORTED;
-        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
-        exit(1);
-    }
-    xmitlen = ntohs(xmitlen);
-    if (!(flags = (char *)malloc((size_t) xmitlen + 1))) {
-        mylog(LOG_ERR, "no memory while allocating buffer to read from client");
-        exit(1);
-    }
-    if (xmitlen > 0) {
-        if ((retval = net_read(sock, (char *)flags,
-                               xmitlen)) <= 0) {
-            mylog(LOG_ERR, "connection abort while reading data from client");
-            exit(1);
-        }
-    }
-    flags[xmitlen] = '\0';
-
-    // hostname
-    if ((retval = net_read(sock, (char *)&xmitlen,
-                           sizeof(xmitlen))) <= 0) {
-        if (retval == 0)
-            errno = ECONNABORTED;
-        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
-        exit(1);
-    }
-    xmitlen = ntohs(xmitlen);
-    if (!(hostname = (char *)malloc((size_t) xmitlen + 1))) {
-        mylog(LOG_ERR, "no memory while allocating buffer to read from client");
-        exit(1);
-    }
-    if (xmitlen > 0) {
-        if ((retval = net_read(sock, (char *)hostname,
-                               xmitlen)) <= 0) {
-            mylog(LOG_ERR, "connection abort while reading data from client");
-            exit(1);
-        }
-    }
-    hostname[xmitlen] = '\0';
 
     mylog(LOG_DEBUG, "operation %c for user %s principal %s from host %s", op, username, principal, inet_ntoa(peername.sin_addr));
 
