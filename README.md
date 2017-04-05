@@ -116,20 +116,25 @@ administrative credentials. Getting the right options is tricky, because
 of how NFS uses the KEYRING.
 
 NFS expects credentials for your normal username to be in whatever
-cache is named as the default in krb5.conf. If you set it to
-KEYRING:persistent:%{uid}, then if the user creates a new cache for
-administrative credentials, kinit will make it primary, and NFS will
-try to use those credentials rather than the user's normal ones.
+cache is named as the default in krb5.conf. If you are using the KEYRING,
+you'll normally set the default cache in krb5.conf to KEYRING:persistent:%{uid}.
+That is, you'll end up with KRB5CCNAME set to a collection.
 
-So we need the default in krb5.conf to be a specific cache, KEYRING:persistent:%{uid}:%{uid} for consistency with openssh.
+When krb5.conf is set to use collections, NFS (actually rpc.gssd) uses the
+primary cache in the collection to authenticate the user. That's normally
+fine. But if the user kinit's as another principal (e.g. an administrator),
+and NFS reevaluates credentials, the NFS access will fail.
 
-However KRB5CCNAME can't be set to that. If we do, and we kinit to admin,
-it will overwrite KEYRING:persistent:%{uid}:%{uid}. To do kinit to create
-a new cache, and allow kswitch to switch between then KRB5CCNAME must
-be set to KEYRING:persistent:%{uid}.
+NFS only rechecks credentials when the old ones expire. So this may not
+happen very often. If it does, you can use kswitch to switch to your
+main credentials and do the file access again.
 
-Thus pam_reg_cc has an option "usecollection" that will update KRB5CCNAME
-from KEYRING:persistent:%{uid}:%{uid} to KEYRING:persistent:%{uid}.
+We suggest setting up cron job to use credentials in /tmp, to avoid this
+kind of issue. But for interactive jobs, where a user might kinit as 
+a different principal, there are dangers to setting KRB5CCNAME to a file
+in /tmp. By default, kinit will overwrite whatever credentials are in
+the file. Hence we think it's safer to use a collection, even though it's
+subject to issues as well.
 
 For cron jobs we recommend configuring pam_kgetcred to use ccname=FILE:/tmp/krb5cc_%{uid}_XXXXXX.
 That makes them independent of what's going on in interactive sessions.
