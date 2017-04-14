@@ -223,11 +223,13 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
 
 /*
  * renew the cache. Note that this closes ccache.
- * The code is designed to be free of race conditions. If the cache
+ * I'm a bit worried about race conditions. If the cache
  * is in /tmp, create a temp file and rename it to the real location.
- * If it's in the keyring, it doesn't need to be reinitialized. New tickets
- * simply replace old ones. Those are the only two types that are supported.
- * Other types will work, but the caches may grow each time they are renewed.
+ * If it's in the keyring, there's no way to do an atomic replacement.
+ * So we have a brief race condition. This shouldn't matter, because
+ * we do this a few minutes bfore the cache expires. NFS will have cached
+ * the credentials in the kernel, and won't recheck until expiration. But
+ * by that time we'll have it back the way it should be.
  */
 static krb5_error_code
 renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
@@ -309,9 +311,14 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
       free(newname);
 
     } else {
-      // cache is a keyring, we hope. Anything other than a file will
-      // come here, but it's not clear that it will work right for
-      // things other than Linux keyring.
+      // anything other than the file we have to use the code that
+      // kinit would use: reinitialized and store
+
+      code = krb5_cc_initialize(ctx, ccache, user);
+      if (code != 0) {
+	mylog(LOG_ERR, "error reinitializing cache %s", error_message(code));
+	goto done;
+      }
 
       code = krb5_cc_store_cred(ctx, ccache, &creds);
       if (code != 0) {
