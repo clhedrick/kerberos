@@ -93,6 +93,29 @@ In an NFS environment, pam_mkhomedir won't work, because root won't be able to c
 new directories to the user. I have created a server, which should run on the file server, and a
 pam client to create home directories when necessary. They use a Kerberized protocol between them.
 
+## krenew_wrap.so
+
+We have an issue with ssh. Ssh sends a ticket to the other machine. But the lifetime of the ticket 
+is only the amount of time left on the current ticket. Suppose you start out with a ticket that's
+good for an hour. 55 minutes into that you ssh to another machine. The ticket on that machine will
+only be good for 5 min. 
+
+This makes automatic renewal difficult, because you'd have to renew it every couple of minutes. Our
+process running very 50 min wouldn't catch it.
+
+To fix this, we also ssh to renew the ticket right before connecting to the other machine. That gives
+you a ticket with the full lifetime. Because renewing is not an atomic process, if you're unlucky
+this could make NFS fail. (If it happens to recheck your credentials at the exact same time ssh is
+renewing them.) So instead our code creates a new, temporary cache in memory, and puts the renewed
+tickets there. 
+
+This is done with an interposer library that adds code right after krb5_init_context. To use it
+ssh should be a script that calls the original program.
+
+#!/bin/sh
+
+LD_PRELOAD=/usr/libexec/krenew-wrap.so exec /usr/bin/ssh.real "$@"
+
 ## pam
 
 The issue here is two factor authentication. Freeipa doesn't currently support anonymous credentials with PKINIT.
