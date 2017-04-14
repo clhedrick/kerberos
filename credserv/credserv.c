@@ -462,7 +462,7 @@ main(int argc, char *argv[])
                 exit(3);
             }
             if (fork()) {
-                ; // in parent
+                close(acc); // in parent
             } else {
                 break;  // in child -- leave loop
             }
