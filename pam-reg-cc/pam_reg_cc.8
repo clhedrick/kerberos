@@ -15,11 +15,6 @@ just created. It will pick a cache from the collection that
 has the user's main principal. That's the same cache that sssd
 uses, so it should be the right one.
 .PP
-In the case where KRB5CCNAME is set to collection in KEYRING,
-pam_reg_cc will also make the cache just created the primary
-one. That avoids a weird situation where a user logins in
-and klist shows a different or invalid cache.
-.PP
 If usecollection is specified, and the cache is in KEYRING, strips
 any subsidiary name. E.g if it is KEYRING:persistent:1003:1003,
 although that name will be registered for renewd, the environment
@@ -34,9 +29,23 @@ principal. Kinit changes the primary cache to the one just set up.
 However NFS expects the primary cache to be set to one with the user's
 default principal. If someone is working with a different cache (e.g. one
 with an administrative credential) this can result in NFS accesses failing,
-should NFS choose to recheck credentials at that time. If this happens,
-use kswitch to choose the user's main principal, and try the file access
-again. 
+should NFS choose to recheck credentials at that time.
+.PP
+For that reason, you may request this module to copy the credential to
+a second location. That way changes to the primary cache won't affect
+NFS access. There are two reasonable locations: a file in /tmp,
+or the file name in gssproxy.conf, usually 
+/var/lib/gssproxy/clients/krb5cc_%U. To make this happen,
+configure krb5.conf with credcopy, e.g.
+.PP
+.nf
+[appdefaults]
+register-cc = {
+    credcopy = /var/lib/gssproxy/clients/krb5cc_%U
+}
+.fi
+.PP
+Like gssproxy, this module will replace %U with the user's numeric userid, and %u with the username.
 .PP
 This module implements only session start (and a no-op session end).
 
