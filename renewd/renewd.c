@@ -73,6 +73,7 @@ automatically renew tickets.
 */
 
 int debug = 0;
+int test = 1;
 
 // hash used to collect uids of all credential caches registered with session keyrings
 
@@ -488,8 +489,8 @@ void renewall(krb5_context ctx, time_t minleft) {
       continue;
     }
 			   
-    if (needs_renew(ctx, cache, minleft)) {
-      renew(ctx, cache, minleft);
+    if (needs_renew(ctx, cache, minleft) && !test) {
+	renew(ctx, cache, minleft);
       // renew closes
     } else {
       krb5_cc_close(ctx, cache);
@@ -665,13 +666,18 @@ int main(int argc, char *argv[])
   progname = *argv;
 
   opterr = 0;
-  while ((ch = getopt(argc, argv, "w:d")) != -1) {
+  while ((ch = getopt(argc, argv, "w:dt")) != -1) {
     switch (ch) {
     case 'w':
       wait = atoi(optarg);
       break;
     case 'd':
       debug++;
+      break;
+    case 't':
+      debug++;
+      debug++;
+      test++;
       break;
     case '?':
     default:
@@ -758,6 +764,9 @@ int main(int argc, char *argv[])
     getccs(); // put uids of all procs into the hash
 
     renewall(context, 60 * (wait + 10));
+
+    if (test)
+      exit(1);
 
     if (strcmp(delete_mode, "none") != 0)
       delete_old(context, strcmp(delete_mode, "valid") == 0);
