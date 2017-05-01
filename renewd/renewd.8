@@ -3,7 +3,7 @@
 renewd \- renew Kerberos credentials for all users automatically
 .SH SYNOPSIS
 .B renewd
-[-w waittime][ -d ]
+[-w waittime][ -d ][ -t ]
 .SH DESCRIPTION
 .I  renewd
 renews credentials. It only watches credentials that have been
@@ -30,9 +30,13 @@ can simply keep renewing all active credentials while the user still
 has a session alive, with one exception: 
 .PP
 For NFS to work reliably credentials must be either the primary
-credential in KEYRING:persistebt:UID, or they must be in a file
-in /tmp owned by the user. We're currently using KEYRING for
-interaction logins, and files in /tmp for cron jobs.
+credential in KEYRING:persistebt:UID, in a file
+in /tmp owned by the user, or in a credential listed in
+/etc/gssproxy/gssproxy.conf. We're currently using KEYRING for
+interaction logins, and files in /tmp for cron jobs. pam_reg_cc
+can (and at Rutgers does) copy the credentials for interactive
+sessions to /var/lib/gssproxy/clients/krb5cc_%U, which is used
+by gssproxy.
 .SH DELETION
 .PP
 In addition to renewing, renewd can remove out of date credential
@@ -55,6 +59,21 @@ renewd = {
 }
 .fi
 .PP
+Renewd will also examine files in a second directory, typically
+/var/lib/gssproxy/clients. See pam_reg_cc for how this is used.
+For consistency, it uses the same configuration as pam_reg_cc, e.g.
+.pp
+.nf
+[appdefaults]
+register-cc = {
+    credcopy = /var/lib/gssproxy/clients/krb5cc_%U
+}
+.fi
+.PP
+The pattern renewd looks for replaces %U and %u with wildcards, i.e. ".*".
+It is assumed that these character occur only in the file name, not any
+of the directory names.
+.PP 
 By default, renewd removes all regular files (i.e. not directories,
 pipes, etc) matching the pattern that aren't
 valid credential files. You can use the "delete" parameter to change
@@ -78,6 +97,8 @@ renewd normally detaches from the terminal, and logs to syslog.
 If -d is supplied it remains attached to the terminal, and prints
 debug and error messasges there. -d can be given more than once
 to increase the level of debugging.
+.PP
+-t will show the current registered tickets and exit
 .PP
 renewd must run as root. Most Kerberos operations are performed as
 the user that owns the cache.

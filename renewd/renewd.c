@@ -30,7 +30,8 @@
    then checks all session keyrings and renews all credential
    caches listed there.
 */
-
+// for asprintf
+#define _GNU_SOURCE   
 #include <krb5.h>
 #include <com_err.h>
 #include <stdlib.h>
@@ -73,7 +74,7 @@ automatically renew tickets.
 */
 
 int debug = 0;
-int test = 1;
+int test = 0;
 
 // hash used to collect uids of all credential caches registered with session keyrings
 
@@ -271,8 +272,16 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
     if (strcmp(cctype, "FILE") == 0) {
       const char* oname;
       const char* nname;
+      char *tempname;
+      int i;
 
-      code = krb5_cc_new_unique(ctx, cctype, "/tmp/krb5cc_XXXXXX", &newcache);
+      oname = krb5_cc_get_name(ctx, ccache);
+      i = asprintf(&tempname, "%s.%lu", oname, (long)getpid());
+      if (i < 0) {
+	mylog(LOG_ERR, "asprintf failed");
+	goto done;
+      }
+      code = krb5_cc_resolve(ctx, tempname, &newcache);
       if (code) {
 	mylog(LOG_ERR, "renewing credentials %s", error_message(code));
 	goto done;
@@ -291,7 +300,6 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
       }
 
       // these are pointers into caches tht we are about to close, so copy them
-      oname = krb5_cc_get_name(ctx, ccache);
       oldname = malloc(strlen(oname) + 1);
       strcpy(oldname, oname);
 
@@ -367,6 +375,8 @@ void getccs() {
   }
   // entries look like 
   //0074836e I--Q---     1 perm 3f010000     0     0 user      krbrenewd:ccname: 43
+  // note that our test will also match krbrenewd:ccname:2, etc., so you
+  // can register more than one file
   while (fgets(buffer, sizeof(buffer)-1, keyfile)) {
     char *id, *dummy, *description;
     int i;
@@ -382,6 +392,7 @@ void getccs() {
       buffer[i-1] = '\0';
 
     id = strtok(buffer, " ");
+
     if (!id)
       continue;
     for (i = 2; i < 9; i++) {
@@ -393,7 +404,7 @@ void getccs() {
     if (!description)
       continue;
 
-    if (strcmp(description, "krbrenewd:ccname:") != 0)
+    if (strncmp(description, "krbrenewd:ccname:", strlen("krbrenewd:ccname:")) != 0)
       continue;
 
     // found one, get the cc name
@@ -511,7 +522,7 @@ void renewall(krb5_context ctx, time_t minleft) {
    name is just the file name assume it's got /tmp in front of it
 */
 void
-maybe_delete(krb5_context kcontext, char *name, int only_valid) {
+maybe_delete(krb5_context kcontext, char *name, char *dir, int only_valid) {
     krb5_error_code code;
     krb5_cc_cursor cur;
     krb5_creds creds;
@@ -523,7 +534,7 @@ maybe_delete(krb5_context kcontext, char *name, int only_valid) {
     ENTRY entry;
     struct stat statbuf;
     
-    snprintf(filename, sizeof(filename)-1, "/tmp/%s", name);
+    snprintf(filename, sizeof(filename)-1, "%s/%s", dir,  name);
 
     // 1. is it in the hash?
 
@@ -611,11 +622,18 @@ maybe_delete(krb5_context kcontext, char *name, int only_valid) {
 }
 
 regex_t regex;
+regex_t regex2;
+char *dir2 = NULL;
 
 int myfilter (const struct dirent *d) {
   return regexec(&regex, d->d_name, 0, NULL, 0) == 0;
 }
   
+int myfilter2 (const struct dirent *d) {
+  return regexec(&regex2, d->d_name, 0, NULL, 0) == 0;
+}
+  
+
 
 void delete_old(krb5_context kcontext, int only_valid) {
   struct dirent **namelist;
@@ -633,11 +651,32 @@ void delete_old(krb5_context kcontext, int only_valid) {
   for (i = 0; i < numdirs; i++) {
     if (debug > 2)
       mylog(LOG_DEBUG, "checking %s", namelist[i]->d_name);
-    maybe_delete(kcontext, namelist[i]->d_name, only_valid);
+    maybe_delete(kcontext, namelist[i]->d_name, "/tmp", only_valid);
     free(namelist[i]);
   }
 
   free(namelist);
+
+  // do we have to check something like /var/lib/gssproxy/client?
+  if (dir2) {
+    numdirs = scandir(dir2, &namelist, myfilter2, alphasort);
+    if (numdirs < 0) {
+      mylog(LOG_ERR, "Couldn't scan %s", dir2);
+      return;
+    }
+
+    // this is safer than opendir because the semantics of
+    // that aren't well defined if you delete files
+    for (i = 0; i < numdirs; i++) {
+      if (debug > 2)
+	mylog(LOG_DEBUG, "checking %s", namelist[i]->d_name);
+      maybe_delete(kcontext, namelist[i]->d_name, dir2, only_valid);
+      free(namelist[i]);
+    }
+    
+    free(namelist);
+
+  }
 
 }
 
@@ -661,7 +700,7 @@ int main(int argc, char *argv[])
   krb5_data realm_data;
   char *pattern;
   char *delete_mode;
-
+  char *pattern2;
 
   progname = *argv;
 
@@ -742,12 +781,54 @@ int main(int argc, char *argv[])
 
   krb5_appdefault_string(context, "renewd", &realm_data, "pattern", "^krb5cc_", &pattern);
   krb5_appdefault_string(context, "renewd", &realm_data, "delete", "all", &delete_mode);
+  krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", "", &pattern2);
 
   // if we just want to look at ones we create:
   // if(regcomp(&regex, "^krb5cc_.*_cron$", 0)) {
   if(regcomp(&regex, pattern, 0)) {
     mylog(LOG_ERR, "Couldn't compile regex");
     exit(1);
+  }
+
+  // second place to scan?
+  if (strlen(pattern2) > 0) {
+    char *pat;
+    char *cp = rindex(pattern2, '/');
+    char *cp2;
+
+    if (!cp) {
+      mylog(LOG_ERR, "krb5.conf/register-cc/credcopy doesn't have a slash");
+      exit(1);
+    }
+    // copy directory portion to dir2
+    dir2 = malloc((cp - pattern2) + 1);
+    strncpy(dir2, pattern2, (cp - pattern2));
+    dir2[cp - pattern2] = '\0';
+
+    // make a patern for stuff after /
+    cp++; // get beyond slash
+    pat = (char *)malloc(2 * strlen(cp) + 1);
+
+    cp2 = pat;
+    while (*cp) {
+      if (*cp == '%' && (*(cp+1) == 'U' || *(cp+1) == 'u')) {
+	*cp2++ = '.';
+	*cp2++ = '*';
+	cp += 2;
+      } else if (index("^.*[$\\", *cp) != NULL) {
+	*cp2++ = '\\';
+	*cp2++ = *cp++;
+      } else {
+	*cp2++ = *cp++;
+      }
+    }
+    *cp2 = '\0';
+
+    // needs to be extended, since \ has opposite meaning for some chars in basic
+    if(regcomp(&regex2, pat, 0)) {
+      mylog(LOG_ERR, "Couldn't compile regex2");
+      exit(1);
+    }
   }
 
   while (1) {
