@@ -4,14 +4,6 @@ To get it use
 
 git clone https://github.com/clhedrick/kerberos.git
 
-I'm keeping a copy on /staff/src for consistency with other software, but the primary
-repository is github. If you need to change it please ask hedrick to add you to the
-repository.
-
-Note that much of this is based on various code by Russ Allbery.
-
-For non-Rutgers people: I think kgetcred and credserv are safe to use. I expect to change them over the next few months, but if you're happy with what they do, I think it's OK. I haven't used renewd enough yet to feel safe in using it in production. I'd be happy to get feedback about it.
-
 # Goals
 
 1. Secure NFS. Make sure users can't install systems at an IP where we've exported a file system and then access all files.
@@ -26,9 +18,14 @@ This should make it safe to allow faculty to mount our file systems on machines 
 
 1. Make Kerberos transparent. I'm dealing with this by supporting all ways into a machine through pam, and by having a daemon that will keep their credentials renewed as long as they have processes.
 
-2. Support for multiple machine types. This is hard. Without two-factor, Linux, Mac, and probably Windows (though I haven't tried) can support it. Two factor uses recent features. Currently the key part, kgetcred, works on Centos 5 - 7, and OS X (using the Macports version of Kerberos).
+2. Support for multiple machine types. This is hard. Without two-factor, Linux, Mac, and probably Windows (though I haven't tried) can support it. Two factor uses recent features. Currently the key part, kgetcred, works on Centos 5 - 7, and OS X (using the Macports version of Kerberos). Windows turns out not to need this code, though we depend upon special features in the GINA that we use.
 
-Suggested configuration:
+Keeping Kerberos credentials working is more challenging than it sounds. By default Centos puts credentials in a collection, KEYRING:persistent:NNN where NNN is the UID. However if you kinit to some other principal, e.g. to do administrative work, things get complex. If KRB5CCNAME is set to a specific cache, kinit will replace your credentials with the new one. A better approach is to set it to the collection. Then kinit will generate a new credential cache. You can switch between then using kswitch. However NFS will always look at the primary cache. So if you're logged in as user, but are currently switched to credentials for user-admin, NFS will try to use the user-admin credentials, and you'll lose access to your home directory.
+
+The only completely clean way to do this appears to be to keep a second copy of the primary credentials. I put it in
+/var/lib/gssproxy/clients, where gssproxy will use it. Then you can do whatever you like with your main collection and it won't cause problems with NFS.
+
+# Suggested configuration
 
 sssd for authentication for Centos 7, the vendor's pam_krb5 on other systems. This will handle most users.
 
@@ -36,6 +33,21 @@ For users with 2FA, they can log into a Centos 7 system, then ssh to an older ma
 
 For older systems we could also use pam_ldap after pam_krb5. That would let 2FA users login.
 The only disadvantage to ldap is that it won't give users Kerberos tickets.
+
+## Which software do you need
+
+At a mininum, to keep credentials alive you need renewd, pam_reg_cc (which registered credentials to be renewed, and creates the copy in /var/lib/gssproxy/clients), and krenew-wrap, which wraps ssh in a script that adds a custom library.
+
+krenew-wrap is needed because the credentials forwarded by ssh often have very short lifetimes. The wrapper renews the
+credentials before forwarding them. The same thing could be done by a script
+
+kinit -R; ssh "$@"
+
+However kinit has a race condition during renewal, and my interposed library does not.
+
+If you want a secure way to do cron jobs, you need kgetcred (including the pam module) and credserv.
+
+If you want to be able to kinit with two factor authentication, you need skinit, and also kgetcred and credserv (unless your kint supports the -n option. I use kgetcred to get anonymous tickets, since IPA currently doesn't support kinit -n).
 
 # Design issues
 
@@ -81,11 +93,16 @@ If your setup supports kinit -n, you might prefer to use that rather than kgetcr
 ## pam_kgetcred
 
 This effectively calls kgetcred with default arguments, using a cache name of /tmp/krb5cc_UID_cron.
-It also sets KRB5CCNAME to the cache name, and registers it for renewd
+It also sets KRB5CCNAME to the cache name, and registers it for renewd. It's design to be used with crond.
+The user has to register using kgetcred -r to indicate that they want to run cron jobs on the current
+system. At that point pam_kgetcred when called from crond will set up credentials for them.
 
 ## pam_reg_cc
 
-This registers the value of KRB5CCNAME (if any) so that renewd will renew it. 
+This registers the value of KRB5CCNAME (if any) so that renewd will renew it. It also puts a second copy of
+the credentials in /var/lib/gssproxy/clients, as explained above. If KRB5CCNAME is set to a specific cache
+in the KEYRING, it will reset it to point to the whole collection. That provides a consistent experience,
+since normally ssh will set it differently depending upon how you login.
 
 ## mkhomedird and pam_kmkhomedir
 
@@ -149,15 +166,16 @@ fine. But if the user kinit's as another principal (e.g. an administrator),
 and NFS reevaluates credentials, the NFS access will fail.
 
 NFS only rechecks credentials when the old ones expire. So this may not
-happen very often. If it does, you can use kswitch to switch to your
-main credentials and do the file access again.
+happen very often. But if your primary credential is wrong at that time, you will lose
+access to NFS until the credentials expire. That's why pam_reg_cc puts a copy
+of your primary credentials in /var/lib/gssproxy/clients.
 
-We suggest setting up cron job to use credentials in /tmp, to avoid this
+We suggest setting up cron jobs to use credentials in /tmp, to avoid this
 kind of issue. But for interactive jobs, where a user might kinit as 
 a different principal, there are dangers to setting KRB5CCNAME to a file
 in /tmp. By default, kinit will overwrite whatever credentials are in
 the file. Hence we think it's safer to use a collection, even though it's
-subject to issues as well.
+subject to issues as well, and depend upon the second copy in /var/lib/gssproxy/clients.
 
 For cron jobs we recommend configuring pam_kgetcred to use ccname=FILE:/tmp/krb5cc_%{uid}_XXXXXX.
 That makes them independent of what's going on in interactive sessions.
