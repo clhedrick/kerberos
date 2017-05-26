@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# command line version of the activator
+# we have to create the same environment that it gets in the web app
+
+#SCRIPT=$(readlink -f "$0")
+#SCRIPTPATH=$(dirname "$SCRIPT")
+cd /var/lib/activator
+
+O=/var/lib/activator/oracle
+A=/var/www/tomcat/webapps/accounts
+L="$A/WEB-INF/lib/*"
+C="$A/WEB-INF/classes"
+
+# this is for ojbdb8. In a web app it works fine.
+# but when called from the command line it wants to find these libaries
+LD_LIBRARY_PATH=$O/instantclient_12_2/
+export LD_LIBRARY_PATH
+
+# give it the same classes and libraries that it gets in the web app
+java -cp $C:"$L" Activator.User "$@"
+

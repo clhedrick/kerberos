@@ -1,0 +1,134 @@
+Deploys in tomcat/webapps/ROOT
+
+See INTRO.TOMCAT and INTRO.MAVEN if you don't know the tools
+
+Need
+* you must install haveged or something else to give randomness.
+  otherwise the command line client won't work
+    yum install haveged
+    systemctl enable haveged; systemctl start haveged
+* krb5.conf, krb5.keytab, krb5.keytab.services
+* /etc/init.d/tomcat uses 
+   /bin/k5start -U -f /etc/krb5.keytab.services -K 50 -k /tmp/krb5ccserv
+ices /var/www/tomcat/bin/startup.sh 
+* /etc/activator.config and /etc/activator.warning [template for email
+   messages]
+* src/main/var-lib-activator should be copied to /var/lib/activator
+   this has the uid table, and files needed for the command line version
+   of activate. The big issue with the command line versoin is that the
+   oracle jdbc client seems to work differently for web and command line
+   environments. The command ine version needs a bunch of shared libraries
+
+To install:
+* password database needs to be in tomcat/db. It's built from src/database
+* mvn package. will pull in all dependencies and build war file
+* sudo cp target/accounts-1.0.war /var/www/tomcat/webapps/accounts.war
+     note that you don't want the version number (1.0) in the copy you install
+-- or use ./build and ./install
+
+You can debug .JSP files by editing them directly in tomcat/webapps/ROOT
+However once they work, you must copy them to src/main/webapp/ here, or
+the next maven deploy will wipe out the changes.
+
+There are three applications in this area:
+
+* Password change
+* Group management
+* Account activation and cleanup
+
+There's also a command-line version of the activator. It uses the 
+same code as the web app. Run activate with no args to see the
+possible arguments.
+
+Password change is done entirely in JSP's in the changepass
+directory. I generally prefer to code in JSP's, because they're easier
+to make changes to and test. However for support operations like
+reading from LDAP data, putting that code inline makes the JSP
+unreadable, so I have Java libraries with that kind of support code.
+
+Group management is in the directory groups. Business logic is again
+in the JSP's, but here I make more use of support code.  Originally
+the directory src was support code for groups. But I ended up using
+thing from the activator as well, so in fact java code in src and
+activator is used for group group management and activation.
+
+The activator is an exception. Business logic is in Java, not the JSP.
+The reason is that we need a command line tool both to test and to do
+account cleanup. So the business logic for activation and cleanup is
+in activator/User.java, in the "doUser" function. That's the place to
+start reading for the activator. If you need to change logic, that may
+well be the only thing you need to change.
+
+Java support code for the activator is also in the activator
+directory.
+
+The activate directory has the JSP's. They simply call "doUser".
+
+This code uses LDAP all over the place. I have separate LDAP support
+code for the University LDAP server (Ldap) and our own LDAP server
+(JndiAction). Both produce a data structure modelled after the PHP
+LDAP code: It's a list of entries, where each entry is a map from
+attribute name to a list of values.
+
+activator/Match.java contains my own implementation of LDAP filters.
+I need to be able to check a number of different filters against data
+from the same user. Rather than do a bunch of LDAP queries for the
+same user, it's better to get all the data for the user and then run a
+filter against their data. I've slightly extended the filter syntax.
+
+You'll see that the LDAP data for a user includes an attribute csrole.
+That is added to the LDAP data from our own database. It has role data
+that CS staff maintain.
+
+Note that this code uses a number of open source jar files. They are
+in either tomcat/lib or here in WEB-INF/lib. That means that if you
+upgrade tomcat, you'll need to put them back.
+
+For the command line activator / cleanup, there's a script,
+activator/test. It sets up a class path with all the jar files and
+libraries, and then calls doUser with the right arguments.
+
+To work properly, we need /etc/krb5.keytab.services, and a normal
+/etc/krb5.keytab for the host. The services principal must be
+authorized to set passwords that don't require the user to change it
+immediately. The host principal needs to be authorized to do large
+LDAP questions. The wiki page for IPA gives instructions for setting
+those things.
+
+Tomcat is called by /etc/init.d/tomcat. In addition to the obvious, it
+uses k5start to maintain credentials for the services principal.
+
+KERBEROS
+
+Operations with our LDAP and IPA are all authenticated with Kerberos.
+University LDAP uses DN and password from the config file.
+
+* LDAP lookup for our server uses our host principle, with /etc/krb5.keytab.
+* Password change and activation use IPA commands authenticated with
+  /tmp/krb5ccservices, which k5start maintains from /etc/krb5.keytab.services.
+  The services principal has user and group management authorization, but isn't
+  quite as strong as admin
+* Group management uses IPA commands authenticated as the user doing the operation.
+  Their credentials cache is stored in /tmp/krb5_USERNAME. The user is authenticated
+  with /usr/local/bin/skinit, so that one time passwords work. The skinit here
+  may not be identical to the usual one, because I found a problem with the
+  usual one when running in this context.
+
+docommand takes an argument which is an environment variable list. KRB5CCNAME
+is set to the appropriate credentials cache for it.
+
+LDAP operations use a Subject that is created using a
+KerberosConfiguration that specifies the appropriate keytab.
+
+-----------
+
+DEPLOYMENT. I did a deploy from scratch on a new system as follows:
+
+* copy all of tomcat to /var/www/apache-tomcat-8.5.13, symlink tomcat to it
+* yum install java-1.6.0-openjdk java-1.6.0-openjdk-devel kstart krb5-workstation, strace tcpdump telnet maven haveged
+* systemctl start haveged
+* systemctl enable haveged
+* copy krb5.keytab.services to /etc [krb5.conf and krb5.keytab are assumed to be there]
+* copy /etc/init.d/tomcat, which does /bin/k5start -U -f /etc/krb5.keytab.services -K 50 -k /tmp/krb5ccservices /var/www/tomcat/bin; startup.sh &
+* copy activator.config and activator.warning to /etc
+* get apache set up to send /accounts through to tomcat

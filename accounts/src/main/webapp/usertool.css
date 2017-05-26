@@ -1,0 +1,42 @@
+body {
+  margin: 0px;
+  font-family: helvetica, arial
+}
+#masthead {
+  background-image: url(red_banner2.png);
+  background-repeat: no-repeat;
+  background-size: 346.43px 100px;
+  background-color: rgb(204,0,41);
+  height:100px;
+}
+#masthead:before {
+  position:absolute;
+  top: 10px;
+  right:0px;
+  display:block;
+  font-size:24px;
+  font-weight: lighter;
+  padding-right:20px;
+  color:white;
+  content:"Department of Computer Science";
+}
+#main {
+  margin-top: 3em;
+  margin-left: 5em;
+  margin-right: 5em;
+}
+a:link, a:visited, a:hover {
+ color: #a00;
+}
+a:hover, a:active {
+ color: red;
+}
+h2 {
+  font: lighter 24pt "Arial", Helvetica;
+  margin-top:0.5em;
+  margin-bottom: 0.75em;
+}
+h3 {
+  font: 16pt Arial, Helvetica;
+  margin-bottom: 0.25em;
+}
