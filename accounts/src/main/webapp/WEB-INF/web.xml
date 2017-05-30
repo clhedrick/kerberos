@@ -38,7 +38,7 @@
 
     <init-param>
       <param-name>service</param-name>
-      <param-value>https://wordpress.cs.rutgers.edu/accounts/changepass/changepass.jsp</param-value>
+      <param-value>https://${serverName}/accounts/changepass/changepass.jsp</param-value>
     </init-param>
   </filter>
 
@@ -53,7 +53,7 @@
 
     <init-param>
       <param-name>service</param-name>
-      <param-value>https://wordpress.cs.rutgers.edu/accounts/changepass/changepass.jsp</param-value>
+      <param-value>https://${serverName}/accounts/changepass/changepass.jsp</param-value>
     </init-param>
   </filter>
 
@@ -88,7 +88,7 @@
 
     <init-param>
       <param-name>service</param-name>
-      <param-value>https://wordpress.cs.rutgers.edu/accounts/activate/activate.jsp</param-value>
+      <param-value>https://${serverName}/accounts/activate/activate.jsp</param-value>
     </init-param>
   </filter>
 
@@ -103,7 +103,7 @@
 
     <init-param>
       <param-name>service</param-name>
-      <param-value>https://wordpress.cs.rutgers.edu/accounts/activate/activate.jsp</param-value>
+      <param-value>https://${serverName}/accounts/activate/activate.jsp</param-value>
     </init-param>
   </filter>
 
