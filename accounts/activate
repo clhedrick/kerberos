@@ -5,18 +5,18 @@
 
 #SCRIPT=$(readlink -f "$0")
 #SCRIPTPATH=$(dirname "$SCRIPT")
+
+# the command line code sets the logging configuration to
+# a file name. It comes from the current diretory. So we have
+# to cd to the right place. The web support code reads a config
+# file from WEB-INF. That's the only real difference between the
+# two contexts.
+
 cd /var/lib/activator
 
-O=/var/lib/activator/oracle
 A=/var/www/tomcat/webapps/accounts
 L="$A/WEB-INF/lib/*"
 C="$A/WEB-INF/classes"
 
-# this is for ojbdb8. In a web app it works fine.
-# but when called from the command line it wants to find these libaries
-LD_LIBRARY_PATH=$O/instantclient_12_2/
-export LD_LIBRARY_PATH
-
-# give it the same classes and libraries that it gets in the web app
 java -cp $C:"$L" Activator.User "$@"
 
