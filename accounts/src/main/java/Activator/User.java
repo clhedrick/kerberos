@@ -772,7 +772,8 @@ public class User {
 			    String warningname = config.warningdir + "/" + username + "@" + cluster;
 			    // nio Path for the file
 			    Path warningPath = Paths.get(warningname);
-			    if (! Files.exists(warningPath)) {
+			    boolean warned = Files.exists(warningPath);
+			    if (config.warningdays > 0 && ! warned) {
 				// if it doesn't exist, he wasn't warned, so we warn him and then create the file
 				// cache the warning template
 				if (user.warningtemplate == null)
@@ -797,12 +798,17 @@ public class User {
 			    } else {
 				// files exists, so they were warned. See if it's time to delete
 				long now = System.currentTimeMillis();
-				FileTime testtime = FileTime.fromMillis(now - (config.warningdays * (24L * 60L * 60L * 1000L)));
-				BasicFileAttributes attr = Files.readAttributes(warningPath, BasicFileAttributes.class);
-				if (testtime.compareTo(attr.creationTime()) > 0) {
+				FileTime testtime = null;
+				BasicFileAttributes attr = null;
+				if (warned) {
+				    testtime = FileTime.fromMillis(now - (config.warningdays * (24L * 60L * 60L * 1000L)));
+
+				    attr = Files.readAttributes(warningPath, BasicFileAttributes.class);
+				}
+				if (config.warningdays == 0 || testtime.compareTo(attr.creationTime()) > 0) {
 				    logger.info("ipa group-remove-member login-" + cluster + " --users=" + username);
 				    if (!test) {
-					if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", "login-" + cluster, "--users=" + username}, env) == 0)
+					if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", "login-" + cluster, "--users=" + username}, env) == 0 && warned)
 					    Files.move(warningPath, Paths.get(warningname + ".done"));
 				    }
 				} else {
