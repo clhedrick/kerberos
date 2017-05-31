@@ -8,6 +8,7 @@ import java.nio.file.attribute.FileTime;
 import java.nio.file.Paths;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
@@ -808,8 +809,9 @@ public class User {
 				if (config.warningdays == 0 || testtime.compareTo(attr.creationTime()) > 0) {
 				    logger.info("ipa group-remove-member login-" + cluster + " --users=" + username);
 				    if (!test) {
-					if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", "login-" + cluster, "--users=" + username}, env) == 0 && warned)
-					    Files.move(warningPath, Paths.get(warningname + ".done"));
+					if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", "login-" + cluster, "--users=" + username}, env) == 0 && warned) {
+					    Files.move(warningPath, Paths.get(warningname + ".done"), StandardCopyOption.REPLACE_EXISTING);
+					}
 				    }
 				} else {
 				    logger.info("User has been notified for " + cluster + " but it's not time to delete them");
