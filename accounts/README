@@ -47,6 +47,15 @@ to make changes to and test. However for support operations like
 reading from LDAP data, putting that code inline makes the JSP
 unreadable, so I have Java libraries with that kind of support code.
 
+Note that you can disable password changes for a user by setting
+businesscategory=noautopasswordchange for that user, e.g.
+ipa user-mod hedrick --addattr=businesscategory=noautopasswordchange
+They will still be able to change their password with kpasswd, but
+if they forget it, staff will need to change it for them. Use this
+for users who need their password to be more secure than their 
+University password. They may turn out not to be a real requirement,
+since those users may be better off using two factor authentication.
+
 Group management is in the directory groups. Business logic is again
 in the JSP's, but here I make more use of support code.  Originally
 the directory src was support code for groups. But I ended up using

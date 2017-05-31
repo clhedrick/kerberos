@@ -11,7 +11,7 @@
 
    String user = request.getRemoteUser();
    if (!utils.allowChangePassword(user)) {
-      out.println("<p>You have requested that we disable automatic password changes for your account. Please come in person to our help desk or systems staff to change your password.");
+      out.println("<p>You have requested that we disable automatic password changes for your account, thus you can't change it here.<p>If you know your current password, you can use \"kpasswd\" on any of our systems.<p>If you've forgotten your password, Please come in person to our help desk or systems staff.");
       return;
    }
 %>
