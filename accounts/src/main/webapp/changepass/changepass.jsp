@@ -1,10 +1,20 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
 <%@ page import="java.util.Map" %>
+<%@ page import="common.utils" %>
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 </head>
 <div id="masthead"></div>
 <div id="main">
 <a href="..">Account Management</a>
+
+<%
+
+   String user = request.getRemoteUser();
+   if (!utils.allowChangePassword(user)) {
+      out.println("<p>You have requested that we disable automatic password changes for your account. Please come in person to our help desk or systems staff to change your password.");
+      return;
+   }
+%>
 
 <h2> Password reset for Computer Science Dept password </h2>
 

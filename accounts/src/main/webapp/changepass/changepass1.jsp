@@ -13,6 +13,7 @@
 <%@ page import="java.sql.Types" %>
 <%@ page import="java.util.HashSet" %>
 <%@ page import="common.lu" %>
+<%@ page import="common.utils" %>
 <%@ page import="org.apache.commons.lang3.StringEscapeUtils" %>
 <%@ page import="org.apache.logging.log4j.LogManager" %>
 <%@ page import="org.apache.logging.log4j.Logger" %>
@@ -112,6 +113,11 @@
    String newpass2 = request.getParameter("pass2");
    String user = request.getRemoteUser();
    int retval = -1;
+
+   if (!utils.allowChangePassword(user)) {
+      out.println("<p>You have requested that we disable automatic password changes for your account. Please come in person to our help desk or systems staff to change your password.");
+      return;
+   }
 
 // stupid. to simulate goto
    while (true) {
