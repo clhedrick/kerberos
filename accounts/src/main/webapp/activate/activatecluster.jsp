@@ -2,6 +2,8 @@
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.ArrayList" %>
 <%@ page import="Activator.User" %>
+<%@ page import="common.utils" %>
+<%@ page import="java.net.URLEncoder" %>
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 </head>
 <div id="masthead"></div>
@@ -29,6 +31,9 @@
       username = "dsmith";
 
    if (User.doUser(username, null, null, null, cluster, false, false, true)) {
+      if (utils.needsPassword(username))
+         response.sendRedirect("../changepass/changepass.jsp?cluster=" + URLEncoder.encode(cluster));
+
 %>
 
 <p> You have been properly activated on cluster <%= cluster %>. 

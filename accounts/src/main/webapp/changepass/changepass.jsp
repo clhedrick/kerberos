@@ -7,14 +7,38 @@
 <div id="main">
 <a href="..">Account Management</a>
 
+<%!
+   public String filtername(String s) {
+       if (s == null)
+	   return null;
+       String ret = s.replaceAll("[^-_.a-z0-9]","");
+       if (ret.equals(""))
+	   return null;
+       return ret;
+   }
+%>
 <%
 
    String user = request.getRemoteUser();
    if (!utils.allowChangePassword(user)) {
-      out.println("<p>You have requested that we disable automatic password changes for your account, thus you can't change it here.<p>If you know your current password, you can use \"kpasswd\" on any of our systems.<p>If you've forgotten your password, Please come in person to our help desk or systems staff.");
+      out.println("<p>You have previously requested that we disable this function for your account.<p>If you know your current password, you can use \"kpasswd\" on any of our systems.<p>If you've forgotten your password, please come in person to our help desk or systems staff.");
       return;
    }
+   String cluster = filtername(request.getParameter("cluster"));
+   if (cluster != null && cluster.trim().length() > 0) {
 %>
+
+<h2> Set password </h2>
+
+<p> You have successfully created an account on cluster <%=cluster%>. In order
+to login, you also need to create a password. This password will be good on 
+systems in Computer Science labs and office. (In contrast, most of our
+web applications use your University password.)
+
+<p> It is preferable to use a password that's different from your University
+password, but we're not going to force you to do that.
+
+<% } else { %>
 
 <h2> Password reset for Computer Science Dept password </h2>
 
@@ -40,6 +64,8 @@ password, or haven't set one up yet.
 
 <p> If you remember your password, you can also change it on any CS system
 that uses this passwords by using the command "kpasswd".
+
+<% } %>
 
 <h2> Password rules </h2>
 
