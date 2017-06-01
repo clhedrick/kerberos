@@ -53,11 +53,21 @@ public class utils {
 	return new KerberosConfiguration(cc);
     }
 
+    // normally we allow people to set a new password after logging in
+    // with their University password. This saves us from havin to deal with
+    // forgotten passwords. However it means that if someone cracks the University
+    // password they can set ours. Some users may want to disable this, so that 
+    // their password in our system can be more secure than the University password.
+    // For those users we set businessCategory=noautopasswordchange
+    // This routine checks for that attribute.
+
     public static boolean allowChangePassword(String username) {
 	Logger logger = null;
 	logger = LogManager.getLogger();
 
+	// give us a kerberos configuration that users /etc/krb5.keytab for authentication
 	Configuration kconfig = makeKerberosConfiguration(null);
+	// authenticate. creates a Kerberos credentials cache internally
 	LoginContext lc = null;
 	try {
 	    lc = new LoginContext("Groups", null, null, kconfig);
@@ -70,13 +80,17 @@ public class utils {
 	    return false;
 	}
 
+	// Subject is Java's internal version of a credentials cache
 	Subject subj = lc.getSubject();  
 	if (subj == null) {
 	    logger.error("Login failed");
 	    return false;
 	}
 
-	JndiAction action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(uid=" + username + "))", "", "businesscategory"});
+	// Create the ldap query.
+	JndiAction action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(uid=" + username
+ + "))", "", "businesscategory"});
+	// execute the query authenticated with our Kerberos credentials
 	Subject.doAs(subj, action);
 
 	// return true only if entry exists and value is set
@@ -92,10 +106,13 @@ public class utils {
 	
     }
 
+    // take a date/time in the format used by LDAP and return a
+    // Java Date.
     public static Date parseLdapDate(String string) {
 	if (string == null)
 	    return null;
 
+	// normally the time ends in Z. SimpleDateFormat can't handle that, so remove it
 	if (string.endsWith("Z"))
 	    string = string.substring(0, string.length()-1);
 
@@ -108,11 +125,18 @@ public class utils {
 	}
     }
 
+    // when a user activates on a system we create the user entry if
+    // we haven't seen them before. The entry is created with a random
+    // password. They need to create their own. This indicates whether
+    // the user needs to create a password. If so, we send them to the
+    // password change screen.
     public static boolean needsPassword(String username) {
 	Logger logger = null;
 	logger = LogManager.getLogger();
 
+	// give us a kerberos configuration that users /etc/krb5.keytab for authentication
 	Configuration kconfig = makeKerberosConfiguration(null);
+	// authenticate. creates a Kerberos credentials cache internally
 	LoginContext lc = null;
 	try {
 	    lc = new LoginContext("Groups", null, null, kconfig);
@@ -125,6 +149,7 @@ public class utils {
 	    return false;
 	}
 
+	// Subject is Java's internal version of a credentials cache
 	Subject subj = lc.getSubject();  
 	if (subj == null) {
 	    logger.error("Login failed");
@@ -135,7 +160,9 @@ public class utils {
 	//krbLastPwdChange: 20170320203913Z
 	//createTimestamp: 20170119210315Z
 
+	// Create the ldap query.
 	JndiAction action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(uid=" + username + "))", "", "krbLastPwdChange", "createTimestamp"});
+	// execute the query authenticated with our Kerberos credentials
 	Subject.doAs(subj, action);
 
 	// return true only if entry exists and value is set
