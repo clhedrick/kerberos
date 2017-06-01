@@ -58,6 +58,9 @@ include your Netid, and the reason you should be eligible for an account.
 %>
 <p> You currently have acounts on the following clusters of systems. You do not need to
 do anything to continue using them.
+
+<p> If you have forgotten your password, or you haven't created a password for the new systems,
+use the <a href=../changepass/changepass.jsp> Change Password </a> screen.
 <ul>
 <%
 	 for (String cluster: currentClusters) {
