@@ -543,10 +543,6 @@ public class User {
 			// can only have one entry with a given uid
 			universityData = universityDataList.get(0);
 		    else {
-			if (!cleanup) {
-			    logger.debug("attempt to activate user " + username + " but can't get university data for them");
-			    return false;
-			}
 			universityData = new HashMap<String,List<String>>();
 		    }
 
@@ -561,6 +557,14 @@ public class User {
 		    JndiAction action = new JndiAction(new String[]{"(uid=" + username + ")", "", "memberOf"});
 		    Subject.doAs(subj, action);
 
+		    if ((action.val == null || action.val.size() == 0) &&
+			(universityData.get("uid") == null || universityData.get("uid").size() == 0)) {
+			logger.debug("user " + username + " doesn't exist in University data or our system. Skipping.");
+			if (cleanup)
+			    continue;
+			else
+			    return false;
+		    }
 	
 		    // get automaticallly maintained groups from University data. will have to filters to see if they fit the cluster
 		    Set<String> userMaintainedGroups = user.makeUserMaintainedGroups(config, universityData);
