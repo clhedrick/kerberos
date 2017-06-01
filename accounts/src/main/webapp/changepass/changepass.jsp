@@ -1,6 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
 <%@ page import="java.util.Map" %>
 <%@ page import="common.utils" %>
+<%@ page import="common.genpassword" %>
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 </head>
 <div id="masthead"></div>
@@ -94,8 +95,17 @@ better than passwords if you pick actual phrases. Most people choose them from p
 don't force you to change it in the first place).
 </ul>
 
-<p> The final version of this page will generate a random pronouncable 
-password, as a suggestion and probably suggestions for choosing a good password.
+
+<%
+String pass = genpassword.generate(10);
+for (int i = 0; i < 1000; i++) {
+   if (dict.checkdict(out, pass)) {
+     out.println("<p> In case you want a suggestion, here's a random, pronouncable 10-character password: " + pass);
+     break;
+   }
+   pass = genpassword.generate(10);   
+}
+%>
 
 <h2> Change password here</h2>
 

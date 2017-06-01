@@ -14,6 +14,7 @@
 <%@ page import="java.util.HashSet" %>
 <%@ page import="common.lu" %>
 <%@ page import="common.utils" %>
+<%@ page import="common.dict" %>
 <%@ page import="org.apache.commons.lang3.StringEscapeUtils" %>
 <%@ page import="org.apache.logging.log4j.LogManager" %>
 <%@ page import="org.apache.logging.log4j.Logger" %>
@@ -22,84 +23,6 @@
 </head>
 <div id="masthead"></div>
 <div id="main">
-
-<%!
-
-     public boolean checkdict(JspWriter out, String newpass) {
-
-     Connection c = null;
-     PreparedStatement pst = null;
-     ResultSet rs = null;
-
-     try {
-         int count = 0;
-
-	 Class.forName("org.hsqldb.jdbc.JDBCDriver" );
-
-	 c = DriverManager.getConnection("jdbc:hsqldb:file:/var/www/tomcat/db/passwords;readonly=true", "SA", "");
-
-//	 pst = c.prepareStatement("select count(*) from passwords where p = ? or p = ? or p = ? or p = ?");
-//	 pst.setString(1, newpass);
-//	 pst.setString(2, newpass.substring(1));
-//	 pst.setString(3, newpass.substring(0,newpass.length()-1));
-//	 pst.setString(4, newpass.substring(1,newpass.length()-1));
-	 
-	 pst = c.prepareStatement("select count(*) from passwords where p = ?");
-         pst.setString(1, newpass);
-
-	 rs = pst.executeQuery();
-	 if (rs.next()) {
-	     count = rs.getInt(1);
-	 }
-	 rs.close();
-	 rs = null;
-
-	 // if already have a match no need to reverse
-//	 if (count == 0) {
-//	     newpass = new StringBuffer(newpass).reverse().toString();
-//	     pst.setString(1, newpass);
-//	     pst.setString(2, newpass.substring(1));
-//	     pst.setString(3, newpass.substring(0,newpass.length()-1));
-//	     pst.setString(4, newpass.substring(1,newpass.length()-1));
-	     
-//	     rs = pst.executeQuery();
-//	     if (rs.next()) {
-//		 count = rs.getInt(1);
-//	     }
-//	 }
-
-	 return count == 0;
-
-     } catch (Exception e) {
-	 try {
-	     out.println("<p>Warning: we were unable to check your password to see if it matches any known weak passwords. We're allowing the change to happen, but you should make sure that your password is a good one.<p>");
-	 } catch (Exception x) {};
-	 return true;
-     } finally {
-	 try {
-	     if (rs != null)
-		 rs.close();
-	 } catch (Exception ignore) {};
-	 try {
-	     if (pst != null)
-		 pst.close();
-	 } catch (Exception ignore) {};
-	 try {
-	     if (c != null)
-		 c.close();
-	 } catch (Exception ignore) {};
-     }
- }
-
-  public boolean checkchars(JspWriter out, String newpass) {
-      HashSet<Character> chars = new HashSet<Character>();
-      for (int i=0; i < newpass.length(); i++) 
-	  chars.add(newpass.charAt(i));
-      return chars.size() >= 6;
-  }
-
-
-%>
 
 <%
 
@@ -139,7 +62,7 @@
 	   break;
        }
 
-       if (!checkdict(out, testpass)) {
+       if (!dict.checkdict(out, testpass)) {
 	   logger.info("User " + user + " new password in dictionary");
 	   out.println("<p>Password is in our dictionary of common passwords<p>");
 	   break;
