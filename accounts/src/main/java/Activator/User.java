@@ -29,6 +29,7 @@ import java.sql.Types;
 import java.sql.Blob;
 import common.JndiAction;
 import common.docommand;
+import common.lu;
 	 
 /*
 
@@ -554,7 +555,7 @@ public class User {
 
 		    // get group memberships from our data; result is action.val
 		    // will be filtered below to find manually maintained groups this user is in for a specific cluster
-		    JndiAction action = new JndiAction(new String[]{"(uid=" + username + ")", "", "memberOf"});
+		    JndiAction action = new JndiAction(new String[]{"(uid=" + username + ")", "", "memberOf", "givenname", "sn", "gecos"});
 		    Subject.doAs(subj, action);
 
 		    if ((action.val == null || action.val.size() == 0) &&
@@ -713,6 +714,39 @@ public class User {
 				ok = false;
 			}
 		    }	
+
+		    // if user exists in both data, update attributes if any have changed
+		    if (action.val.size() > 0 && lu.oneVal(universityData.get("uid")) != null) {
+			HashMap<String,ArrayList<String>> ourData = action.val.get(0);
+			List<String> mods = new ArrayList<String>();
+
+			boolean needmod = false;
+			String first = lu.oneVal(universityData.get("givenname"),"-");
+			String ofirst = lu.oneVal(ourData.get("givenname"));
+			if (!first.equals(ofirst)) {
+			    needmod = true;
+			}
+
+			String last = lu.oneVal(universityData.get("sn"),"-");
+			String olast = lu.oneVal(ourData.get("sn"));
+			if (!last.equals(olast)) {
+			    needmod = true;
+			}
+
+			String cn = lu.oneVal(universityData.get("cn"),"-");
+			String ocn = lu.oneVal(ourData.get("gecos"));
+			if (!cn.equals(ocn)) {
+			    needmod = true;
+			}
+
+			if (needmod) {
+			    logger.info("ipa user-mod " + username + " --first=" + first + " --last=" + last + " --gecos=" + cn);
+			    if (!test) {
+				// continue even if this fails
+				docommand.docommand (new String[]{"/bin/ipa", "user-mod", username, "--first=" + first, "--last=" + last, "--gecos=" + cn}, env);
+			    }
+			}
+		    }
 
 		    // update all automatically maintained groups if user exists
 		    if (!cleanup || action.val.size() >= 0) {
