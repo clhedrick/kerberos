@@ -9,6 +9,7 @@
 <%@ page import="java.util.Hashtable" %>
 <%@ page import="java.util.HashMap" %>
 <%@ page import="java.util.ArrayList" %>
+<%@ page import="java.util.List" %>
 <%@ page import="java.util.Set" %>
 <%@ page import="org.apache.commons.lang3.StringEscapeUtils" %>
 <%@ page import="java.net.URLEncoder" %>
@@ -121,14 +122,14 @@ else
     gid = ", " + gid;
 
 
-ArrayList<String>categories = attrs.get("businesscategory");
+List<String>categories = attrs.get("businesscategory");
 boolean islogin = (categories != null && categories.contains("login"));
 
-ArrayList<String> clusters = new ArrayList<String>();
+List<String> clusters = new ArrayList<String>();
 clusters.add("ilab");
 clusters.add("grad");
 
-ArrayList<String> hosts = lu.valList(attrs.get("host"));
+List<String> hosts = lu.valList(attrs.get("host"));
 
 %>
 

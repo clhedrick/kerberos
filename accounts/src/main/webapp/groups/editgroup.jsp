@@ -23,6 +23,7 @@
 <%@ page import="Activator.Ldap" %>
 <%@ page import="Activator.Config" %>
 <%@ page import="Activator.Uid" %>
+<%@ page import="Activator.User" %>
 <%@ page import="org.apache.logging.log4j.LogManager" %>
 <%@ page import="org.apache.logging.log4j.Logger" %>
 
@@ -80,34 +81,8 @@
 		 return false;
 	     }
 	     universityData = universityDataList.get(0);
-
-	     long uid = Uid.allocateUid(name, conf);
-	     List<String> firstl = universityData.get("givenname");
-	     String first;
-	     if (firstl == null)
-		 first = "-";
-	     else 
-		 first = firstl.get(0);
-	     List<String> lastl = universityData.get("sn");
-	     String last;
-	     if (lastl == null)
-		 last = "-";
-	     else 
-		 last = lastl.get(0);
-	     List<String> gecosl = universityData.get("cn");
-	     String gecos;
-	     if (gecosl == null)
-		 gecos = "-";
-	     else
-		 gecos = gecosl.get(0);
-	     
 	     String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
-
-	     logger.info("ipa user-add " + name + " --uid=" + uid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
-	     if (docommand.docommand (new String[]{"/bin/ipa", "user-add", name, "--uid=" + uid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"}, env, out) != 0) {
-		 //out.println("<p>Unable to add user " + name + " to our system. Contact <a href=\"mailto:help@cs.rutgers.edu\">help@cs.rutgers.edu</a> for more information.");
-		 return false;
-	     }
+             return User.createUser(name, conf, universityData, false, logger, env);
 
 	 }
 	 return true;

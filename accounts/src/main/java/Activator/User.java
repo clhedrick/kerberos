@@ -348,6 +348,68 @@ public class User {
 	return false;
     }
 
+    public static boolean createUser(String username, Config config, Map<String,List<String>> universityData, boolean test, Logger logger, String[] env) {
+	long uid = Uid.allocateUid(username, config);
+	List<String> firstl = universityData.get("givenname");
+	String first;
+	if (firstl == null)
+	    first = "-";
+	else 
+	    first = firstl.get(0);
+	List<String> lastl = universityData.get("sn");
+	String last;
+	if (lastl == null)
+	    last = "-";
+	else 
+	    last = lastl.get(0);
+	List<String> gecosl = universityData.get("cn");
+	String gecos;
+	if (gecosl == null)
+	    gecos = "-";
+	else
+	    gecos = gecosl.get(0);
+	
+	logger.info("ipa user-add " + username + " --uid=" + uid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
+	if (!test) {
+	    if (docommand.docommand (new String[]{"/bin/ipa", "user-add", username, "--uid=" + uid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"}, env) != 0)
+		return false;
+	}
+	return true;
+    }
+
+    // user exists in both sets of update. Update our info if it's different
+    // don't bother returning a value because we'll continue with other stuff even if this fails
+    static void syncUser(String username, Config config, Map<String,List<String>> universityData, HashMap<String,ArrayList<String>> ourData, boolean test, Logger logger, String[] env) {
+	List<String> mods = new ArrayList<String>();
+
+	boolean needmod = false;
+	String first = lu.oneVal(universityData.get("givenname"),"-");
+	String ofirst = lu.oneVal(ourData.get("givenname"));
+	if (!first.equals(ofirst)) {
+	    needmod = true;
+	}
+
+	String last = lu.oneVal(universityData.get("sn"),"-");
+	String olast = lu.oneVal(ourData.get("sn"));
+	if (!last.equals(olast)) {
+	    needmod = true;
+	}
+
+	String cn = lu.oneVal(universityData.get("cn"),"-");
+	String ocn = lu.oneVal(ourData.get("gecos"));
+	if (!cn.equals(ocn)) {
+	    needmod = true;
+	}
+
+	if (needmod) {
+	    logger.info("ipa user-mod " + username + " --first=" + first + " --last=" + last + " --gecos=" + cn);
+	    if (!test) {
+		// continue even if this fails
+		docommand.docommand (new String[]{"/bin/ipa", "user-mod", username, "--first=" + first, "--last=" + last, "--gecos=" + cn}, env);
+	    }
+	}
+    }
+
     public static void main( String[] argarray) {
 
 	ArrayList<String> args = new ArrayList<String>(Arrays.asList(argarray));
@@ -682,71 +744,12 @@ public class User {
 		    //   user if he can activate anywhere, but we don't really need the user until
 		    //   he activates on a cluster where he can login
 		    // we also don't create users for cleanup. We wait until they activate
-		    if (!cleanup && action.val.size() == 0 && userAllowedClusters.contains(requestedCluster)) {
-			// don't want to create users if we're cleaning up
-
-			// WARNING:
-			// This code is duplicated in editgroup.jsp. If you change here, change ther.
-
-			long uid = Uid.allocateUid(username, config);
-			List<String> firstl = universityData.get("givenname");
-			String first;
-			if (firstl == null)
-			    first = "-";
-			else 
-			    first = firstl.get(0);
-			List<String> lastl = universityData.get("sn");
-			String last;
-			if (lastl == null)
-			    last = "-";
-			else 
-			    last = lastl.get(0);
-			List<String> gecosl = universityData.get("cn");
-			String gecos;
-			if (gecosl == null)
-			    gecos = "-";
-			else
-			    gecos = gecosl.get(0);
-	    
-			logger.info("ipa user-add " + username + " --uid=" + uid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
-			if (!test) {
-			    if (docommand.docommand (new String[]{"/bin/ipa", "user-add", username, "--uid=" + uid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"}, env) != 0)
-				ok = false;
-			}
-		    }	
+		    if (!cleanup && action.val.size() == 0 && userAllowedClusters.contains(requestedCluster))
+			ok = ok & createUser(username, config, universityData, test, logger, env);
 
 		    // if user exists in both data, update attributes if any have changed
-		    if (action.val.size() > 0 && lu.oneVal(universityData.get("uid")) != null) {
-			HashMap<String,ArrayList<String>> ourData = action.val.get(0);
-			List<String> mods = new ArrayList<String>();
-
-			boolean needmod = false;
-			String first = lu.oneVal(universityData.get("givenname"),"-");
-			String ofirst = lu.oneVal(ourData.get("givenname"));
-			if (!first.equals(ofirst)) {
-			    needmod = true;
-			}
-
-			String last = lu.oneVal(universityData.get("sn"),"-");
-			String olast = lu.oneVal(ourData.get("sn"));
-			if (!last.equals(olast)) {
-			    needmod = true;
-			}
-
-			String cn = lu.oneVal(universityData.get("cn"),"-");
-			String ocn = lu.oneVal(ourData.get("gecos"));
-			if (!cn.equals(ocn)) {
-			    needmod = true;
-			}
-
-			if (needmod) {
-			    logger.info("ipa user-mod " + username + " --first=" + first + " --last=" + last + " --gecos=" + cn);
-			    if (!test) {
-				// continue even if this fails
-				docommand.docommand (new String[]{"/bin/ipa", "user-mod", username, "--first=" + first, "--last=" + last, "--gecos=" + cn}, env);
-			    }
-			}
-		    }
+		    if (action.val.size() > 0 && lu.oneVal(universityData.get("uid")) != null)
+			syncUser(username, config, universityData, action.val.get(0), test, logger, env);
 
 		    // update all automatically maintained groups if user exists
 		    if (!cleanup || action.val.size() >= 0) {
