@@ -40,6 +40,7 @@
 #include <regex.h>
 
 #include <sys/stat.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -166,6 +167,8 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
     // the TGT needs renewing.  This sets us up to iterate through the credentials
     if ((code = krb5_cc_start_seq_get(kcontext, cache, &cur))) {
       mylog(LOG_ERR, "can't start sequence for cache %s", error_message(code));
+      if (cur) 
+	krb5_cc_end_seq_get(kcontext, cache, &cur);
       goto done;
     }
     found_tgt = FALSE;   // found a TGT that isn't current
@@ -564,8 +567,6 @@ maybe_delete(krb5_context kcontext, char *name, char *dir, int only_valid) {
       return;
     }
       
-
-
     if (!code)
       code = krb5_cc_start_seq_get(kcontext, cache, &cur);
 
@@ -588,8 +589,11 @@ maybe_delete(krb5_context kcontext, char *name, char *dir, int only_valid) {
 
     if (princ)
       krb5_free_principal(kcontext, princ);
-    if (cache)
+    if (cur)
+      krb5_cc_end_seq_get(kcontext, cache, &cur);
+    if (cache) {
       krb5_cc_close(kcontext, cache);
+    }
 
     if (ok) {
       if (debug > 1)
