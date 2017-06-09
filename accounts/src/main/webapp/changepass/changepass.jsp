@@ -2,6 +2,7 @@
 <%@ page import="java.util.Map" %>
 <%@ page import="common.utils" %>
 <%@ page import="common.genpassword" %>
+<%@ page import="common.dict" %>
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 </head>
 <div id="masthead"></div>
