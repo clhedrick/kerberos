@@ -1,0 +1,10 @@
+[Unit]
+Description=User Management Web Service (tomcat)
+
+[Service]
+Type=simple
+ExecStart=/bin/k5start -U -f /etc/krb5.keytab.services -K 50 -k /tmp/krb5ccservices /var/www/tomcat/bin/startup.sh
+ExecStop=/var/www/tomcat/bin/shutdown.sh
+
+[Install]
+WantedBy=multi-user.target
