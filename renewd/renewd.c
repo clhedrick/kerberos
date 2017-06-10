@@ -145,9 +145,9 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
 int
 needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
     krb5_error_code code, code2;
-    krb5_cc_cursor cur;
+    krb5_cc_cursor cur = NULL;
     krb5_creds creds;
-    krb5_principal princ;
+    krb5_principal princ = NULL;
     krb5_boolean found_tgt, found_current_tgt;
     int ret = 0;
     time_t now;
@@ -527,7 +527,7 @@ void renewall(krb5_context ctx, time_t minleft) {
 void
 maybe_delete(krb5_context kcontext, char *name, char *dir, int only_valid) {
     krb5_error_code code;
-    krb5_cc_cursor cur;
+    krb5_cc_cursor cur = NULL;
     krb5_creds creds;
     krb5_principal princ = NULL;
     krb5_ccache cache = NULL;
