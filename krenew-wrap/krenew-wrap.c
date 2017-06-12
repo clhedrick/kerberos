@@ -43,6 +43,8 @@ static krb5_error_code (*real_krb5_init_context)(krb5_context *context) = NULL;
 
 // static int (*real_puts)(const char* str) = NULL;
 
+static krb5_wrap_done = 0;
+
 /* wrapping write function call */
 krb5_error_code krb5_init_context(krb5_context *context)
 {
@@ -58,10 +60,13 @@ krb5_error_code krb5_init_context(krb5_context *context)
 
   real_krb5_init_context = dlsym(RTLD_NEXT, "krb5_init_context");
   retval = real_krb5_init_context(context);
-  if (retval) {
+  // only need to do this once, as it changes the default
+  if (krb5_wrap_done || retval) {
     code = retval;
     goto done;
   }
+
+  krb5_wrap_done = 1;
 
   ctx = *context;
 
