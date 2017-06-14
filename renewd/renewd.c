@@ -40,6 +40,7 @@
 #include <regex.h>
 
 #include <sys/stat.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -144,9 +145,9 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
 int
 needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
     krb5_error_code code, code2;
-    krb5_cc_cursor cur;
+    krb5_cc_cursor cur = NULL;
     krb5_creds creds;
-    krb5_principal princ;
+    krb5_principal princ = NULL;
     krb5_boolean found_tgt, found_current_tgt;
     int ret = 0;
     time_t now;
@@ -166,6 +167,8 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
     // the TGT needs renewing.  This sets us up to iterate through the credentials
     if ((code = krb5_cc_start_seq_get(kcontext, cache, &cur))) {
       mylog(LOG_ERR, "can't start sequence for cache %s", error_message(code));
+      if (cur) 
+	krb5_cc_end_seq_get(kcontext, cache, &cur);
       goto done;
     }
     found_tgt = FALSE;   // found a TGT that isn't current
@@ -521,7 +524,7 @@ void renewall(krb5_context ctx, time_t minleft) {
 void
 maybe_delete(krb5_context kcontext, char *name, char *dir, int only_valid) {
     krb5_error_code code;
-    krb5_cc_cursor cur;
+    krb5_cc_cursor cur = NULL;
     krb5_creds creds;
     krb5_principal princ = NULL;
     krb5_ccache cache = NULL;
@@ -561,8 +564,6 @@ maybe_delete(krb5_context kcontext, char *name, char *dir, int only_valid) {
       return;
     }
       
-
-
     if (!code)
       code = krb5_cc_start_seq_get(kcontext, cache, &cur);
 
@@ -585,8 +586,11 @@ maybe_delete(krb5_context kcontext, char *name, char *dir, int only_valid) {
 
     if (princ)
       krb5_free_principal(kcontext, princ);
-    if (cache)
+    if (cur)
+      krb5_cc_end_seq_get(kcontext, cache, &cur);
+    if (cache) {
       krb5_cc_close(kcontext, cache);
+    }
 
     if (ok) {
       if (debug > 1)
