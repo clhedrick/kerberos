@@ -190,12 +190,10 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
       krb5_free_cred_contents(kcontext, &creds);
     }
 
-    if (debug) {
-      if (found_current_tgt) 
-	mylog(LOG_DEBUG, "current ticket in %s", krb5_cc_get_name(kcontext, cache));
-      else if (found_tgt)
-	mylog(LOG_DEBUG, "renewable ticket in %s", krb5_cc_get_name(kcontext, cache));	
-    }
+    if (found_current_tgt) 
+      mylog(LOG_DEBUG, "current ticket in %s", krb5_cc_get_name(kcontext, cache));
+    else if (found_tgt)
+      mylog(LOG_DEBUG, "renewable ticket in %s", krb5_cc_get_name(kcontext, cache));	
 
     if ((code2 = krb5_cc_end_seq_get(kcontext, cache, &cur))) {
       mylog(LOG_ERR, "close cc sequence failed %s", error_message(code2));
@@ -416,8 +414,7 @@ void getccs() {
     }
     buffer[len] = '\0';
 
-    if (debug > 1)
-      mylog(LOG_DEBUG, "cache registered with session: %s", buffer);
+    mylog(LOG_DEBUG, "cache registered with session: %s", buffer);
 
     // buffer should now be a cache name. normalize it
     if (strncmp(buffer, "FILE:", 5) == 0)

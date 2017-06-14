@@ -1,6 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
 
 <%@ page import="java.util.Map" %>
+<%@ page import="common.utils" %>
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 </head>
 <div id="masthead"></div>
@@ -31,6 +32,7 @@ to <%=Activator.Config.getConfig().helpmail%>.
 
 <p>
 <form action="login1.jsp" method="post">
+<%= utils.getCsrf(request) %>
 Username: <input type="text" name="user"/><br/>
 Password: <input type="password" name="pass"/>
 <p>

@@ -2,6 +2,7 @@
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.ArrayList" %>
 <%@ page import="Activator.User" %>
+<%@ page import="common.utils" %>
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
@@ -79,7 +80,8 @@ an account there:
 <ul>
 <%
 	 for (String cluster: clusters) {
-	     out.println("<li><a class=\"link\" href=\"activatecluster.jsp?cluster=" + cluster + "\">" + cluster + "</a><br/>");
+	     out.println("<li><a class=\"link\" href=\"#\" onclick=\"document.getElementById('form-" + cluster + "').submit();\">" + cluster + "</a><br/>");
+	     out.println("<form style=\"display:none\" id=\"form-" + cluster + "\" action=\"activatecluster.jsp\" method=\"post\">" + utils.getCsrf(request) + "<input type=\"hidden\" name=\"cluster\" value=\"" + cluster + "\"/><input type=\"submit\" value=\"submit\"/></form>");
 	 }
 %>
 </ul>

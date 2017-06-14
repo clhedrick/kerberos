@@ -14,6 +14,7 @@
 <%@ page import="org.apache.commons.lang3.StringEscapeUtils" %>
 <%@ page import="java.net.URLEncoder" %>
 <%@ page import="common.lu" %>
+<%@ page import="common.utils" %>
 <%@ page import="common.JndiAction" %>
 
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
@@ -63,6 +64,7 @@ $(document).ready(function(){
 
 
 <form action="editgroup.jsp" method="post">
+<%= utils.getCsrf(request) %>
 <%
 
  // This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.

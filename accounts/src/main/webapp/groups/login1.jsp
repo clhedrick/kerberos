@@ -11,6 +11,7 @@
 <%@ page import="javax.naming.ldap.*" %>
 <%@ page import="java.util.Hashtable" %>
 <%@ page import="common.JndiAction" %>
+<%@ page import="common.utils" %>
 <%@ page import="Activator.Config" %>
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 </head>
@@ -117,6 +118,8 @@
 
 %>
 <%
+
+   utils.checkCsrf(request);
 
    // KerberosConfiguration
    //  generates a config on the fly rather than the default of reading it from a file

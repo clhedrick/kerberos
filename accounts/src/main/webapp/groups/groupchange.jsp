@@ -12,6 +12,7 @@
 <%@ page import="org.apache.commons.lang3.StringEscapeUtils" %>
 <%@ page import="java.net.URLEncoder" %>
 <%@ page import="common.docommand" %>
+<%@ page import="common.utils" %>
 <%@ page import="Activator.Config" %>
 <%@ page import="org.apache.logging.log4j.LogManager" %>
 <%@ page import="org.apache.logging.log4j.Logger" %>
@@ -35,6 +36,8 @@
 %>
 
 <%
+
+   utils.checkCsrf(request);
 
    Logger logger = null;
    logger = LogManager.getLogger();

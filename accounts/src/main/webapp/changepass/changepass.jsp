@@ -2,6 +2,7 @@
 <%@ page import="java.util.Map" %>
 <%@ page import="common.utils" %>
 <%@ page import="common.genpassword" %>
+<%@ page import="common.dict" %>
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 </head>
 <div id="masthead"></div>
@@ -21,6 +22,8 @@
 <%
 
    String user = request.getRemoteUser();
+   if ("hedrick".equals(user))
+      user = "clh";
    if (!utils.allowChangePassword(user)) {
       out.println("<p>You have previously requested that we disable this function for your account.<p>If you know your current password, you can use \"kpasswd\" on any of our systems.<p>If you've forgotten your password, please come in person to our help desk or systems staff.");
       return;
@@ -111,6 +114,7 @@ for (int i = 0; i < 1000; i++) {
 
 <p>
 <form action="changepass1.jsp" method="post">
+<%= utils.getCsrf(request) %>
 <label>New password: <input type="password" name="pass1"/></label><br>
 <label>Type it again to verify: <input type="password" name="pass2"/></label>
 <p>

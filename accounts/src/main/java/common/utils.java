@@ -16,6 +16,8 @@ import java.text.SimpleDateFormat;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.Date;
+import javax.servlet.http.HttpServletRequest;
+import java.util.Random;
 
 public class utils {
 
@@ -189,6 +191,29 @@ public class utils {
 
 	return true;
 	
+    }
+
+    static Random random = new Random();
+
+    public static String getCsrfToken(HttpServletRequest request) {
+	String csrf = (String)request.getSession().getAttribute("csrftoken");
+	if (csrf == null) {
+	    csrf = Long.toUnsignedString(random.nextLong()) + Long.toUnsignedString(random.nextLong());
+	    request.getSession().setAttribute("csrftoken", csrf);	    
+	}
+	return csrf;
+    }
+
+    public static String getCsrf(HttpServletRequest request) {
+	return "<input type=\"hidden\" name=\"csrftoken\" value=\"" + getCsrfToken(request) + "\"/>";
+    }
+
+    public static void checkCsrf(HttpServletRequest request) {
+	String token = request.getParameter("csrftoken");
+	String csrf = getCsrfToken(request);
+	if (csrf.equals(token))
+	    return;
+	throw new java.lang.IllegalArgumentException("no permission");
     }
 
     public static void main( String[] argarray) {

@@ -20,6 +20,7 @@
 <%@ page import="common.docommand" %>
 <%@ page import="common.JndiAction" %>
 <%@ page import="common.lu" %>
+<%@ page import="common.utils" %>
 <%@ page import="Activator.Ldap" %>
 <%@ page import="Activator.Config" %>
 <%@ page import="Activator.Uid" %>
@@ -101,6 +102,8 @@
 %>
 
 <%
+
+   utils.checkCsrf(request);
 
    Logger logger = null;
    logger = LogManager.getLogger();

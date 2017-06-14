@@ -24,6 +24,8 @@
 
 <%
 
+   utils.checkCsrf(request);
+
    String cluster = filtername(request.getParameter("cluster"));
 
    String username = request.getRemoteUser();
