@@ -1,0 +1,38 @@
+This is a wrapper for ssh. Here's why it is needed:
+
+If you use SSH with Kerberos, it sends your ticket to the other end.
+However the ticket on the other end will start at the current time and
+end at the end time of the original ticket. E.g. if you have a ticket
+from 12 pm to 1 pm, and at 12:30 you ssh to another host, on that host
+you'll end up with a ticket from 12:30 to 1.
+
+This is an issue in an environment where tickets need to be kept
+alive. We run a job that periodically renews tickets. But it only
+works if the tickets last at least 50 min. With ssh if you do it at
+the wrong time you could end up with a ticket lasting only a
+minute. There's no way to make sure such tickets are renewed.
+
+The wrapper renews the ticket on the initiating end before doing the
+ssh. That way the ticket you send has the full available lifetime.
+Since I don't want to disturb the original ticket, the wrapper
+actually copies the ticket into a memory cache and renews it there,
+changing KRB5CCNAME to point to that ticket.
+
+This could be done with a pure shell script, but not with a memory
+cache. I've chosen to write a small library that is interposed using
+LD_PRELOAD. It intercepts the Kerberos initialization and fixing the
+ticket.
+
+For this to work, /bin/ssh has to be the shell script that sets up the
+library and then runs the real ssh. I rename the real ssh to
+/bin/ssh.real.
+
+What happens next time we do yum update? if it replaces ssh we lose
+the wrapper. So this package includes a yum plugin that checks for ssh
+being a shell script. If it's not, it renames /bin/ssh to
+/bin/ssh.real and creates the shell script.
+
+To install the plugin:
+
+cp clh.conf /etc/yum/pluginconf.d/
+cp clh.py /usr/lib/yum-plugins/
