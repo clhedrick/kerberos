@@ -1,5 +1,6 @@
 [Unit]
 Description=User Management Web Service (tomcat)
+After=syslog.target network.target
 
 [Service]
 Type=simple

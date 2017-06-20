@@ -1,5 +1,6 @@
 [Unit]
 Description=Kerberos Credentials Automatic Rewewal
+After=syslog.target network.target named.service
 
 [Service]
 Type=forking
