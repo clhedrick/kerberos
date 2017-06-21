@@ -48,4 +48,15 @@ register-cc = {
 Like gssproxy, this module will replace %U with the user's numeric userid, and %u with the username.
 .PP
 This module implements only session start (and a no-op session end).
-
+.PP
+If this module is being used in a system with renewd, you may want to warn users if the
+credentials forwarded to them have too short a lifetime to be renewed. To warn if there
+is less than 55 min left use
+.PP
+.nf
+[appdefaults]
+register-cc = {
+    ticket_minlife = 55m
+}
+.fi
+.PP

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <security/pam_appl.h>
 #include <security/pam_modules.h>
+#include <security/pam_ext.h>
 #include <keyutils.h>
 #include <syslog.h>
 #include "krb5.h"
@@ -37,6 +38,31 @@ for /tmp, just register the name}
 if requested put a copy of the cache into /var/lib//var/lib/gssproxy/clients/
 
 */
+
+static inline int
+data_eq(krb5_data d1, krb5_data d2)
+{
+  return (d1.length == d2.length && (d1.length == 0 ||
+				     !memcmp(d1.data, d2.data, d1.length)));
+}
+
+static inline int
+data_eq_string (krb5_data d, const char *s)
+{
+  return (d.length == strlen(s) && (d.length == 0 ||
+				    !memcmp(d.data, s, d.length)));
+}
+
+krb5_boolean is_local_tgt (krb5_principal princ, krb5_data *realm);
+
+/* Return true if princ is the local krbtgt principal for local_realm. */
+krb5_boolean
+is_local_tgt(krb5_principal princ, krb5_data *realm)
+{
+  return princ->length == 2 && data_eq(princ->realm, *realm) &&
+    data_eq_string(princ->data[0], KRB5_TGS_NAME) &&
+    data_eq(princ->data[1], *realm);
+}
 
 char *
 build_cache_name(char *arg, uid_t uid, const char *username)
@@ -103,8 +129,14 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *tempcred = NULL;
   krb5_ccache cachecopy = NULL;
   krb5_ccache firstcache = NULL;
+  krb5_cc_cursor cur = NULL;
+  krb5_creds creds;
   struct passwd * pwd = NULL;
   krb5_principal userprinc = NULL;
+  int found_current_tgt = FALSE;
+  time_t now;
+  krb5_deltat minlife;
+  char *minlife_st;
 
   pam_syslog(pamh, LOG_ERR, "ccname %s", ccname);
 
@@ -229,6 +261,43 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   realm_data.data = default_realm;
   realm_data.length = strlen(default_realm);
   
+  // see if it's got enough time left
+  krb5_appdefault_string(context, "register-cc", &realm_data, "ticket_minlife", "0m", &minlife_st);
+  ret = krb5_string_to_deltat(minlife_st, &minlife);
+  if (ret)
+    goto err;
+
+  pam_syslog(pamh, LOG_ERR, "minlife %d", minlife);
+
+  if (minlife) {
+
+    ret = krb5_cc_resolve(context, ccname, &firstcache);
+    if (ret) goto err;
+    if ((ret = krb5_cc_start_seq_get(context, firstcache, &cur))) {
+      goto err;
+    }
+    found_current_tgt = FALSE;   // found a TGT that is current
+    
+    now = time(0);
+    
+    while (!(ret = krb5_cc_next_cred(context, firstcache, &cur, &creds))) {
+      // only renewable creds are worth looking at. and must be TGT
+      if ((creds.ticket_flags & TKT_FLG_RENEWABLE) && is_local_tgt(creds.server, &userprinc->realm)) {
+	// enough time left, it's current
+	if ((creds.times.endtime - now) > minlife) {
+	  found_current_tgt = TRUE;
+	  krb5_free_cred_contents(context, &creds);
+	  break;
+	}
+	krb5_free_cred_contents(context, &creds);
+      }
+    }
+    krb5_cc_end_seq_get(context, firstcache, &cur);
+    
+    if (!found_current_tgt) 
+      pam_info(pamh, "\n**********************************************************************\nYour Kerberos ticket doesn't have enough lifetime left. You may lose\naccess to your files during this session. We suggest using the\ncommand \"kinit\" to get a new ticket.\n**********************************************************************\n");
+  }
+
   krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", "", &credcopy);
 
   if (strlen(credcopy) > 0) {
