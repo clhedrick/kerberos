@@ -1,6 +1,8 @@
 #define PAM_SM_SESSION
+#include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <security/pam_appl.h>
 #include <security/pam_modules.h>
@@ -294,8 +296,50 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     }
     krb5_cc_end_seq_get(context, firstcache, &cur);
     
-    if (!found_current_tgt) 
-      pam_info(pamh, "\n**********************************************************************\nYour Kerberos ticket doesn't have enough lifetime left. You may lose\naccess to your files during this session. We suggest using the\ncommand \"kinit\" to get a new ticket.\n**********************************************************************\n");
+    // if ticket isn't good enough issue warning.
+    // most of the code is for reading warning from a file configured in krb5.conf
+    // the text is probably a bit long to put in krb5.conf directly
+    if (!found_current_tgt) {
+      char *warnfilename = NULL;
+      FILE *warnfile = NULL;
+      char *warntext = NULL;
+      long fsize;
+      int warnfd;
+
+      krb5_appdefault_string(context, "register-cc", &realm_data, "ticket_warn_file", "", &warnfilename);      
+      // do we have a file with text? Otherwise there's a builtin default text
+      if (warnfilename && strlen(warnfilename) > 0) {
+	warnfile = fopen(warnfilename, "r");
+	if (!warnfile)
+	  goto texterr;
+	// you'd expect to use fstat, but it's missing from libc somehow
+	fseek(warnfile, 0, SEEK_END);
+	fsize = ftell(warnfile);
+	fseek(warnfile, 0, SEEK_SET);  //same as rewind(f);
+	warntext = malloc(fsize + 1);
+	if (!warntext)
+	  goto texterr;
+	if (fread(warntext, fsize, 1, warnfile) != 1)
+	  goto texterr;
+	warntext[fsize] = 0;
+	goto textok;
+	
+      texterr:
+	if (warntext) {
+	  free(warntext);
+	  warntext = NULL;
+	}
+      textok:
+	if (warnfile) 
+	  fclose(warnfile);
+      }
+
+      if (warntext) {
+	pam_info(pamh, "%s", warntext);
+	free(warntext);
+      } else
+	pam_info(pamh, "\n**********************************************************************\nYour Kerberos ticket doesn't have enough lifetime left. You may lose\naccess to your files during this session. We suggest using the\ncommand \"kinit\" to get a new ticket.\n**********************************************************************\n");
+    }
   }
 
   krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", "", &credcopy);

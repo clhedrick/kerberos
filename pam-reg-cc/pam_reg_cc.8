@@ -51,12 +51,15 @@ This module implements only session start (and a no-op session end).
 .PP
 If this module is being used in a system with renewd, you may want to warn users if the
 credentials forwarded to them have too short a lifetime to be renewed. To warn if there
-is less than 55 min left use
+is less than 55 min left use. You may also want to specify ticket_warn_file, which is
+a file with the text of the warning message to be printed. There's default text in case
+it isn't specified, but this lets you specify your own.
 .PP
 .nf
 [appdefaults]
 register-cc = {
     ticket_minlife = 55m
+    ticket_warn_file = /etc/krb5.ticketwarning
 }
 .fi
 .PP
