@@ -142,6 +142,7 @@ char *pam_kgetcred(char *krb5ccname, struct passwd * pwd, krb5_context context, 
 
 char *pam_kgetcred(char *krb5ccname, struct passwd * pwd, krb5_context context, pam_handle_t *pamh)
 {
+    key_serial_t serial;
 #else
 int main(int argc, char *argv[])
 {
@@ -191,7 +192,6 @@ int main(int argc, char *argv[])
      int prived = 0;
      char *flags = "";
      krb5_data realm_data;
-     key_serial_t serial;
      unsigned int waitsec = 30;
      krb5_get_init_creds_opt *opts = NULL;
      krb5_creds usercreds;
@@ -828,6 +828,8 @@ int main(int argc, char *argv[])
             mainret = realccname;
             mylog(LOG_DEBUG, "%s", realccname);
 
+#ifdef PAM            
+
             // register this credential in the session keyring.
             // renewd uses this to check which credential caches are
             // still active and so need to be renewed
@@ -840,6 +842,9 @@ int main(int argc, char *argv[])
             if (keyctl_setperm(serial, 0x3f000003)) {
                 mylog(LOG_ERR, "kgetcred can't set permissions for credential file");
             }
+
+#endif 
+
 
             // do the rename for files in /tmp, from temporary to real file name
             if (needrename) {

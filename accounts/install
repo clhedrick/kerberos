@@ -1,0 +1,3 @@
+#!/bin/sh
+
+cp target/accounts-1.0.war /var/www/tomcat/webapps/accounts.war 

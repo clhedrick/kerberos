@@ -15,5 +15,6 @@ pam_kmkhomedir.so: pam_kmkhomedir.c
 clean::
 	rm mkhomedird.o mkhomedird 
 
-install::
-
+install:: all
+	cp pam_kmkhomedir.so /lib64/security
+	cp pam_kmkhomedir.8 /usr/share/man/man8

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+ <Appenders>
+   <Console name="STDOUT" target="SYSTEM_OUT">
+     <PatternLayout pattern="%m%n"/>
+   </Console>
+   <Syslog name="syslog" host="localhost" port="514" protocol="TCP" facility="authpriv" newLine="true"/>
+ </Appenders>
+ <Loggers>
+   <Logger name="org.apache.log4j.xml" level="info"/>
+   <Root level="info">
+     <AppenderRef ref="STDOUT"/>
+     <AppenderRef ref="syslog"/>
+   </Root>
+ </Loggers>
+</Configuration>

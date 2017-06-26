@@ -1,0 +1,75 @@
+Tomcat is a web server for Java code. Major directories:
+
+bin - code for tomcat. we don't touch, with one exception. bin/setenv.sh
+   is called when tomcat starts to set environment variables. If any of
+   your code needs an environment variable, put it here. This file is
+   optional. A new tomcat install doesn't have it. The JAVA_OPTS environment
+   variable is used to set options for Tomcat itself.
+conf - config files. The only one you'll need to look at it server.xml
+   For us the main thing is the connector for AJP. Apache sends requests
+   to tomcat via AJP. Most configuration can be commented out. Since
+   everything goes through Apache, we don't need to listen on 80 or 443,
+   and we don't need SSL certs. (They are handled by apache)
+db - this is the HSQL database that has 1,000,000 common passwords.
+   the tools for building it are in the source, in src/main/database
+lib - jar files for stuff internal to tomcat. These jar files are also
+   in the class path for our application. They come with Tomcat.
+logs - localhost_access_log.date is like the apache access log.
+       catalina.out has java errors, and stuff written to System.out.
+       My code logs to syslog, but if there are bugs,
+       catalina.out may have error messages that will help.
+temp - available for temp files
+webapps - this is where the applications go
+work - JSPs get compiled into java code. This is where the .java files are put.
+     We don't need to worry about this. Tomcat will do compilations as needed.
+
+The insteresting stuff is in webapps. Tomcat is designed so you can
+have multiple applications. They're more or less independent. You can
+put up new versions of one without affecting the others, in
+theory. Each application is its own directory. Ours is
+tomcat/webapps/accounts. Any URL starting with /accounts will go
+there. (Because we have apache in front of Tomcat, if you want to add
+a new application, you'll need to change /etc/httpd/conf.d/ajp.conf
+so that Apache passes the URLs through for that application.)
+
+You can edit files in webapps/accounts. But normally it's deployed from
+a war file, i.e. tomcat/webapps/accounts.war. A WAR file is just a ZIP
+file. When a new copy of accounts.war is put up, Tomcat sees it, removes
+webapps/accounts, and unzips accounts.war to make a new copy of the 
+directory.
+
+You can edit stuff in accounts to experiment. But things you want
+to change permanently need to go back into the source, so that the next
+time a new war file is unzip'ed, it doesn't overwrite your changes.
+
+----------------
+
+The structure of an application, in this case accounts:
+
+Files outside of the WEB-INF subdirectory are just served, the same way
+any other web server would work. Tomcat can handle HTML files and other
+web content just fine. It handles files ending in .jsp specially. They're
+the Java equivalent of .php files. I.e. you can put Java code in the middle
+of your HTML using <% %>.
+
+META-INF is not normally of interest.
+
+WEB-INF has Java stuff. You can have an application that's just made
+of static web pages, and JSP files. In that case you don't need
+WEB-INF. But if you have common functions, it's often nicer to
+separate them out from the JSP's. That keeps the JSP's easy to read,
+and separates JSPs -- which define the user interface -- from more
+complex logic.
+
+The Java code is compiled into classes which are put in
+WEB-INF/classes.  The JSP's can see all classes in WEB-INF/classes and
+anything in jar files in WEB-INF/lib. (They can also see anything in
+jar files in tomcat/lib.) Typically WEB-INF/classes are the files
+we've written for this application, and WEB-INF/lib are JAR files for
+standard open-source libraries that we use.
+
+There's one more file in WEB-INF, WEB-INF/web.xml. This is a
+configuration file for the application. It can do all kinds of weird
+stuff, but for this application, the only thing in it is configuration
+for CAS. Tomcat is told that any JSP's in the changepass and activate
+subdirectories require CAS authentication.

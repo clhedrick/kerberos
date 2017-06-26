@@ -1,0 +1,9 @@
+#!/bin/sh
+
+SSHTYPE=`file /usr/bin/ssh`
+if test `expr "$SSHTYPE" : ".*shell script.*"` == 0
+  then
+  mv /usr/bin/ssh /usr/bin/ssh.real
+fi
+cp ./ssh /usr/bin
+

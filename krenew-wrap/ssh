@@ -1,0 +1,8 @@
+#!/bin/sh
+if [ -n "$KRB5CCNAME" ] 
+then
+export LD_PRELOAD=/usr/libexec/krenew-wrap.so
+fi
+exec /usr/bin/ssh.real "$@"
+
+

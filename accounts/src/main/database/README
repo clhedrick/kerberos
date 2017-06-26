@@ -1,0 +1,21 @@
+top1000000 is from https://github.com/cry/nbp.git, which seems to have been done for NIST
+
+awk '{if (length($0) >= 8) print(tolower($0))}' top1000000 | sort -u > passwords.1
+
+put in /root/sqltool.rc:
+
+urlid personal
+url jdbc:hsqldb:file:/var/www/tomcat/db/passwords;shutdown=true
+username SA
+password
+transiso TRANSACTION_READ_COMMITTED
+
+clear /var/www/tomcat/db/
+cp passwords.1 /var/www/tomcat/db/passwordin
+
+java -jar /var/www/tomcat/webapps/accounts/WEB-INF/lib/sqltool-2.4.0.jar personal
+create text table temp (p varchar(255));
+set table temp source "passwordin";
+create table passwords(p) as (select * from temp) with data;
+create index passind on   passwords(p);
+commit

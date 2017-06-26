@@ -1,0 +1,31 @@
+#!/bin/sh
+
+echo This builds kerberos.tar, with files for normal client systems. credserv and mkhomedird are not included
+cd kmkhomedir
+make install
+cd ../krenew-wrap
+make install
+cd ../pam-reg-cc
+make install
+cd ../renewd
+make install
+cd ../kgetcred
+make install
+cd ../skinit
+make install
+cd ..
+cp /etc/krb5.conf /etc/krb5.conf.sample
+
+rm -f ./kerberos.tar
+tar cf ./kerberos.tar /lib64/security/pam_kmkhomedir.so /usr/share/man/man8/pam_kmkhomedir.8 /lib64/security/pam_reg_cc.so /usr/share/man/man8/pam_reg_cc.8 /etc/systemd/system/renewd.service /usr/sbin/renewd /usr/share/man/man8/renewd.8 /usr/bin/kgetcred /lib64/security/pam_kgetcred.so /usr/share/man/man1/kgetcred.1 /usr/share/man/man8/pam_kgetcred.8 /usr/local/bin/skinit /usr/share/man/man1/skinit.1 /usr/libexec/krenew-wrap.so /usr/bin/ssh-wrap /etc/krb5.conf.sample /etc/krb5.ticketwarning
+
+echo
+echo WARNING: you must move the original /usr/bin/ssh to /usr/bin/ssh.real and rename ssh-wrap to ssh
+echo You will need to update the appsdefault section of /etc/krb5.conf from /etc/krb5.conf.sample, although
+echo the whole file could probably be used on a normal client system.
+echo
+
+
+
+
+

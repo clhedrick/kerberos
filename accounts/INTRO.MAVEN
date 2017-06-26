@@ -1,0 +1,42 @@
+Maven is a build system much like make.
+
+It knows how to build web applications. You don't need to list all the
+java files or anything like that, because it can find everything based
+on the file names.
+
+The build file is pom.xml. As always, you can put all kinds of wierd things
+in it, but ours is pretty simple:
+
+* At the beginning we specify the name and version of our application.
+The "artifact name" of accounts means that the final result will be
+a file accounts-1.0.war. The 1.0 is the version number.
+
+* Most of the file is "dependencies." These are .jar files for all the
+open-source libraries we use. They are fetched automatically from the
+Maven repository. Pretty much every projec in the world sticks their
+code into the same Maven repository, so it's really convenient. It's like
+yum for Java.
+
+* The end is a specification for how the application is to be built. It's
+mostly standard stuff, except that I've defined the version of Java to use.
+It defaults to an old version. My code uses some recent features.
+
+-----------
+
+Structure of the source
+
+src/main - you can have multiple subprojects. We don't, so everything is
+in main.
+
+src/main/webapp - these are files that just get copied as is into the
+.war file. Note that the jar file for Oracle is here. Oracle doesn't
+put their code into the normal Maven repository, so I don't fetch it
+as a dependency the same way as other .jar files.
+
+src/main/java - these are Java source. They get compiled to classes that
+go into WEB-INF/classes
+
+Note that Java has "packages." Each package is a separate name space.
+I use two packages, common and Activator. Java source files go in the
+directory for their package. (I should actually have used activator,
+not Activator.)
