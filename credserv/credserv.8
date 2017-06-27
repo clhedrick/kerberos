@@ -8,29 +8,31 @@ credserv \- provide Kerberos credentials from keytab stored to remote client
 .I  kgetcred
 is designed for cron jobs or services that need access to Kerberos
 credentials, but don't have an interactive user to supply them.
-Kgetcred sends a request to a credserv server. The server looks
-for a standard Kerberos keytab stores in a directory of the form
-/var/credserv/USER
-In each directory /var/credserv/USER there's a file INDEX with lines
-that look like
+Kgetcred sends a request to a credserv server. The server stores
+its data in LDAP. It uses two attributes.
+.PP
+csRutgersEduCredservRule can have multiple values. The values look like
 .PP
 host:principal:flags
 .PP
 where flags is optional. Currently the only supported option is F, for
-forwardable. Each line indicatest that the user is permitted to 
+forwardable. Each value indicatest that the user is permitted to 
 get credentials for that principal on that host. The F option indicates
 that the credentials should be forwardable. 
 .PP
 * in the host field will apply to all hosts
 .PP
-Each distinct principal will have a corresponding keytab in the same directory.
-The keytab will be in a file whose name is the whole principal, including domain.
-There's no extension on the file, just the principal name.
+csRutgersEduCredservKeytab stores key tables. There is a separate entry
+for each principal that appears in a rule. The value will be of the form
+.pp
+smith@CS.RUGTGERS.EDU=nnnnnn
+.PP
+where nnnnn is a key table encoded in base64.
 .PP
 Because anonymous kinit isn't supported on all systems yet, and it's
 needed to armor requests for one-time passwords, this service
 also provides a way to get anonymous credentials. If you want to support
-this, put a keytab for "anonymous.user"  in /var/credserv/anonymous.keytab.
+this, put a keytab for "anonymous.user"  in /etc/krb5.anonymous.keytab
 This user should be added to the system with a random password. It should
 not have any privileges, and shouldn't be allowed to login anywhere.
 (This username is built into both kgetcred and credserv.)
@@ -54,6 +56,21 @@ user. The protocol allows user, principal and flags to be passed.
 But unprivileged users must have user and principal match the
 principal by which they are authenticated, and they may not
 specify flags.
+.PP
+There should be an entry for credserv in the [appdefaults]
+section of /etc/krb5.conf. The most common parameters are
+.PP
+.nf
+[appdefaults]
+credserv= {
+    ldapurl=ldaps://krb1.cs.rutgers.edu,ldaps://krb2.cs.rutgers.edu
+    ldapbase=cn=accounts,dc=cs,dc=rutgers,dc=edu
+}
+.fi
+.PP
+where ldapurl points to the LDAP server. If omitted you'll get
+ldaps://localhost, which may well be appropriate. ldapbase
+is the search base for user lookups.
 .PP
 If you want to be able to do privileged operations, put the
 users who are authorized into a group, and then add the name of the group to

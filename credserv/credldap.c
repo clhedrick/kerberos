@@ -1,43 +1,6 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 
-/* 
- * This code is based on the Kerberos sample server, which contains the 
- * following license. There is, however, virtually none of the original 
- * code left here without rewriting.
- *
- * The current code is Copyright 2017, by Rutgers, the State University of
- * New Jersey. It is released under the same license as MIT's, with the obvious
- * replacement of MIT by Rutgers.
- */
-
-/* 
- * Credserv, the service side of kgetcred/credserv. See the man page
- * for specifics of function.
- */
-
-/*
- * Copyright 1990,1991 by the Massachusetts Institute of Technology.
- * All Rights Reserved.
- *
- * Export of this software from the United States of America may
- *   require a specific license from the United States Government.
- *   It is the responsibility of any person or organization contemplating
- *   export to obtain such a license before exporting.
- *
- * WITHIN THAT CONSTRAINT, permission to use, copy, modify, and
- * distribute this software and its documentation for any purpose and
- * without fee is hereby granted, provided that the above copyright
- * notice appear in all copies and that both that copyright notice and
- * this permission notice appear in supporting documentation, and that
- * the name of M.I.T. not be used in advertising or publicity pertaining
- * to distribution of the software without specific, written prior
- * permission.  Furthermore if you modify this software you must label
- * your software as modified software and not distribute it in such a
- * fashion that it might be confused with the original M.I.T. software.
- * M.I.T. makes no representations about the suitability of
- * this software for any purpose.  It is provided "as is" without express
- * or implied warranty.
- */
+/* ldap using gssapi, and ldap utility code for credserv */
 
 #include "port-sockets.h"
 #include "krb5.h"
@@ -67,28 +30,13 @@
 #endif
 
 #include "sample.h"
+#include "credldap.h"
 
 extern krb5_deltat krb5_clockskew;
 
 int debug = 0;
 
 // credentaisl is a list of lists. 
-
-struct hostlist {
-    char *host;
-    char *flags;
-    struct hostlist *next;
-};
-
-struct princlist {
-    char *principal;
-    struct hostlist *hosts;
-    struct princlist *next;
-};
-
-#ifndef GETPEERNAME_ARG3_TYPE
-#define GETPEERNAME_ARG3_TYPE int
-#endif
 
 #define GENERIC_ERR "Unable to get credentials"
 #define NOKEYTAB_ERR "You must register a keytable for this host before you can use this program."
@@ -170,12 +118,17 @@ static int ldap_sasl_interact(LDAP *ld, unsigned flags, void *priv_data, void *s
 
 int  auth_method    = LDAP_AUTH_SASL;
 int desired_version = LDAP_VERSION3;
+
+// data fot testing
+// these are passed as arguments from credserv in real usage
 char *grealm = "CS.RUTGERS.EDU";
 char *gservice = "credserv";
 char *ghostname = "krb1.cs.rutgers.edu";
 char *targetuser = "hedrick";
 
-LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *realm);
+// a fairly generic ldap open with GSSAPI
+// for a server. for a client a lot of this code isn't needed
+// since most of it is setting up a credentials cache for the server's principal
 
 LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *realm) {
     LDAP *ld = NULL;
@@ -277,7 +230,7 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
 
 }
 
-int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct berval ***rules, struct berval***keytab, char **dn);
+// read rules and keytab from ldap
 
 int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct berval ***rules, struct berval***keytab, char **dn) {
     char* filter;
@@ -327,7 +280,9 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct
 
 }
 
-void freeLdapData(struct berval **rules, struct berval **keytab, char *dn);
+// free all data structures returned by above
+// I don't actually use this. credserv forks, and there's no
+// reason to clean up memory when it's about to exit
 
 void freeLdapData(struct berval **rules, struct berval **keytab, char *dn) {
     if (rules)
@@ -338,7 +293,7 @@ void freeLdapData(struct berval **rules, struct berval **keytab, char *dn) {
         ldap_memfree(dn);
 }
 
-int addRule(LDAP *ld, char *dn, char *rule);
+// add a credserv authorization rule into ldap
 
 int addRule(LDAP *ld, char *dn, char *rule) {
     LDAPMod rulemod;
@@ -365,7 +320,7 @@ int addRule(LDAP *ld, char *dn, char *rule) {
     return 0;
 }
 
-int deleteRule(LDAP *ld, char *dn, char *rule);
+// delete a credserv authorization rule from ldap
 
 int deleteRule(LDAP *ld, char *dn, char *rule) {
     LDAPMod rulemod;
@@ -392,16 +347,45 @@ int deleteRule(LDAP *ld, char *dn, char *rule) {
     return 0;
 }
 
-int replaceKeytab(LDAP *ld, char *dn, struct berval *newkeytab);
+// update the key table for a user.
+// this will create a new one or update the existing one
 
-int replaceKeytab(LDAP *ld, char *dn, struct berval *newkeytab) {
+int replaceKeytab(LDAP *ld, char *dn, struct berval **keytab, struct berval *newkeytab) {
     LDAPMod rulemod;
     LDAPMod *mods[2];
     struct berval *rulevalues[2];
     int ret;
+    int i;
+    // number of chars in prefix of new value, i.e. up through and including =
+    char *newtext = newkeytab->bv_val;
+    int preflen = (strchr(newtext, '=') - newtext) + 1;
+
+    // remove any value for this principal
+    if (keytab && keytab[0] != NULL) {
+        for (i = 0; keytab[i] != NULL; i++) {
+            char *thistext;
+            thistext = keytab[i]->bv_val;
+            if (strncmp(thistext, newtext, preflen) == 0) {
+                // this entry is for this principal, so we need to delete it
+                rulemod.mod_op     = LDAP_MOD_DELETE | LDAP_MOD_BVALUES;
+                rulemod.mod_type   = "csRutgersEduCredservKeytab";
+                rulevalues[0] = keytab[i];
+                rulevalues[1] = NULL;
+                rulemod.mod_bvalues = rulevalues;
+
+                mods[0] = &rulemod;
+                mods[1] = NULL;
+
+                if ((ret = ldap_modify_ext_s(ld, dn, mods, NULL, NULL)) != LDAP_SUCCESS) {
+                    mylog(LOG_ERR, "ldap_modify failed to remove old keytab: %s", ldap_err2string(ret));
+                    return 1;
+                }
+            }
+        }
+    }
 
     /* Initialize the attribute, specifying 'REPLACE' as the operation */
-    rulemod.mod_op     = LDAP_MOD_REPLACE | LDAP_MOD_BVALUES;
+    rulemod.mod_op     = LDAP_MOD_ADD | LDAP_MOD_BVALUES;
     rulemod.mod_type   = "csRutgersEduCredservKeytab";
     rulevalues[0] = newkeytab;
     rulevalues[1] = NULL;
@@ -414,6 +398,46 @@ int replaceKeytab(LDAP *ld, char *dn, struct berval *newkeytab) {
     if ((ret = ldap_modify_ext_s(ld, dn, mods, NULL, NULL)) != LDAP_SUCCESS) {
         mylog(LOG_ERR, "ldap_modify for add: %s", ldap_err2string(ret));
         return 1;
+    }
+
+    return 0;
+}
+
+// delete the keytab for this user from ldap
+
+int deleteKeytab(LDAP *ld, char *dn, struct berval **keytab, char *principal) {
+    LDAPMod rulemod;
+    LDAPMod *mods[2];
+    struct berval *rulevalues[2];
+    int ret;
+    char *prefix;
+    int preflen = strlen(principal) + 1;
+    int i;
+
+    asprintf(&prefix, "%s=", principal);
+
+    // remove any value for this principal
+    if (keytab && keytab[0] != NULL) {
+        for (i = 0; keytab[i] != NULL; i++) {
+            char *thistext;
+            thistext = keytab[i]->bv_val;
+            if (strncmp(thistext, prefix, preflen) == 0) {
+                // this entry is for this principal, so we need to delete it
+                rulemod.mod_op     = LDAP_MOD_DELETE | LDAP_MOD_BVALUES;
+                rulemod.mod_type   = "csRutgersEduCredservKeytab";
+                rulevalues[0] = keytab[i];
+                rulevalues[1] = NULL;
+                rulemod.mod_bvalues = rulevalues;
+
+                mods[0] = &rulemod;
+                mods[1] = NULL;
+
+                if ((ret = ldap_modify_ext_s(ld, dn, mods, NULL, NULL)) != LDAP_SUCCESS) {
+                    mylog(LOG_ERR, "ldap_modify failed to remove old keytab: %s", ldap_err2string(ret));
+                    return 1;
+                }
+            }
+        }
     }
 
     return 0;

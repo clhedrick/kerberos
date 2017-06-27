@@ -6,7 +6,8 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct
 void freeLdapData(struct berval **rules, struct berval **keytab, char *dn);
 int addRule(LDAP *ld, char *dn, char *rule);
 int deleteRule(LDAP *ld, char *dn, char *rule);
-int replaceKeytab(LDAP *ld, char *dn, struct berval *newkeytab);
+int replaceKeytab(LDAP *ld, char *dn, struct berval **keytab, struct berval *newkeytab);
+int deleteKeytab(LDAP *ld, char *dn, struct berval **keytab, char *principal);
 int base64encode(const void* data_buf, size_t dataLength, char* result, size_t resultSize);
 int base64decode (char *in, size_t inLen, unsigned char *out, size_t *outLen);
 

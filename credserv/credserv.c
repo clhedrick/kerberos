@@ -704,6 +704,10 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     size_t keysize;
     int i;
     int needunlink = 0;
+    char *prefix;
+    int preflen = strlen(principal) + 1;
+
+    asprintf(&prefix, "%s=", principal);
 
     // This is the one operation where we don't do permissions
     // checking. The code in the main body verified that the caller
@@ -798,15 +802,32 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         // make sure we got one from ldap. if there's a rule there should
         // be a key table, so this is unusual
         if (keytab == NULL || keytab[0] == NULL) {
-            mylog(LOG_ERR, "no keytab attribute in ldap");
+            mylog(LOG_ERR, "no keytab attribute in ldap for %s", username);
             return GENERIC_ERR;
         }
 
-        // yup. it's in a berval in keytab
-        // base64 decode it into keydata
-        keydata = malloc(keytab[0]->bv_len);
-        keysize = keytab[0]->bv_len;
-        if (base64decode (keytab[0]->bv_val, strlen(keytab[0]->bv_val), keydata, &keysize)) {
+        found = 0;
+
+        for (i = 0; keytab[i] != NULL; i++) {
+            char *thistext;
+            thistext = keytab[i]->bv_val;
+            if (strncmp(thistext, prefix, preflen) == 0) {
+                found = 1;
+                break;
+            }
+        }
+
+        if (!found) {
+            mylog(LOG_ERR, "missing key table for %s %s", principal, username);
+            return GENERIC_ERR;
+        }
+
+        // found keytab for this principal
+        // i is the right index
+       // + preflen to skip principal= and get to the actual keytable
+        keydata = malloc(keytab[i]->bv_len);
+        keysize = keytab[i]->bv_len;
+        if (base64decode (keytab[0]->bv_val + preflen, strlen(keytab[0]->bv_val + preflen), keydata, &keysize)) {
             mylog(LOG_ERR, "base64 decode failed");
             return GENERIC_ERR;
         }
@@ -1302,8 +1323,11 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     // keytab is now in keydata.
     // base64 encode into the newkeytab berval
 
-    newkeytab.bv_val = malloc(3*fsize + 1);
-    if (base64encode(keydata, fsize, newkeytab.bv_val, 3*fsize+1)) {
+    // set bv_val to principal=keytab
+    newkeytab.bv_val = malloc(strlen(principal) + 3*fsize + 2);
+    strcpy(newkeytab.bv_val, principal);
+    strcat(newkeytab.bv_val, "=");
+    if (base64encode(keydata, fsize, newkeytab.bv_val + strlen(newkeytab.bv_val), 3*fsize+1)) {
         mylog(LOG_ERR, "base64 encode failed");
         return "base64 encode failed";
     }
@@ -1311,7 +1335,7 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
 
     // have the keytab in newkeytab. write it into ldap
 
-    r = replaceKeytab(ld, dn, &newkeytab);
+    r = replaceKeytab(ld, dn, keytab, &newkeytab);
     if (r != 0) {
         mylog(LOG_ERR, "unable to replace keytab in ldap");
         return "unable to replace keytab in ldap";
@@ -1439,10 +1463,8 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
     // if there's no references to this principal left in the file,
     // remove the keytab
     if (!principal_found) {
-        // currently not implemented
-        // principal not in use by other hosts
-        //        mylog(LOG_DEBUG, "removed keytab for %s", principal);
-        // failure isn't fatal, just leaves a file aroudn
+        deleteKeytab(ld, dn, keytab, principal);
+        mylog(LOG_DEBUG, "removed keytab for %s", principal);
     }
 
     outdata->data = "ok\n";
