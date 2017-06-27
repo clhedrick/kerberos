@@ -59,7 +59,7 @@
 #include <time.h>
 #include <grp.h>
 #include <signal.h>
-
+#include "credldap.h"
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -69,7 +69,7 @@
 
 extern krb5_deltat krb5_clockskew;
 
-int debug = 0;
+extern int debug;
 
 // credentaisl is a list of lists. 
 
@@ -131,20 +131,6 @@ net_read(int fd, char *buf, int len)
 }
 
 int krb5_net_write (krb5_context, int, const char *, int);
-
-void mylog (int level, const char *format, ...)  __attribute__ ((format (printf, 2, 3)));
-void mylog (int level, const char *format, ...) {
-    va_list args;
-    va_start (args, format);
-
-    if (debug) {
-        vprintf(format, args);
-        printf("\n");
-    } else
-        vsyslog(level, format, args);
-
-    va_end(args);
-}
 
 char * read_item(int sock, char *olditem);
 
@@ -256,9 +242,9 @@ int isrecent(krb5_ticket *ticket) {
 
 /* the actual operations */
 
-char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *data);
+char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, krb5_data *data);
 char *listcreds(krb5_context context, krb5_auth_context  auth_context, char * username, char *principal, char *hostname, krb5_data *data, char *cname);
-char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char * flags);
+char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char * flags);
 char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket);
 
 /* 
@@ -291,6 +277,7 @@ main(int argc, char *argv[])
     int on = 1;
     char hostbuf[1024];
     struct hostent* host;
+    char *myhostname = NULL;
     // args from kgetcred
     char op; // operation: G - get creds, S - set creds; future delete and list
     char *username;
@@ -393,6 +380,18 @@ main(int argc, char *argv[])
 
     chdir("/tmp"); // should be irrelevant. but just in case
     umask(027); // just to get something known, we shouldn't actually create any files
+
+    // get our hostname, normalized
+    // We're generating the local host principal needed for the forward call
+    hostbuf[sizeof(hostbuf)-1] = '\0';
+    gethostname(hostbuf, sizeof(hostbuf)-1);
+    host = gethostbyname(hostbuf);
+    if (host == NULL) {
+        mylog(LOG_ERR, "hostname %s not found", hostbuf);
+        goto cleanup;
+    }
+    myhostname = malloc(strlen(host->h_name) + 1);
+    strcpy(myhostname, host->h_name);
 
     // Mutual authentication, so we need credentials.
     // Ours comes from /etc/krb5.conf
@@ -604,11 +603,11 @@ main(int argc, char *argv[])
 
     // do the real operations
     if (op == 'G') 
-        errmsg = getcreds(context, auth_context, username, principal, realhost, &data);
+        errmsg = getcreds(context, auth_context, username, principal, myhostname, realhost, &data);
     else if (op == 'L') 
         errmsg = listcreds(context, auth_context, username, principal, realhost, &data, cname);
     else if (op == 'R') 
-        errmsg = registercreds(context, auth_context, username, principal, hostname, realhost, &data, cname, ticket, flags);
+        errmsg = registercreds(context, auth_context, username, principal, myhostname, hostname, realhost, service, &data, cname, ticket, flags);
     else if (op == 'U') 
         errmsg = unregistercreds(context, auth_context, username, principal, hostname, realhost, &data, cname, ticket);
 
@@ -681,7 +680,7 @@ main(int argc, char *argv[])
 
 // returns NULL if OK, else error message
 char *
-getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *data) {
+getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, krb5_data *data) {
     krb5_error_code r;
     krb5_ccache ccache;
     krb5_principal serverp = 0;
@@ -696,9 +695,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     krb5_keytab userkeytab;
     krb5_principal userprinc;
     char repbuf[BUFSIZ];
-    char hostbuf[1024];
     krb5_creds usercreds;
-    struct hostent* host;
 
     // This is the one operation where we don't do permissions
     // checking. The code in the main body verified that the caller
@@ -851,18 +848,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         goto cleanup;
     }
 
-    // get our hostname, normalized
-    // We're generating the local host principal needed for the forward call
-    hostbuf[sizeof(hostbuf)-1] = '\0';
-    gethostname(hostbuf, sizeof(hostbuf)-1);
-    host = gethostbyname(hostbuf);
-    if (host == NULL) {
-        mylog(LOG_ERR, "hostname %s not found", hostname);
-        goto cleanup;
-    }
-    // FQ hostname is now host->h_name                                                                
-
-    if ((r = krb5_sname_to_principal(context, host->h_name, NULL,
+    if ((r = krb5_sname_to_principal(context, myhostname, NULL,
 				     KRB5_NT_SRV_HST, &serverp))) {
       mylog(LOG_ERR, "could not make server principal %s",error_message(r));
       goto cleanup;
@@ -1065,16 +1051,22 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
 // cname is the principal that they are authenticated as.
 
 char *
-registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char *flags) {
+registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char *flags) {
 
     char *default_realm = NULL;
-    char buffer[1024];
-    char newname[1024];
     int r;
-    FILE *indexf;
+    FILE *keytabf;
+    char princname[1024];
+    long fsize;
     int found = 0;
     pid_t child;
     int status;
+    struct berval **rules;
+    struct berval **keytab;
+    struct berval newkeytab;
+    char *dn;
+    int i;
+    LDAP *ld;
 
     if ((r = krb5_get_default_realm(context, &default_realm))) {
         mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
@@ -1093,13 +1085,13 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     // gets a new ticket. I have no obvious way to know that the ticket they're presenting
     // is that one, but I can check that it was obtained within the last 30 sec.
 
-    snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
+    snprintf(princname, sizeof(princname)-1, "%s@%s", username, default_realm);
     if (isprived(clientp)) {
         ;  // allow anything
     } else if (strcmp("root", username) == 0) {
         // root generally isn't a valid principal
         return "Currently we don't support this function for root";
-    } else if (strcmp(buffer, clientp) != 0 || strcmp(buffer, principal) != 0) {
+    } else if (strcmp(princname, clientp) != 0 || strcmp(princname, principal) != 0) {
         // non-root, user must agree with authenticated principal
         mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
         return GENERIC_ERR;
@@ -1113,18 +1105,24 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         hostname = realhost;
     }
 
-    // file containing authorizations for the requested user
-    snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/INDEX", username);
-    indexf = fopen(buffer, "r");
+    ld = krb_ldap_open(context, service, myhostname, default_realm);
 
-    // see if it already exists
-    if (indexf) {
-        while (fgets(buffer, sizeof(buffer), indexf)) {
-            char *ch, *princp;
-        
-            // if ends in \n, kill the \n
-            if (buffer[strlen(buffer)-1] == '\n')
-                buffer[strlen(buffer)-1] = '\0';
+    if (!ld) {
+        mylog(LOG_ERR, "ldap open failed");
+        return GENERIC_ERR;
+    }
+
+    r = getLdapData(context, ld, default_realm,  username, &rules, &keytab, &dn);
+    if (r) {
+        mylog(LOG_ERR, "get ldap data failed");
+        return GENERIC_ERR;
+    }
+
+    if (rules) {
+        for (i = 0; rules[i]; i++) {
+            char *buffer = rules[i]->bv_val;
+            char *ch;
+            char *princp;
 
             // first item is host
             ch = strchr(buffer, ':');
@@ -1150,44 +1148,31 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
             found = 1;
             break;
         }
-        fclose(indexf);
     }
 
     // if it's not there, add it
     if (!found) {
-        int wrote;
-
+        char *newrule;
         mylog(LOG_DEBUG, "user %s principal %s host %s not in INDEX, adding", username, principal, hostname);
-        // just in case. these will fail silently if the directories exist
-        mkdir("/var/credserv", 0755);
-        snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s", username);
-        mkdir(buffer, 0755);
 
-        // now append entry to file
-        snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/INDEX", username);
-        
-        // append, file is created if it doesn't exist
-        indexf = fopen(buffer, "a"); 
-        if (!indexf) {
-            mylog(LOG_DEBUG, "unable to open INDEX file for %s to add entry", username);
-            return "unable to open INDEX file for user";
-        }
         if (strcmp(flags, "") != 0)
-            wrote = fprintf(indexf, "%s:%s:%s\n", hostname, principal, flags);
+            asprintf(&newrule, "%s:%s:%s", hostname, principal, flags);
         else
-            wrote = fprintf(indexf, "%s:%s\n", hostname, principal);
-        if (wrote <= 0) {
-            mylog(LOG_DEBUG, "unable to write new entry in INDEX file for %s", username);
-            return "unable to add entry ton INDEX file";
+            asprintf(&newrule, "%s:%s", hostname, principal);
+
+        r = addRule(ld, dn, newrule);
+
+        if (r != 0) {
+            mylog(LOG_DEBUG, "unable to add new rule for %s", username);
+            return "unable to add new rule";
         }
-        fclose(indexf);
     }
 
     // now recreate the keytable. do this even if index entry existed. Because keytables
     // are invalidated when the user changes their password, we need a way for them to
     // update the keytable. So reregistering for a host will get the keytable again.
 
-    snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/%s.%lu", username, principal, (unsigned long) getpid());
+    snprintf(princname, sizeof(princname)-1, "/tmp/credserv.keytab.%lu", (unsigned long) getpid());
 
     // for the moment the only way to generate a key table for another user is
     // to be on the Kerberos server and use kadmin.local. This will change in new
@@ -1197,11 +1182,11 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     child = fork();
 
     if (child == 0) {
-        int i, fd;
+        int fd;
 
         // in child
-        for ( i=getdtablesize(); i>=0; --i) 
-            close(i);
+        for ( fd=getdtablesize(); fd>=0; --fd) 
+            close(fd);
 
         fd = open("/dev/null",O_RDWR, 0);
         
@@ -1213,7 +1198,7 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
                 close (fd);
         }
 
-        execl("/sbin/kadmin.local", "kadmin.local", "ktadd", "-norandkey", "-k", buffer, principal, NULL);
+        execl("/sbin/kadmin.local", "kadmin.local", "ktadd", "-norandkey", "-k", princname, principal, NULL);
         mylog(LOG_ERR, "exec of kadmin.local failed");
 
     }
@@ -1227,15 +1212,21 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         return "unable to create key table -- kadmin failed";
     }
 
-    // to prevent race conditions while the new file is being build (or truncated
-    // files if something goes wrong), we generate a temp file and then rename
-    // it to the real one.
+    keytabf = fopen(princname, "r");
+    fseek(keytabf, 0, SEEK_END);
+    fsize = ftell(keytabf);
+    fseek(keytabf, 0, SEEK_SET);  //same as rewind(f);
 
-    snprintf(newname, sizeof(newname)-1, "/var/credserv/%s/%s", username, principal);
+    newkeytab.bv_len = fsize;
+    newkeytab.bv_val = malloc(fsize);
+    fread(newkeytab.bv_val, fsize, 1, keytabf);
+    
+    fclose(keytabf);
 
-    if (rename(buffer, newname)) {
-        mylog(LOG_ERR, "rename of %s to %s failed", buffer, newname);
-        return "unable to put key table in the right place - rename failed";
+    r = replaceKeytab(ld, dn, &newkeytab);
+    if (r != 0) {
+        mylog(LOG_ERR, "unable to replace keytab in ldap");
+        return "unable to replace keytab in ldap";
     }
 
     mylog(LOG_ERR, "added %s %s to INDEX of %s, with new keytab", hostname, principal, username);

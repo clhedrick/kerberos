@@ -86,9 +86,6 @@ struct princlist {
     struct princlist *next;
 };
 
-char *admingroup = NULL;
-
-
 #ifndef GETPEERNAME_ARG3_TYPE
 #define GETPEERNAME_ARG3_TYPE int
 #endif
@@ -173,11 +170,9 @@ static int ldap_sasl_interact(LDAP *ld, unsigned flags, void *priv_data, void *s
 
 int  auth_method    = LDAP_AUTH_SASL;
 int desired_version = LDAP_VERSION3;
-char* base="cn=accounts,dc=cs,dc=rutgers,dc=edu";
 char *grealm = "CS.RUTGERS.EDU";
 char *gservice = "credserv";
 char *ghostname = "krb1.cs.rutgers.edu";
-char *ldapurl = "ldaps://krb1.cs.rutgers.edu,ldaps://krb2.cs.rutgers.edu";
 char *targetuser = "hedrick";
 
 LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *realm);
@@ -192,6 +187,13 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
     krb5_creds servcreds;
     int havecreds = 0;
     char *putstr = NULL;
+    char *ldapurl;
+    krb5_data realm_data;
+
+    realm_data.data = realm;
+    realm_data.length = strlen(realm);
+
+    krb5_appdefault_string(context, "credserv", &realm_data, "ldapurl", "ldaps://localhost", &ldapurl);
 
     // first we have to set up a credentials file with creds for the credserv/HOST
     // that's used by the GSSAPI authentication
@@ -275,6 +277,149 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
 
 }
 
+int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct berval ***rules, struct berval***keytab, char **dn);
+
+int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct berval ***rules, struct berval***keytab, char **dn) {
+    char* filter;
+    LDAPMessage* msg;
+    BerElement* ber;
+    LDAPMessage *entry;
+    char* attr;
+    char *base;
+    krb5_data realm_data;
+
+    realm_data.data = realm;
+    realm_data.length = strlen(realm);
+
+    krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
+
+    asprintf(&filter, "(uid=%s)", user);
+
+    if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
+        mylog(LOG_ERR, "ldap_search_s failed");
+        free(filter);
+        return 1;
+    }
+    free(filter);
+
+    entry = ldap_first_entry(ld, msg);
+    if (entry == NULL) {
+        mylog(LOG_ERR, "no ldap entry for %s", user);
+    }
+
+    *dn = ldap_get_dn(ld, entry);
+
+    *rules = NULL; // if no rules defined
+    *keytab = NULL; // if no keytab defined
+    for (attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
+        if (strcmp(attr, "csRutgersEduCredservRule") == 0) {
+            *rules = ldap_get_values_len(ld, entry, attr);
+        } else if (strcmp(attr, "csRutgersEduCredservKeytab") == 0) {
+            *keytab = ldap_get_values_len(ld, entry, attr);
+        }
+        ldap_memfree(attr);
+    }
+    if (ber)
+        ber_free(ber, 0);
+    ldap_msgfree(msg);
+
+    return 0;
+
+}
+
+void freeLdapData(struct berval **rules, struct berval **keytab, char *dn);
+
+void freeLdapData(struct berval **rules, struct berval **keytab, char *dn) {
+    if (rules)
+        ldap_value_free_len(rules);
+    if (keytab)
+        ldap_value_free_len(keytab);
+    if (dn)
+        ldap_memfree(dn);
+}
+
+int addRule(LDAP *ld, char *dn, char *rule);
+
+int addRule(LDAP *ld, char *dn, char *rule) {
+    LDAPMod rulemod;
+    LDAPMod *mods[2];
+    char *rulevalues[2];
+    int ret;
+
+    /* Initialize the attribute, specifying 'REPLACE' as the operation */
+    rulemod.mod_op     = LDAP_MOD_ADD;
+    rulemod.mod_type   = "csRutgersEduCredservRule";
+    rulevalues[0] = rule;
+    rulevalues[1] = NULL;
+    rulemod.mod_values = rulevalues;
+
+    /* Fill the attributes array (remember it must be NULL-terminated) */
+    mods[0] = &rulemod;
+    mods[1] = NULL;
+
+    if ((ret = ldap_modify_ext_s(ld, dn, mods, NULL, NULL)) != LDAP_SUCCESS) {
+        mylog(LOG_ERR, "ldap_modify for add: %s", ldap_err2string(ret));
+        return 1;
+    }
+
+    return 0;
+}
+
+int deleteRule(LDAP *ld, char *dn, char *rule);
+
+int deleteRule(LDAP *ld, char *dn, char *rule) {
+    LDAPMod rulemod;
+    LDAPMod *mods[2];
+    char *rulevalues[2];
+    int ret;
+
+    /* Initialize the attribute, specifying 'REPLACE' as the operation */
+    rulemod.mod_op     = LDAP_MOD_DELETE;
+    rulemod.mod_type   = "csRutgersEduCredservRule";
+    rulevalues[0] = rule;
+    rulevalues[1] = NULL;
+    rulemod.mod_values = rulevalues;
+
+    /* Fill the attributes array (remember it must be NULL-terminated) */
+    mods[0] = &rulemod;
+    mods[1] = NULL;
+
+    if ((ret = ldap_modify_ext_s(ld, dn, mods, NULL, NULL)) != LDAP_SUCCESS) {
+        mylog(LOG_ERR, "ldap_modify for add: %s", ldap_err2string(ret));
+        return 1;
+    }
+
+    return 0;
+}
+
+int replaceKeytab(LDAP *ld, char *dn, struct berval *newkeytab);
+
+int replaceKeytab(LDAP *ld, char *dn, struct berval *newkeytab) {
+    LDAPMod rulemod;
+    LDAPMod *mods[2];
+    struct berval *rulevalues[2];
+    int ret;
+
+    /* Initialize the attribute, specifying 'REPLACE' as the operation */
+    rulemod.mod_op     = LDAP_MOD_REPLACE | LDAP_MOD_BVALUES;
+    rulemod.mod_type   = "csRutgersEduCredservKeytab";
+    rulevalues[0] = newkeytab;
+    rulevalues[1] = NULL;
+    rulemod.mod_bvalues = rulevalues;
+
+    /* Fill the attributes array (remember it must be NULL-terminated) */
+    mods[0] = &rulemod;
+    mods[1] = NULL;
+
+    if ((ret = ldap_modify_ext_s(ld, dn, mods, NULL, NULL)) != LDAP_SUCCESS) {
+        mylog(LOG_ERR, "ldap_modify for add: %s", ldap_err2string(ret));
+        return 1;
+    }
+
+    return 0;
+}
+
+#ifdef MAIN
 int main(int argc, char *argv[]) {
 
     krb5_context context;
@@ -285,8 +430,18 @@ int main(int argc, char *argv[]) {
     LDAP *ld;
     LDAPMessage *entry;
     char* attr;
+    struct berval **rules;
+    struct berval **keytab;
+    struct berval newkeytab;
     struct berval **vals;
     int i;
+    char *base;
+    krb5_data realm_data;
+    char *dn = NULL;
+    int ret;
+    char *foovalues[] = {"foobar", NULL};
+    LDAPMod foo;
+    LDAPMod *mods[2];
 
     retval = krb5_init_context(&context);
     if (retval) {
@@ -295,6 +450,34 @@ int main(int argc, char *argv[]) {
     }
 
     ld = krb_ldap_open(context, gservice, ghostname, grealm);
+
+    if (getLdapData(context, ld, grealm, targetuser, &rules, &keytab, &dn) == 0) {
+        printf("dn %s\n", dn);
+        if (rules) {
+            for(i = 0; rules[i] != NULL; i++) {
+                printf("rule: %s\n", rules[i]->bv_val);
+            }
+        }
+        if (keytab) {
+            for(i = 0; keytab[i] != NULL; i++) {
+                printf("keytab: %s\n", keytab[i]->bv_val);
+            }
+        }
+    }
+
+    deleteRule(ld, dn, "fake rule");
+
+    newkeytab.bv_len = strlen("fake keytab");
+    newkeytab.bv_val = "fake keytab";
+    replaceKeytab(ld, dn, &newkeytab);
+
+    freeLdapData(rules, keytab, dn);
+
+#ifdef undef    
+    realm_data.data = grealm;
+    realm_data.length = strlen(grealm);
+
+    krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
 
     /* search from this point */
      
@@ -306,6 +489,8 @@ int main(int argc, char *argv[]) {
     free(filter);
 
     for (entry = ldap_first_entry(ld, msg); entry != NULL; entry = ldap_next_entry(ld, entry)) {
+        dn = ldap_get_dn(ld, entry);
+        printf("dn: %s\n", dn);
         for( attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
             if ((vals = ldap_get_values_len(ld, entry, attr)) != NULL)  {
                 for(i = 0; vals[i] != NULL; i++) {
@@ -321,6 +506,24 @@ int main(int argc, char *argv[]) {
     }
     ldap_msgfree(msg);
 
+
+    /* Initialize the attribute, specifying 'REPLACE' as the operation */
+    foo.mod_op     = LDAP_MOD_REPLACE;
+    foo.mod_type   = "csRutgersEduCredservKeytab";
+    foo.mod_values = foovalues;
+
+    /* Fill the attributes array (remember it must be NULL-terminated) */
+    mods[0] = &foo;
+    mods[1] = NULL;
+
+    if ((ret = ldap_modify_ext_s(ld, dn, mods, NULL, NULL)) != LDAP_SUCCESS) {
+        mylog(LOG_ERR, "ldap_sasl_bind_s: %s", ldap_err2string(ret));
+    }
+
+    ldap_memfree(dn);
+#endif
+
     return 0;
     
 }
+#endif
