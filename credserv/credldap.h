@@ -7,3 +7,6 @@ void freeLdapData(struct berval **rules, struct berval **keytab, char *dn);
 int addRule(LDAP *ld, char *dn, char *rule);
 int deleteRule(LDAP *ld, char *dn, char *rule);
 int replaceKeytab(LDAP *ld, char *dn, struct berval *newkeytab);
+int base64encode(const void* data_buf, size_t dataLength, char* result, size_t resultSize);
+int base64decode (char *in, size_t inLen, unsigned char *out, size_t *outLen);
+

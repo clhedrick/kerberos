@@ -242,10 +242,10 @@ int isrecent(krb5_ticket *ticket) {
 
 /* the actual operations */
 
-char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, krb5_data *data);
-char *listcreds(krb5_context context, krb5_auth_context  auth_context, char * username, char *principal, char *hostname, krb5_data *data, char *cname);
+char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data);
+char *listcreds(krb5_context context, krb5_auth_context  auth_context, char * username, char *principal, char *myhostname, char *hostname, char *service,  krb5_data *data, char *cname);
 char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char * flags);
-char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket);
+char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket);
 
 /* 
    The sample was designed so it could be run directly or 
@@ -603,13 +603,13 @@ main(int argc, char *argv[])
 
     // do the real operations
     if (op == 'G') 
-        errmsg = getcreds(context, auth_context, username, principal, myhostname, realhost, &data);
+        errmsg = getcreds(context, auth_context, username, principal, myhostname, realhost, service, &data);
     else if (op == 'L') 
-        errmsg = listcreds(context, auth_context, username, principal, realhost, &data, cname);
+        errmsg = listcreds(context, auth_context, username, principal, myhostname, realhost, service, &data, cname);
     else if (op == 'R') 
         errmsg = registercreds(context, auth_context, username, principal, myhostname, hostname, realhost, service, &data, cname, ticket, flags);
     else if (op == 'U') 
-        errmsg = unregistercreds(context, auth_context, username, principal, hostname, realhost, &data, cname, ticket);
+        errmsg = unregistercreds(context, auth_context, username, principal, myhostname, hostname, realhost, service, &data, cname, ticket);
 
     // return the results to the client
     if (errmsg == NULL) {
@@ -680,7 +680,7 @@ main(int argc, char *argv[])
 
 // returns NULL if OK, else error message
 char *
-getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, krb5_data *data) {
+getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data) {
     krb5_error_code r;
     krb5_ccache ccache;
     krb5_principal serverp = 0;
@@ -688,7 +688,6 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     char *default_realm = NULL;
     char *realm = NULL;
     struct stat statbuf;
-    FILE *indexf;
     char *flags;
     char *sp;
     krb5_get_init_creds_opt *options;
@@ -696,6 +695,15 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     krb5_principal userprinc;
     char repbuf[BUFSIZ];
     krb5_creds usercreds;
+    LDAP *ld;
+    struct berval **rules;
+    struct berval **keytab;
+    char *dn;
+    FILE *ofile;
+    unsigned char *keydata;
+    size_t keysize;
+    int i;
+    int needunlink = 0;
 
     // This is the one operation where we don't do permissions
     // checking. The code in the main body verified that the caller
@@ -709,7 +717,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     // get the keytab registered for this user and host
     // anonymous is special -- always allowed
     if (strcmp(username, "anonymous.user") == 0) {
-        snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/anonymous.keytab");
+        snprintf(repbuf, sizeof(repbuf)-1, "/etc/krb5.anonymous.keytab");
     }
     else {
         // we'll give out any credentials authorized for this user and host.
@@ -723,63 +731,109 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         // Root will be set up by admins. They should only have access to non-critical
         // principals, except on secure machines.
 
-        char line[1024];
         int found = 0;
 
-        // Check the INDEX file for this user, to see that they are registered
-        // for this principal from this host.
+        ld = krb_ldap_open(context, service, myhostname, default_realm);
 
-        snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/%s/INDEX", username);
-        indexf = fopen(repbuf, "r");
-        // probably nothing registered
-        if (indexf == NULL) 
-            return NOKEYTAB_ERR;
-
-        while (fgets(line, sizeof(line), indexf)) {
-            char *ch, *princp;
-
-            // if ends in \n, kill the \n
-            if (line[strlen(line)-1] == '\n')
-                line[strlen(line)-1] = '\0';
-
-            // first item is host
-            ch = strchr(line, ':');
-            if (!ch)
-                continue;
-            *ch = '\0';
-            // line - ch is host; verify right host
-            if (strcmp(line, hostname) != 0 && strcmp(line, "*") != 0)
-                continue;
-
-            princp = ch+1;
-            // next item is principal
-            ch = strchr(princp, ':');
-            // end of line is OK
-            if (ch)
-                *ch = '\0';
-            if (strcmp(princp, principal) != 0)
-                continue;
-
-            // got it
-            found = 1;
-            // rest is flags
-            if (ch)
-                flags = ch+1;
-            else
-                flags = "";
-            break;
+        if (!ld) {
+            mylog(LOG_ERR, "ldap open failed");
+            return GENERIC_ERR;
         }
 
-        fclose(indexf);
+        r = getLdapData(context, ld, default_realm,  username, &rules, &keytab, &dn);
+        if (r) {
+            mylog(LOG_ERR, "get ldap data failed");
+            return GENERIC_ERR;
+        }
+
+        if (rules) {
+            for (i = 0; rules[i]; i++) {
+
+                char *line = rules[i]->bv_val;
+
+                char *ch, *princp;
+
+                // if ends in \n, kill the \n
+                if (line[strlen(line)-1] == '\n')
+                    line[strlen(line)-1] = '\0';
+
+                // first item is host
+                ch = strchr(line, ':');
+                if (!ch)
+                continue;
+                *ch = '\0';
+                // line - ch is host; verify right host
+                if (strcmp(line, hostname) != 0 && strcmp(line, "*") != 0)
+                    continue;
+
+                princp = ch+1;
+                // next item is principal
+                ch = strchr(princp, ':');
+                // end of line is OK
+                if (ch)
+                    *ch = '\0';
+                if (strcmp(princp, principal) != 0)
+                    continue;
+
+                // got it
+                found = 1;
+                // rest is flags
+                if (ch)
+                    flags = ch+1;
+                else
+                    flags = "";
+                break;
+            }
+            
+        }
 
         if (!found)
             return NOKEYTAB_ERR;            
 
         // Found 
 
-        snprintf(repbuf, sizeof(repbuf)-1, "/var/credserv/%s/%s", username, principal);
+        // we've got a rule that matches. Now need keytab in order to
+        // generate the credentials
+
+        // make sure we got one from ldap. if there's a rule there should
+        // be a key table, so this is unusual
+        if (keytab == NULL || keytab[0] == NULL) {
+            mylog(LOG_ERR, "no keytab attribute in ldap");
+            return GENERIC_ERR;
+        }
+
+        // yup. it's in a berval in keytab
+        // base64 decode it into keydata
+        keydata = malloc(keytab[0]->bv_len);
+        keysize = keytab[0]->bv_len;
+        if (base64decode (keytab[0]->bv_val, strlen(keytab[0]->bv_val), keydata, &keysize)) {
+            mylog(LOG_ERR, "base64 decode failed");
+            return GENERIC_ERR;
+        }
+
+        // keytab is now in keydata
+        // write it into a file, since kerberos expects keytabs to be in files
+
+        snprintf(repbuf, sizeof(repbuf)-1, "/tmp/credserv.keytab.%lu", (unsigned long) getpid());
+
+        ofile = fopen(repbuf, "w");
+        if (!ofile) {
+            mylog(LOG_ERR, "fopen failed: %s", repbuf);
+            return GENERIC_ERR;
+        }
+
+        if (fwrite(keydata, keysize, 1, ofile) != 1) {
+            mylog(LOG_ERR, "keytab write failed");
+            return GENERIC_ERR;
+        }
+
+        fclose(ofile);
+        needunlink = 1;  // this is temp file
 
     }
+
+    // keytab, either the anonymous one or the user's is now in a file 
+    // file name in repbuf
 
     // request is authorized
     // now have filename of keytab in repbuf
@@ -875,6 +929,9 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
       goto cleanup;
     }
 
+    if (needunlink)
+        unlink(repbuf);
+
     // good return. The new, adjusted credential is in data. It's actually
     // a KRB-CRED message, which has the most sensitive part encrypted
     // in the session key. krb5_rd_cred in the client reads this message and
@@ -882,6 +939,8 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     return 0;
     // since we forked, we're not actually doign cleanup
  cleanup:
+    if (needunlink)
+        unlink(repbuf);
 
     return GENERIC_ERR;
 
@@ -891,18 +950,22 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
 // cname is the principal that they are authenticated as.
 
 char *
-listcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, krb5_data *outdata, char *clientp) {
+listcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *outdata, char *clientp) {
 
     char *default_realm = NULL;
-    char buffer[1024];
     struct princlist *princs = NULL;
     int printsize = 0;
+    char princbuf[1024];
     char *outptr;
     char *outstring;
     int r;
-    FILE *indexf;
     struct princlist *princitem;
     struct hostlist *hostitem;
+    struct berval **rules;
+    struct berval **keytab;
+    char *dn;
+    int i;
+    LDAP *ld;
 
     if ((r = krb5_get_default_realm(context, &default_realm))) {
         mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
@@ -914,13 +977,13 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
     // Root if it hasn't authenticated as a privileged user can't do anything.
     // Otherwise, user can see only its own data.
 
-    snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
+    snprintf(princbuf, sizeof(princbuf)-1, "%s@%s", username, default_realm);
     if (isprived(clientp)) {
         ;  // allow anything
     } else if (strcmp("root", username) == 0) {
         // Root is generally not a valid credential
         return "Currently we don't support this function for root";
-    } else if (strcmp(buffer, clientp) != 0) {
+    } else if (strcmp(princbuf, clientp) != 0) {
         // non-root, user they're requested info on must agree with authenticated principal
         mylog(LOG_ERR, "user %s asked to list user %s", username, clientp);
         return GENERIC_ERR;
@@ -929,80 +992,88 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
         hostname = NULL;
     }
 
-    // INDEX file for the requested user has the permissions to list
-    snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/INDEX", username);
-    indexf = fopen(buffer, "r");
-    // probably nothing registered
-    if (indexf == NULL) 
-        return NOKEYTAB_ERR;
+    ld = krb_ldap_open(context, service, myhostname, default_realm);
+
+    if (!ld) {
+        mylog(LOG_ERR, "ldap open failed");
+        return GENERIC_ERR;
+    }
+
+    r = getLdapData(context, ld, default_realm,  username, &rules, &keytab, &dn);
+    if (r) {
+        mylog(LOG_ERR, "get ldap data failed");
+        return GENERIC_ERR;
+    }
 
     // parse the file and collect data. Since we want to be able
     // to sort it, we put the data into a list of malloc'ed structures
     // We also collect the sizes of the strings we'll eventually output,
     // so we know how big a space to malloc for the final output.
-    while (fgets(buffer, sizeof(buffer), indexf)) {
-        char *ch, *princp, *flags;
-        
-        // if ends in \n, kill the \n
-        if (buffer[strlen(buffer)-1] == '\n')
-            buffer[strlen(buffer)-1] = '\0';
 
-        // first item is host
-        ch = strchr(buffer, ':');
-        if (!ch)
-            continue;
-        *ch = '\0';
-        // buffer is now host
-
-        // only allowed to see one host. if it's a different one, skip it
-        //        if (hostname && strcmp(hostname, buffer) != 0)
-        //            continue;
+    if (rules) {
+        for (i = 0; rules[i]; i++) {
+            char *buffer = rules[i]->bv_val;
+            char *ch, *princp, *flags;
         
-        princp = ch+1;
-        // next item is principal
-        ch = strchr(princp, ':');
-        // end of line is OK
-        if (ch)
+            // if ends in \n, kill the \n
+            if (buffer[strlen(buffer)-1] == '\n')
+                buffer[strlen(buffer)-1] = '\0';
+            
+            // first item is host
+            ch = strchr(buffer, ':');
+            if (!ch)
+                continue;
             *ch = '\0';
-        // princp is now principal
-        
-        if (ch)
-            flags = ch+1;
-        else
-            flags = "";
+            // buffer is now host
 
-        // look for our principal in the list
-        for (princitem = princs; princitem && strcmp(princitem->principal, princp) ; princitem = princitem->next)
+            // only allowed to see one host. if it's a different one, skip it
+            //        if (hostname && strcmp(hostname, buffer) != 0)
+            //            continue;
+            
+            princp = ch+1;
+            // next item is principal
+            ch = strchr(princp, ':');
+            // end of line is OK
+            if (ch)
+                *ch = '\0';
+            // princp is now principal
+        
+            if (ch)
+                flags = ch+1;
+            else
+                flags = "";
+
+            // look for our principal in the list
+            for (princitem = princs; princitem && strcmp(princitem->principal, princp) ; princitem = princitem->next)
             ;
-        // if we didn't find it, create a new entry
-        if (!princitem) {
-            princitem = malloc(sizeof(struct princlist));
-            princitem->principal = malloc(strlen(princp) + 1);
-            strcpy(princitem->principal, princp);
-            princitem->next = princs;
-            princitem->hosts = NULL;
-            princs = princitem;
-            printsize += strlen(princp) + 2;
-        }
-        // princitem is now the principal. See if we've already got this host
-        for (hostitem = princitem->hosts; hostitem && strcmp(hostitem->host, buffer) ; hostitem = hostitem->next)
-            ;
-        // if we didn't find it, create a new entry
-        if (!hostitem) {
-            hostitem = malloc(sizeof(struct hostlist));
-            hostitem->host = malloc(strlen(buffer) + 1);
-            strcpy(hostitem->host, buffer);
-            hostitem->flags = malloc(strlen(flags) + 1);
-            strcpy(hostitem->flags, flags);
-            hostitem->next = princitem->hosts;
-            princitem->hosts = hostitem;
-            printsize += strlen(buffer) + 2;
-            if (strlen(flags) > 0)
-                printsize += strlen(flags) + 1;
+            // if we didn't find it, create a new entry
+            if (!princitem) {
+                princitem = malloc(sizeof(struct princlist));
+                princitem->principal = malloc(strlen(princp) + 1);
+                strcpy(princitem->principal, princp);
+                princitem->next = princs;
+                princitem->hosts = NULL;
+                princs = princitem;
+                printsize += strlen(princp) + 2;
+            }
+            // princitem is now the principal. See if we've already got this host
+            for (hostitem = princitem->hosts; hostitem && strcmp(hostitem->host, buffer) ; hostitem = hostitem->next)
+                ;
+            // if we didn't find it, create a new entry
+            if (!hostitem) {
+                hostitem = malloc(sizeof(struct hostlist));
+                hostitem->host = malloc(strlen(buffer) + 1);
+                strcpy(hostitem->host, buffer);
+                hostitem->flags = malloc(strlen(flags) + 1);
+                strcpy(hostitem->flags, flags);
+                hostitem->next = princitem->hosts;
+                princitem->hosts = hostitem;
+                printsize += strlen(buffer) + 2;
+                if (strlen(flags) > 0)
+                    printsize += strlen(flags) + 1;
+            }
         }
     }
-
-    fclose(indexf);
 
     /* now print the result. format
  principal: host, host\n
@@ -1060,10 +1131,11 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     long fsize;
     int found = 0;
     pid_t child;
-    int status;
+    int status = 0;
     struct berval **rules;
     struct berval **keytab;
     struct berval newkeytab;
+    char *keydata;
     char *dn;
     int i;
     LDAP *ld;
@@ -1179,6 +1251,8 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     // versions of kerberos, where kadmin can be authorized to do it remotely.
     // But for now, we call kadmin.local in a fork.
 
+    mylog(LOG_DEBUG, "/sbin/kadmin.local ktadd -norandkey -k %s %s", princname, principal);
+
     child = fork();
 
     if (child == 0) {
@@ -1197,7 +1271,6 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
             if (fd > 2)
                 close (fd);
         }
-
         execl("/sbin/kadmin.local", "kadmin.local", "ktadd", "-norandkey", "-k", princname, principal, NULL);
         mylog(LOG_ERR, "exec of kadmin.local failed");
 
@@ -1208,26 +1281,43 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     waitpid(child, &status, 0);
 
     if (WEXITSTATUS(status)) {
-        mylog(LOG_ERR, "kadmin ktadd failed for %s", principal);
+        mylog(LOG_ERR, "kadmin ktadd failed for %u %s", WEXITSTATUS(status), principal);
         return "unable to create key table -- kadmin failed";
     }
 
+    // keytab is now in a file, name in princname
+    // read it in and put it into ldap
+
+    // read it
     keytabf = fopen(princname, "r");
     fseek(keytabf, 0, SEEK_END);
     fsize = ftell(keytabf);
     fseek(keytabf, 0, SEEK_SET);  //same as rewind(f);
 
-    newkeytab.bv_len = fsize;
-    newkeytab.bv_val = malloc(fsize);
-    fread(newkeytab.bv_val, fsize, 1, keytabf);
-    
+    keydata = malloc(fsize + 1);
+    fread(keydata, fsize, 1, keytabf);
     fclose(keytabf);
+    unlink(princname);
+    
+    // keytab is now in keydata.
+    // base64 encode into the newkeytab berval
+
+    newkeytab.bv_val = malloc(3*fsize + 1);
+    if (base64encode(keydata, fsize, newkeytab.bv_val, 3*fsize+1)) {
+        mylog(LOG_ERR, "base64 encode failed");
+        return "base64 encode failed";
+    }
+    newkeytab.bv_len = strlen(newkeytab.bv_val);
+
+    // have the keytab in newkeytab. write it into ldap
 
     r = replaceKeytab(ld, dn, &newkeytab);
     if (r != 0) {
         mylog(LOG_ERR, "unable to replace keytab in ldap");
         return "unable to replace keytab in ldap";
     }
+
+    // yeah! it worked
 
     mylog(LOG_ERR, "added %s %s to INDEX of %s, with new keytab", hostname, principal, username);
 
@@ -1241,18 +1331,18 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
 // cname is the principal that they are authenticated as.
 
 char *
-unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *hostname, char *realhost, krb5_data *outdata, char *clientp, krb5_ticket *ticket) {
+unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket) {
 
     char *default_realm = NULL;
     char buffer[1024];
-    char newname[1024];
-    char line[1024];
-    char removeline[1024];
     int r;
-    FILE *indexf;
-    FILE *newf;
     int found = 0;
     int principal_found = 0;
+    struct berval **rules;
+    struct berval **keytab;
+    char *dn;
+    int i;
+    LDAP *ld;
 
     if ((r = krb5_get_default_realm(context, &default_realm))) {
         mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
@@ -1280,19 +1370,25 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
         hostname = realhost;
     }
 
-    // file containing authorizations
-    snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/INDEX", username);
-    indexf = fopen(buffer, "r");
+    ld = krb_ldap_open(context, service, myhostname, default_realm);
 
-    // see if the entry to be removed is actually there
-    if (indexf) {
-        while (fgets(line, sizeof(line), indexf)) {
-            char *ch, *princp;
+    if (!ld) {
+        mylog(LOG_ERR, "ldap open failed");
+        return GENERIC_ERR;
+    }
+
+    r = getLdapData(context, ld, default_realm,  username, &rules, &keytab, &dn);
+    if (r) {
+        mylog(LOG_ERR, "get ldap data failed");
+        return GENERIC_ERR;
+    }
+
+    if (rules) {
+        for (i = 0; rules[i]; i++) {
+            char *line = rules[i]->bv_val;
+            char *ch, *ch1;
+            char *princp;
         
-            // if ends in \n, kill the \n
-            if (line[strlen(line)-1] == '\n')
-                line[strlen(line)-1] = '\0';
-
             // first item is host
             ch = strchr(line, ':');
             if (!ch)
@@ -1302,10 +1398,10 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
 
             princp = ch+1;
             // next item is principal
-            ch = strchr(princp, ':');
+            ch1 = strchr(princp, ':');
             // end of line is OK
-            if (ch)
-                *ch = '\0';
+            if (ch1)
+                *ch1 = '\0';
             // princp is now principal
         
             if (strcmp(princp,principal) != 0)
@@ -1318,74 +1414,24 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
                 continue;
             }
 
+            // put the line back
+            *ch = ':';
+            if (ch1)
+                *ch1 = ':';
+
             // both principal and host match. found the actual entry
             found = 1;
             break;
         }
-        fclose(indexf);
+
     }
 
-    // if so, write a new version of the file without that entry
-    // write into a temp file and rename it on top of the real one
+    // if we found the requested entry, delete from ldap
     if (found) {
-        // need to delete entry. copying index to new location then rename
-
-        snprintf(removeline, sizeof(removeline)-1, "%s:%s", hostname, principal);
-        // buffer still has real index name
-        indexf = fopen(buffer, "r");
-        if (!indexf) {
-            mylog(LOG_ERR, "unable to open INDEX file for %s to remove entry", username);
-            return "unable to open INDEX file for user";
+        if (deleteRule(ld, dn, rules[i]->bv_val)) {
+            mylog(LOG_ERR, "unable to delete rule from ldap");
+            return GENERIC_ERR;
         }
-        snprintf(newname, sizeof(buffer)-1, "/var/credserv/%s/INDEX.%lu", username, (unsigned long) getpid());
-        newf = fopen(newname, "w");
-        if (!indexf) {
-            mylog(LOG_ERR, "unable to open new copy of INDEX file for %s to remove entry", username);
-            unlink(newname);
-            return "unable to open new copy of INDEX file for user";
-        }
-        while (fgets(line, sizeof(line), indexf)) {
-            char *cp;
-            int colons = 0;
-            
-            int length = strlen(line);
-        
-            // for this loop, we can't change the line because we're going to have
-            // to write it back out
-
-            if (line[length-1] == '\n')
-                length--;
-            
-            // if we have a third : just compare up to it
-            for (cp = line; *cp; cp++) {
-                if (*cp == ':') {
-                    colons ++;
-                }
-                if (colons == 2) {
-                    length = (cp - line);
-                    break;
-                }
-            }
-            
-            if (strncmp(line, removeline, length) != 0) {
-                if (fputs(line, newf) <= 0) {
-                    unlink(newname);
-                    mylog(LOG_ERR, "write to new copy of INDEX file failed");
-                    return "error writing new INDEX file, removal has not happened";
-                }
-            }
-        }
-        fclose(indexf);
-        fclose(newf);
-
-        if (rename(newname, buffer)) {
-            unlink(newname);
-            mylog(LOG_ERR, "rename of %s to %s failed", newname, buffer);
-            return "unable to put new INDEX file into position; removal has not happened";
-        }
-
-        mylog(LOG_DEBUG, "removed INDEX entry user %s principal %s host %s", username, principal, hostname);
-
     } else {
         mylog(LOG_DEBUG, "user %s principal %s host %s not in INDEX, no need to remove", username, principal, hostname);
     }
@@ -1393,10 +1439,9 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
     // if there's no references to this principal left in the file,
     // remove the keytab
     if (!principal_found) {
+        // currently not implemented
         // principal not in use by other hosts
-        snprintf(buffer, sizeof(buffer)-1, "/var/credserv/%s/%s", username, principal);
-        unlink(buffer);
-        mylog(LOG_DEBUG, "removed keytab for %s", principal);
+        //        mylog(LOG_DEBUG, "removed keytab for %s", principal);
         // failure isn't fatal, just leaves a file aroudn
     }
 
