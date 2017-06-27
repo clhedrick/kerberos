@@ -1311,6 +1311,10 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
 
     // read it
     keytabf = fopen(princname, "r");
+    if (!keytabf) {
+        mylog(LOG_ERR, "unable to create key table for %s", principal);
+        return "unable to create key table";
+    }
     fseek(keytabf, 0, SEEK_END);
     fsize = ftell(keytabf);
     fseek(keytabf, 0, SEEK_SET);  //same as rewind(f);
