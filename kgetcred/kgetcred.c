@@ -129,9 +129,23 @@ int read_lasthost(char *buf, size_t bufsize);
 int read_lasthost(char *buf, size_t bufsize) {
     int fd;
     size_t r;
+    struct stat statbuf;
+
     fd = open("/tmp/kgetcred.last", O_RDONLY);
     if (fd == -1)
         return 1;
+    // only read it if created by root. Normal users
+    // can create files on /tmp. I think it's bad practice
+    // to let a user point us to a host of their choice,
+    // although mutual authentication should fail in the end
+    if (fstat(fd, &statbuf) != 0) {
+        close(fd);
+        return 1;
+    }
+    if (statbuf.st_uid != 0) {
+        close(fd);
+        return 1;
+    }
     r = read(fd, buf, bufsize);
     close(fd);
     if (r == 0)
