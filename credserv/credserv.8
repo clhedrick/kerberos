@@ -90,7 +90,12 @@ Because full principals can't appear in groups, you'll want to use
 user.admin, not user/admin.
 .PP
 NOTE: You must make a service principal for credserv/HOST on the server
-and add it to /etc/krb5.keytab.
+and add it to /etc/krb5.keytab. You also need to add attributes 
+csRutgersEduCredservKeytab and csRutgersEduCredservRule to user entries.
+There's documentation for IPA on how to do this. You need to create a
+new objectclass with these attributes allowed, and configure IPA to
+add the objectclass to all user entries. I chose to put the data in
+LDAP because LDAP will replicate it to all of the servers.
 .SH "OPTIONS"
 .TP
 .B \-d
@@ -98,13 +103,70 @@ do not detach, and print debugging messages
 .SH "SEE ALSO"
 kgetcred(1)
 .SH "IMPLEMENTATION NOTES"
-Currently the code isn't designed to handle a redundant server. That would be
-easy to add, but you'd need to synchronize data on the two servers.
 .PP
 Currently credserv must be run on the Kerberos server, because it uses
 kadmin.local to generate keytabs. This restriction could be removed if the
 client sent the user's password to the server. Then ktutil could be
 used to make keytabs. However the password would need to be encrypted,
 and I'm not convinced I'm competent to do that design.
-
-
+.SH "INSTALLATION"
+.PP
+1. install credserv in /usr/sbin, credserv.8 in /usr/share/man/man8, credserv.service in /etc/systemd/system/
+.br
+2. generate or copy /etc/krb5.anonymous.keytab from anonymous.user
+.br
+3. edit /etc/krb5.conf to add entry with ldapurl and ldapbase, and probably admingroup
+.br
+4. add one or more administrative users to the group mentioned in admingroup
+.br
+5. add service credserv/HOST
+.br
+6. merge a keytable for the service into /etc/krb5.keytab (ipa-getkeytable to generate the keytable, ktutil to merge it)
+.br
+7. Add attributes csRutgersEduCredservRule and csRutgersEduCredservRule. See below.
+.br
+8. add permissions for credserv/HOST to read and write the new attributes. This is best done in the IPA web GUI, under IPA server, Role Based Access Control. You'll need to add a permission that can read and write csRutgersEduCredservRule and csRutgersEduCredservRule, a privilege with that permission, a role with that privilege, and then add the service principal credserv/HOST to the role.
+.PP
+.SH "ADD ATTRIBUTES"
+.PP
+Adding attributes may differ depending upon which ldap server you're using. These instructions are for IPA.
+.PP
+Create a file addattr containing
+.PP
+.nf
+dn: cn=schema
+changetype: modify
+add: attributetypes
+attributeTypes: ( 1.3.6.1.4.1.10962.2.4.2 NAME 'csRutgersEduCredservKeytab' DE
+ SC 'Encoded keytab for credserv' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 X-ORIGI
+ N ( 'cs.rutgers.edu' 'user defined' ) )
+attributeTypes: ( 1.3.6.1.4.1.10962.2.4.1 NAME 'csRutgersEduCredservRule' DESC
+  'Authorization for credserv' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 X-ORIGIN (
+  'cs.rutgers.edu' 'user defined' ) )
+-
+add: objectclasses
+objectClasses: ( 1.3.6.1.4.1.10962.2.4.3 NAME 'csRutgersEduPerson' SUP top AUX
+ ILIARY MAY ( csRutgersEduCredservRule $ csRutgersEduCredservKeytab ) X-ORIGIN
+  ( 'cs.rutgers.edu' 'user defined' ) )
+.fi
+.PP
+ldapmodify -ZZ -x -D "cn=Directory Manager" -W -H ldap://localhost -f addattr
+.PP
+You'll have to type the directory manager password.
+.PP
+In principle you can now do ipa config-mod --addattr=ipaUserObjectClasses=csRutgersEduPerson. However it didn't work
+for me. I had to use the following file with ldapmodify
+.PP
+.nf
+dn: cn=ipaConfig,cn=etc,dc=cs,dc=rutgers,dc=edu
+changetype:modify
+add:ipaUserObjectClasses
+ipaUserObjectClasses:csRutgersEduPerson
+.fi
+.PP
+If there are existing users, you'll need to add the objectclass csRutgersEduPerson to them.
+.PP
+Obviously you can use a different name for your attribute, that doesn't have Rutgers in it. However
+the definition of the attribute includes a globally unique ID number (OID). The ID number given here
+is registered to the Rutgers CS department. If you change the attribute name you should use
+your own OID.
