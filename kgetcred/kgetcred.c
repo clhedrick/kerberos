@@ -144,9 +144,10 @@ int read_lasthost(char *buf, size_t bufsize) {
     }
     if (statbuf.st_uid != 0) {
         close(fd);
+        unlink("/tmp/kgetcred.last");
         return 1;
     }
-    r = read(fd, buf, bufsize);
+    r = read(fd, buf, bufsize-1);
     close(fd);
     if (r == 0)
         return 1;
