@@ -666,7 +666,9 @@ int main(int argc, char *argv[])
     if (debug)
         mylog(LOG_ERR, "connected %d", sock);
     // connect apparently worked. save it in lasthost
-    write_lasthost(serverhost);
+    // only save if new value is different
+    if (!lasthostused || strcmp(lasthost, serverhost) != 0)
+        write_lasthost(serverhost);
 
     // at this point ccache has credentials to be used
     // for connection, and client has the principal for them.
