@@ -47,7 +47,8 @@ get credentials for anonymous.user. Primarily intended for kinit -T, until IPA s
 Requires a keytable for anonymous.user on the server.
 .TP
 .B \-w waittime
-amount of time to wait for a response from the server, in seconds. Default is 30 seconds.
+amount of time to wait for a response from the server, in seconds. Default is 15 seconds for
+connect, 30 sec for response.
 .TP
 .B principal
 for root, a principal must be specified. Root can have multiple principals available for a host.
@@ -76,12 +77,12 @@ Note that there is a pam version of this, pam_kgetcred. We expect that this will
 for cron. In that case most users won't need to call kgetcred from their jobs. They'll just
 need the -r and -u options to register keytables on the server.
 .PP
-The hostname of a server running credserv must be registered in /etc/krb5.conf, e.g.
+The hostname of at least one server running credserv must be registered in /etc/krb5.conf, e.g.
 .PP
 .nf
 [appdefaults]
 kgetcred = {
-     server = myserver.domain.edu
+     server = myserver.domain.edu,backupserver.domain.edu
 }
 .fi
 .SH "For root cron jobs"
@@ -100,5 +101,8 @@ Unless your job spawns a background job, we recommend destroying the credentials
 .PP
 A normal user (presumably at a site not using pam_kgetcred) would use kgetcred without an
 argument. 
+.SH "Files"
+/tmp/kgetcred.last is used to store the lsat successful server. That way if the first 
+server in the list is down, every call doesn't have to wait for the timeout.
 .SH "SEE ALSO"
 credserv(8)

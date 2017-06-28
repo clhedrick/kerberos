@@ -61,6 +61,7 @@ If you don't have clearenv you'll need to use the MAC code
 #include "com_err.h"
 
 #include <stdio.h>
+#include <fcntl.h>
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
@@ -124,6 +125,41 @@ net_read(int fd, char *buf, int len)
     return(len2);
 }
 
+int read_lasthost(char *buf, size_t bufsize);
+int read_lasthost(char *buf, size_t bufsize) {
+    int fd;
+    size_t r;
+    fd = open("/tmp/kgetcred.last", O_RDONLY);
+    if (fd == -1)
+        return 1;
+    r = read(fd, buf, bufsize);
+    close(fd);
+    if (r == 0)
+        return 1;
+    if (r < bufsize)
+        buf[r] = '\0';
+    return 0;
+}
+
+int write_lasthost(char *buf);
+int write_lasthost(char *buf) {
+    int fd;
+    size_t r;
+    fd = open("/tmp/kgetcred.last", O_WRONLY|O_CREAT, 0644);
+    if (fd == -1) {
+        printf("fail 1 %m\n");
+        return 1;
+    }
+    r = write(fd, buf, strlen(buf));
+    close(fd);
+    if (r == 0) {
+        printf("fail 2\n");
+        return 1;
+    }
+    return 0;
+}
+
+
 /*
  The program is setuid, so we have to think about security. The other end needs to be able to believe who we are.
  That's why we use host/foo.cs.rutgers.edu as our principal. It lets the other end verify tht we have access
@@ -185,6 +221,10 @@ int main(int argc, char *argv[])
     char *username = NULL;
     long written;
     char *serverhost = NULL;
+    char *serverhostlist = NULL;
+    char lasthost[1024];
+    int lasthostdone = 0;
+    int lasthostused = 0;
      char *default_realm = NULL;
      unsigned debug = 0;
      int anonymous = 0;
@@ -192,12 +232,13 @@ int main(int argc, char *argv[])
      int prived = 0;
      char *flags = "";
      krb5_data realm_data;
+     unsigned int cwaitsec = 15; // connect wait
      unsigned int waitsec = 30;
      krb5_get_init_creds_opt *opts = NULL;
      krb5_creds usercreds;
      int haveusercreds = 0;
      char * mainret = NULL;
-     jmp_buf env;
+     sigjmp_buf env;
 
      // this has to be internal, because it needs pamh, which is a local
      void __attribute__ ((format (printf, 2, 3))) mylog (int level, const char *format, ...) {
@@ -245,8 +286,7 @@ int main(int argc, char *argv[])
      // longjmp out of a Kerberos library, it is very likely that they will have 
      // allocated data structures, and we'll have a memory leak.
      void catch_alarm (int sig) {
-         mylog(LOG_ERR, "kgetcred timeout talking to server");
-         longjmp(env, 1);
+         siglongjmp(env, 1);
      }
 
      recv_data.data = NULL;
@@ -276,6 +316,7 @@ int main(int argc, char *argv[])
              break;
          case 'w':
              waitsec = atoi(optarg);
+             cwaitsec = atoi(optarg);
              break;
          case 'P':
              prived = 1;
@@ -338,10 +379,10 @@ int main(int argc, char *argv[])
     realm_data.data = default_realm;
     realm_data.length = strlen(default_realm);
 
-    krb5_appdefault_string(context, "kgetcred", &realm_data, "server", "", &serverhost);
+    krb5_appdefault_string(context, "kgetcred", &realm_data, "server", "", &serverhostlist);
 
     // address of credserv server
-    if (strlen(serverhost) == 0) {
+    if (strlen(serverhostlist) == 0) {
         mylog(LOG_ERR, "Please define server in the [appdefaults] section, e.g. \nkgetcred = {\n     server=hostname\n}");
         goto done;
     }
@@ -491,21 +532,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    // at this point ccache has credentials to be used
-    // for connection, and client has the principal for them.
-
-    // drop privs as soon as possible
-    // there's not much user input so it's not clear how you'd exploit this program, but still, be safe
-#ifdef PAM    
-    // for PAM, have to leave saved uid as root, or we can't get back
-    setresgid(pwd->pw_gid, pwd->pw_gid, -1);
-    setresuid(pwd->pw_uid, pwd->pw_uid, -1);
-#else
-    // for non-pam, we don't have to get back, so drop irrevocably
-    setegid(pwd->pw_gid);
-    seteuid(pwd->pw_uid);
-#endif
-
     // so we don't have to do wait for the subprocess
     (void) signal(SIGPIPE, SIG_IGN);
 
@@ -515,6 +541,33 @@ int main(int argc, char *argv[])
     portstr = "755";
 
     // get a connection to the server
+    // if more than one, iterate down list
+ while (1) {
+    // first see if there's a saved host. This is one that worked
+    // last time. This is to prevent having to time out every time
+    // if the first host is down
+    if (!lasthostdone && read_lasthost(lasthost, sizeof(lasthost)) == 0) {
+        serverhost = lasthost;
+        lasthostused = 1;
+    }
+    // done with saved host, get next host from list
+    else if (!(serverhost = strsep(&serverhostlist, ",")))
+        break;
+
+    // skip blanks
+    while(*serverhost == ' ')
+        serverhost++;
+    // if nothing left, e.g. trailing comma, done
+    if (!*serverhost) {
+        break;
+    }
+
+    // we don't want to try last host a second time
+    // if we used lasthost, and this isn't the first try with it,
+    // skip it
+    if (lasthostdone && lasthostused && strcmp(lasthost, serverhost) == 0)
+        continue;
+    lasthostdone = 1;
 
     memset(&aihints, 0, sizeof(aihints));
     aihints.ai_socktype = SOCK_STREAM;
@@ -547,12 +600,14 @@ int main(int argc, char *argv[])
         goto done;
     }
 
-    // set timeout for opening the connection
-    if (setjmp(env))
-        goto done;
+    // set timeout for opening the connection. If it fails, try next host
+    if (sigsetjmp(env, 1)) {
+        alarm(0);
+        continue;
+    }
 
     signal (SIGALRM, catch_alarm);
-    alarm(waitsec);  // this should be enough. we don't want to hang web processes that depend upon this too long
+    alarm(cwaitsec);  // this should be enough. we don't want to hang web processes that depend upon this too long
 
     /* set up the address of the foreign socket for connect() */
     apstart = ap; /* For freeing later */
@@ -587,6 +642,22 @@ int main(int argc, char *argv[])
     }
 
     alarm(0);
+
+    // connect failed. ran out of addresses for this host to try
+    if (sock == -1)
+        continue;
+
+    // if we got here without an alarm, exit and use this host
+    break;
+
+  }  // end of loop over hosts
+
+    // tried all servers
+    if (serverhost == NULL || !*serverhost) {
+        mylog(LOG_ERR, "unable to connect to server");
+        goto done;
+    }
+
     // kerberos will do its own timeouts, so remove the timeout
 
     if (sock == -1)
@@ -594,6 +665,23 @@ int main(int argc, char *argv[])
         goto done;
     if (debug)
         mylog(LOG_ERR, "connected %d", sock);
+    // connect apparently worked. save it in lasthost
+    write_lasthost(serverhost);
+
+    // at this point ccache has credentials to be used
+    // for connection, and client has the principal for them.
+
+    // drop privs as soon as possible
+    // there's not much user input so it's not clear how you'd exploit this program, but still, be safe
+#ifdef PAM    
+    // for PAM, have to leave saved uid as root, or we can't get back
+    setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+    setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+#else
+    // for non-pam, we don't have to get back, so drop irrevocably
+    setegid(pwd->pw_gid);
+    seteuid(pwd->pw_uid);
+#endif
 
     cksum_data.data = serverhost;
     cksum_data.length = strlen(serverhost);
@@ -618,6 +706,12 @@ int main(int argc, char *argv[])
             goto done;
         }
         ccache = NULL;
+    }
+
+    // probably should try next host, but I'm not sure this code is written to be done twice
+    if (sigsetjmp(env, 1)) {
+        mylog(LOG_ERR, "kgetcred timeout talking to server");
+        goto done;
     }
 
     // set timeout. We're about to do network I/O

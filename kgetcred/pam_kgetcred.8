@@ -42,7 +42,7 @@ credentials using the ccname parameter in krb5.conf, e.g.
 .nf
 [appdefaults]
 kgetcred = {
-     server = myserver.domain.edu
+     server = myserver.domain.edu, backup.domain.edu
      ccname=FILE:/tmp/krb5cc_%{uid}_XXXXXX
 }
 .fi
@@ -74,14 +74,17 @@ Such scripts should do a kdestroy at the end.
 .PP
 pam_kgetcred implements only session start (and a no-op session end).
 .PP
-The hostname of a server running credserv must be specified in /etc/krb5.conf, e.g.
+The hostname of at least one server running credserv must be specified in /etc/krb5.conf, e.g.
 .PP
 .nf
 [appdefaults]
 kgetcred = {
-     server = myserver.domain.edu
+     server = myserver.domain.edu, backup.domain.edu
 }
 .fi
 .PP
 kgetcred is used for the key rather than pam_kgetcred, because kgetcred and pam_kgetcred
 use the same service.
+.PP
+/tmp/kgetcred.last stores the name of the server most recently used. This is to avoid
+timeouts if the first server is down.
