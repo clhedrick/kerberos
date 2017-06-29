@@ -957,6 +957,9 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     // a KRB-CRED message, which has the most sensitive part encrypted
     // in the session key. krb5_rd_cred in the client reads this message and
     // produces the actual credential.
+
+    mylog(LOG_INFO, "credserv returning credentials for %s for user %s to host %s", principal, username, hostname);
+
     return 0;
     // since we forked, we're not actually doign cleanup
  cleanup:
@@ -1347,7 +1350,7 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
 
     // yeah! it worked
 
-    mylog(LOG_ERR, "added %s %s to INDEX of %s, with new keytab", hostname, principal, username);
+    mylog(LOG_INFO, "registered %s:%s:%s for user %s", hostname, principal, flags, username);
 
     outdata->data = "ok\n";
     outdata->length = 3;
@@ -1470,6 +1473,8 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
         deleteKeytab(ld, dn, keytab, principal);
         mylog(LOG_DEBUG, "removed keytab for %s", principal);
     }
+
+    mylog(LOG_ERR, "unregistered %s:%s for user %s", hostname, principal, username);
 
     outdata->data = "ok\n";
     outdata->length = 3;

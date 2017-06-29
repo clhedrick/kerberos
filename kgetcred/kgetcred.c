@@ -263,6 +263,8 @@ int main(int argc, char *argv[])
          pam_vsyslog(pamh, level, format, args);
 #else
          vprintf(format, args);
+         if (level != LOG_DEBUG)
+             vsyslog(level, format, args);
          printf("\n");
 #endif
          va_end(args);
@@ -312,6 +314,8 @@ int main(int argc, char *argv[])
       */
      opterr = 0;
 #ifndef PAM
+     // pam uses pam_syslog, which doesn't need this
+     openlog("kgetcred", 0, LOG_AUTHPRIV);
      while ((ch = getopt(argc, argv, "dalruPU:F:H:w:")) != -1) {
          switch (ch) {
          case 'd':
@@ -346,7 +350,8 @@ int main(int argc, char *argv[])
              hostname = optarg;
              break;
          default:
-             mylog(LOG_ERR, "-d debug, -a get anonymous ticket, -l list, -r register, -u unregister -w waittime; -P prived user, -U user to operate on, -F flags, -H hostname for entry");
+             // debug because we don't want this going to syslog
+             mylog(LOG_DEBUG, "-d debug, -a get anonymous ticket, -l list, -r register, -u unregister -w waittime; -P prived user, -U user to operate on, -F flags, -H hostname for entry");
              goto done;
              break;
          }
@@ -679,7 +684,7 @@ int main(int argc, char *argv[])
         /* Already printed error message above.  */
         goto done;
     if (debug)
-        mylog(LOG_ERR, "connected %d", sock);
+        mylog(LOG_DEBUG, "connected %d", sock);
     // connect apparently worked. save it in lasthost
     // only save if new value is different
     if (!lasthostused || strcmp(lasthost, serverhost) != 0)
@@ -937,10 +942,14 @@ int main(int argc, char *argv[])
 
             // final return is the name of the final cache
             mainret = realccname;
+#ifndef PAM
             mylog(LOG_DEBUG, "%s", realccname);
+            // have to do syslog directly because we don't want to print this to terminal.
+            syslog(LOG_INFO, "User %s created credentials for %s in %s", username, principal, realccname);
+#endif
 
 #ifdef PAM            
-
+            mylog(LOG_INFO, "User %s created credentials for %s in %s", username, principal, realccname);
             // register this credential in the session keyring.
             // renewd uses this to check which credential caches are
             // still active and so need to be renewed
