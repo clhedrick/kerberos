@@ -3,7 +3,7 @@ all: krenew-wrap.c
 
 install: all
 	cp krenew-wrap.so /usr/libexec/
-	./installssh
+	cp ssh /usr/local/bin
 
 
 
