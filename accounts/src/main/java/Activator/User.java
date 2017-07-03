@@ -504,12 +504,12 @@ public class User {
     }
 
     // must specify one of the following
-    //   allowedClusters, currentClusters, ineligibleClusters, supplied as empty lists that doUser will fill in
+    //   activatableClusters, currentClusters, ineligibleClusters, supplied as empty lists that doUser will fill in
     //       this is the main screen of the web app
     //   requested cluster - activation for that cluster - the activation screen of the web app
     //   cleanup - batch account cleanup
     //   isweb - is it called from web or command line. currently not used
-    public static boolean doUser (String username, List<String>allowedClusters, List<String>currentClusters, List<String>ineligibleClusters, String requestedCluster, boolean cleanup, boolean test, boolean isWeb) {
+    public static boolean doUser (String username, List<String>activatableClusters, List<String>currentClusters, List<String>ineligibleClusters, String requestedCluster, boolean cleanup, boolean test, boolean isWeb) {
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
@@ -584,7 +584,7 @@ public class User {
 		List<String> addtoCluster = new ArrayList<String>();
 		List<String> removefromCluster = new ArrayList<String>();
 
-		if (allowedClusters != null)
+		if (activatableClusters != null)
 		    logger.debug("Requesting clusters user " + username);		    
 		else if (cleanup)
 		    logger.debug("Doing cleanup for user " + username);
@@ -684,15 +684,15 @@ public class User {
 			}
 			// caller wants to know allowed clusters. 
 			// classify into the appropriate 3 groups
-			// allowedClusters is a list to be returned for the "list" function
+			// activatableClusters is a list to be returned for the "list" function
 			// so if it's set this is a list function
-			if (allowedClusters != null) {
+			if (activatableClusters != null) {
 			    if (current && ok)
 				currentClusters.add(cluster.name);
 			    else if (current)  // in it but shouldn't be; will get cleaned up
 				ineligibleClusters.add(cluster.name);
 			    else if (ok)  // clusters they could activate for
-				allowedClusters.add(cluster.name);
+				activatableClusters.add(cluster.name);
 			}
 
 			if (ok)
@@ -702,9 +702,9 @@ public class User {
 
 		    // if just listing clusters they can login on, we're done. Don't want any actual changes
 		    // no debug output because caller will do the output
-		    // allowedClusters is a list to be returned for the "list" function
+		    // activatableClusters is a list to be returned for the "list" function
 		    // so if it's set this is a list function
-		    if (!cleanup && allowedClusters != null) {
+		    if (!cleanup && activatableClusters != null) {
 			return true;
 		    }
 
