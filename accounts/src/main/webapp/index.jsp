@@ -26,9 +26,11 @@ background-color: #eeeeee;
 
 <h2> Account Management Tools for<br>Computer Science Systems</h2>
 
-<span style="color:#c00"> WARNING: </span> These tools work with a new account management
+<p><span style="color:#c00"> WARNING: </span> These tools work with a new account management
 system. No public CS computers currently use these passwords and groups. The first clusters
 to be moved to this system will be grad and ilab, in the summer of 2017.
+<p>
+For details on the new system see <a href="kerberos.html">Computer Science Department user administration tools</a>
 
 <ul>
 <li> <a href="activate/activate.jsp">Activate an account on a Computer Science system</a>
@@ -37,7 +39,6 @@ This will let you create an account for Computer Science Department systems. Com
 faculty, majors, grad students, and students enrolled in computer science courses other than 110, 170 and 494
 are eligible for accounts.
 <p>
-</P>
 <li> <a href="changepass/changepass.jsp">Change your Computer Science  password</a>. 
 <p>
 This will show you a University login screen. So as long as you remember
