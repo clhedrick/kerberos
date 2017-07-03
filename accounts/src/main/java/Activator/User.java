@@ -633,7 +633,7 @@ public class User {
 		    Set<String> userMaintainedGroups = user.makeUserMaintainedGroups(config, universityData);
 		    // list of login groups for all clusters - just for logging
 		    Set<String> userManualLoginGroups = new HashSet<String>();
-		    // list clusters user is allowed on -- for logging
+		    // list clusters user is allowed on
 		    Set<String> userAllowedClusters = new HashSet<String>();
 
 		    // print the clusters they can login on.
@@ -684,6 +684,8 @@ public class User {
 			}
 			// caller wants to know allowed clusters. 
 			// classify into the appropriate 3 groups
+			// allowedClusters is a list to be returned for the "list" function
+			// so if it's set this is a list function
 			if (allowedClusters != null) {
 			    if (current && ok)
 				currentClusters.add(cluster.name);
@@ -700,6 +702,8 @@ public class User {
 
 		    // if just listing clusters they can login on, we're done. Don't want any actual changes
 		    // no debug output because caller will do the output
+		    // allowedClusters is a list to be returned for the "list" function
+		    // so if it's set this is a list function
 		    if (!cleanup && allowedClusters != null) {
 			return true;
 		    }
