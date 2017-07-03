@@ -752,10 +752,11 @@ public class User {
 			syncUser(username, config, universityData, action.val.get(0), test, logger, env);
 
 		    // update all automatically maintained groups if user exists
-		    if (!cleanup || action.val.size() >= 0) {
+		    if ((!cleanup && userAllowedClusters.contains(requestedCluster)) || action.val.size() > 0) {
 			// want to update all groups as long as the user exists.
 			// action.val.size() means they existed at the start of this process. If we're
-			// not cleaning up, we will have created them if they didn't exist
+			// not cleaning up, we will have created them if they didn't exist and they're supporsed to,
+			//   so we just check whether they're supposed to exist
 
 			// create groups if needed
 			for (String addgroup: addGroups) {
