@@ -253,6 +253,9 @@ char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char
    inetd. It probably won't work.
 */
 
+// NOTE while the v6 code here seems to work, there's more 
+// conversion needed before the program actually works with v6
+
 const char *ntoa(struct sockaddr *peername);
 const char *ntoa(struct sockaddr *peername) {
     char *name = malloc(1024);
