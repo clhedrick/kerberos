@@ -253,14 +253,46 @@ char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char
    inetd. It probably won't work.
 */
 
+const char *ntoa(struct sockaddr *peername);
+const char *ntoa(struct sockaddr *peername) {
+    char *name = malloc(1024);
+    int family = peername->sa_family;
+    if (family == AF_INET) {
+        return inet_ntop(AF_INET, &((struct sockaddr_in *)peername)->sin_addr, name, 1023);
+    }
+    if (family == AF_INET6) {
+        return inet_ntop(AF_INET6, &((struct sockaddr_in6 *)peername)->sin6_addr, name, 1023);
+    }
+    return NULL;
+}
+
+int compare_addrs(struct sockaddr *a1, struct sockaddr *a2);
+int compare_addrs(struct sockaddr *a1, struct sockaddr *a2) {
+    if (a1->sa_family != a2->sa_family)
+        return 0;
+    if (a1->sa_family == AF_INET) {
+        struct sockaddr_in *aa1 = (struct sockaddr_in *)a1;
+        struct sockaddr_in *aa2 = (struct sockaddr_in *)a2;
+        return aa1->sin_addr.s_addr == aa2->sin_addr.s_addr;
+    }
+    if (a1->sa_family == AF_INET6) {
+        struct sockaddr_in6 *aa1 = (struct sockaddr_in6 *)a1;
+        struct sockaddr_in6 *aa2 = (struct sockaddr_in6 *)a2;
+        return memcmp(&(aa1->sin6_addr), &(aa2->sin6_addr), sizeof(struct in6_addr)) == 0;
+    }
+    return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
     krb5_context context;
     krb5_auth_context auth_context = NULL;
     krb5_ticket * ticket;
-    struct sockaddr_in peername;
-    GETPEERNAME_ARG3_TYPE  namelen = sizeof(peername);
+    struct sockaddr peername;
+    struct addrinfo * addrs;
+    struct addrinfo * addrsp;
+    socklen_t namelen;
     int sock = -1;                      /* incoming connection fd */
     short xmitlen;
     krb5_error_code retval;
@@ -291,7 +323,6 @@ main(int argc, char *argv[])
     char *errmsg = GENERIC_ERR;
     int i;
     int found = 0;
-    struct in_addr **addr_list;
     krb5_data realm_data;
     char *default_realm = NULL;
 
@@ -456,7 +487,8 @@ main(int argc, char *argv[])
         }
         signal(SIGCHLD, SIG_IGN);
         while (1) {
-            if ((acc = accept(sock, (struct sockaddr *)&peername, &namelen)) == -1){
+            namelen = sizeof(peername);
+            if ((acc = accept(sock, &peername, &namelen)) == -1){
                 mylog(LOG_ERR, "accept: %m");
                 exit(3);
             }
@@ -475,7 +507,8 @@ main(int argc, char *argv[])
          * To verify authenticity, we need to know the address of the
          * client.
          */
-        if (getpeername(0, (struct sockaddr *)&peername, &namelen) < 0) {
+        namelen = sizeof(peername);
+        if (getpeername(0, &peername, &namelen) < 0) {
             mylog(LOG_DEBUG, "getpeername: %m");
             exit(1);
         }
@@ -483,7 +516,12 @@ main(int argc, char *argv[])
     }
 
 
-    mylog(LOG_DEBUG, "connection from %s", inet_ntoa(peername.sin_addr));
+    if (peername.sa_family != AF_INET && peername.sa_family != AF_INET6) {
+        mylog(LOG_ERR, "request not IPv4 or 6 %d", peername.sa_family);
+        exit(1);
+    }
+
+    mylog(LOG_DEBUG, "connection from %s", ntoa(&peername));
 
     // I'm not sure why this is needed, but we've seen hung forks
 
@@ -523,8 +561,7 @@ main(int argc, char *argv[])
     if (!hostname)
         exit(1);
 
-    mylog(LOG_DEBUG, "operation %c for user %s principal %s from host %s", op, username, principal, inet_ntoa(peername.sin_addr));
-
+    mylog(LOG_DEBUG, "operation %c for user %s principal %s from host %s", op, username, principal, ntoa(&peername));
     // Get client name (i.e. principal by which client authenticated ) from ticket.
     // This is typically the user running kgetcred, except that for the 'G' operation
     // it's the host principal from /etc/krb5.keytab on the client side.
@@ -543,6 +580,10 @@ main(int argc, char *argv[])
 
         char *hoststart;
         char *hostend;
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME;
     
         // cname is the principal the client was authenticated as. In this
         // case it's host/HOSTNAME@DOMAIN
@@ -567,33 +608,35 @@ main(int argc, char *argv[])
         // now handle the hostname. Forward lookup on the name,
         // then make sure the IP is on the list of addresses for
         // that name.
-        host = gethostbyname(hoststart+1);
-        if (!host) {
+        i = getaddrinfo(hoststart+1, NULL, &hints, &addrs);
+        if (i) {
             mylog(LOG_ERR, "can't find hostname %s", hoststart + 1);
             goto cleanup;
         }
 
         // make sure request is actually from this host
-        addr_list = (struct in_addr **)host->h_addr_list;
-        for(i = 0; addr_list[i] != NULL; i++) {
-            if (addr_list[i]->s_addr == peername.sin_addr.s_addr) {
+        for(addrsp = addrs; addrsp != NULL; addrsp = addrsp->ai_next) {
+            // first entry is canon name
+            if (addrsp == addrs)
+                strncpy(hostbuf, addrsp->ai_canonname, sizeof(hostbuf));            
+            if (compare_addrs(addrsp->ai_addr, &peername)) {
                 found = 1;
                 break;
             }
         }
         if (!found) {
             mylog(LOG_ERR, "peer address %s doesn't match hostname %s",
-                  inet_ntoa(peername.sin_addr), hoststart+1);
+                  ntoa(&peername), hoststart+1);
             goto cleanup;
         }
         *hostend = '@';  // put back punctuation so we have the whole principal again
         *hoststart = '/';
         // normalized name
-        strncpy(hostbuf, host->h_name, sizeof(hostbuf));
         realhost = hostbuf;
+        freeaddrinfo(addrs);
     } else {
         //all we have is an ip address. just do reverse lookup
-        if (getnameinfo((struct sockaddr *)&peername, namelen, hostbuf, sizeof(hostbuf), NULL, 0, NI_NAMEREQD)) {
+        if (getnameinfo(&peername, namelen, hostbuf, sizeof(hostbuf), NULL, 0, NI_NAMEREQD)) {
             mylog(LOG_ERR, "can't find hostname from IP %m");
             goto cleanup;
         }        
@@ -614,7 +657,7 @@ main(int argc, char *argv[])
     // return the results to the client
     if (errmsg == NULL) {
         char status[1];
-        mylog(LOG_DEBUG, "returning data to client %s for user %s length %d", inet_ntoa(peername.sin_addr), username, data.length);
+        mylog(LOG_DEBUG, "returning data to client %s for user %s length %d", ntoa(&peername), username, data.length);
 
         if (op == 'G')
             status[0] = 'c'; // credentials
@@ -641,7 +684,7 @@ main(int argc, char *argv[])
         // error message. return the message
         char status[1];
         status[0] = 'e'; // error message
-        mylog(LOG_DEBUG, "returning error to client %s for user %s %s", inet_ntoa(peername.sin_addr), username, errmsg);
+        mylog(LOG_DEBUG, "returning error to client %s for user %s %s", ntoa(&peername), username, errmsg);
 
         if ((retval = krb5_net_write(context, 0, (char *)status, 1)) < 0) {
             mylog(LOG_ERR, "%m: while writing len to client");
