@@ -26,6 +26,9 @@ background-color: #eeeeee;
 authentication: TOTP, HOTP, and Yubikey. In addition, Google authenticator
 can be used, as in the past. 
 
+<p> There are things to think about before using two-factor authentication.
+See the section at the end.
+
 <p> To use two-factor authentication, login to the
 <a href="https://krb1.cs.rutgers.edu"> IPA Administrative Application</a>.
 Note that once you've enabled two-factor authentication,
@@ -57,4 +60,35 @@ on all of these options.
 sitting at. If you use it we recommend enabling at least one of HOTP or TOTP.
 That will let you work from home.
 
+<h3> Possible problems </h3>
+
+<p> Two-factor authentication is inconsistent with Kerberos key tables and with
+cron jobs. By definition, two-factor authentication requires you to use a
+second factor to authenticate. There's no way cron can get the second factor.
+The same problem exists if you want to be able to start daemons with your
+userid automatically when the system restarts.
+
+<p> We have several solutions for people who use two-factor authentication
+and also need to use cron:
+
+<ul>
+<li> Use <a href="https://www.cs.rutgers.edu/~makmur/howto/googleauthenticator/index.whtml">Google authenticator</a>. This is a form of two-factor 
+authentication that is checked only for interactive login. It's not
+as secure, because if someone is able to become root, and knows your
+password, they can access your files. However for many users it 
+may be good enough. It works with cron jobs, though you'll still
+need to use "kgetcred -r" to register any system where you run
+cron jobs.
+<li> Use a second user id. E.g. user smith might have a second userid, smith-cron
+for cron jobs. That id wouldn't use two-factor authentication. Because it's
+a separate user, it wouldn't have any special access to smith's files, and
+thus compromises of smith-cron would have no effect on smith's files. If
+there are specific files that need to be shared, that can done easily
+with group access. To request a second userid, please send email
+to help@cs.rutgers.edu. (Alternatively, you could use two-factor
+authentication for the second userid and not your primary userid.)
+<li> Store all files needed by the cron job on local file systems.
+For many systems that's /freespace. Note however that freespace is
+not backed up, and is likely to get wiped between semesters.
+</ul>
 
