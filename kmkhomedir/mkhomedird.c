@@ -127,13 +127,46 @@ void mylog (int level, const char *format, ...) {
 
 int isprived(char *principal);
 
+const char *ntoa(struct sockaddr *peername);
+const char *ntoa(struct sockaddr *peername) {
+    char *name = malloc(1024);
+    int family = peername->sa_family;
+    if (family == AF_INET) {
+        return inet_ntop(AF_INET, &((struct sockaddr_in *)peername)->sin_addr, name, 1023);
+    }
+    if (family == AF_INET6) {
+        // see if it's actually IPv4. that has ::ff:ff at the beginning
+        struct sockaddr_in6 *aa2 = (struct sockaddr_in6 *)peername;
+        // this is the v4 prefix
+        unsigned char v4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255};
+        int i;
+        char *retval;
+
+        // if it's not v4, just call inet_ntop
+        for (i = 0; i < 12; i++)
+            if (aa2->sin6_addr.s6_addr[i] != v4[i])
+                return inet_ntop(AF_INET6, &((struct sockaddr_in6 *)peername)->sin6_addr, name, 1023);
+        // v4, but can't call normal ntoa because it's an array not a struct
+        asprintf(&retval, "%d.%d.%d.%d", 
+                 aa2->sin6_addr.s6_addr[12],
+                 aa2->sin6_addr.s6_addr[13],
+                 aa2->sin6_addr.s6_addr[14],
+                 aa2->sin6_addr.s6_addr[14]);
+        return retval;
+    }
+    return NULL;
+}
+
 int
 main(int argc, char *argv[])
 {
     krb5_context context;
     krb5_auth_context auth_context = NULL;
     krb5_ticket * ticket;
-    struct sockaddr_in peername;
+    // sockaddr_storage is largest possible sockaddr, currently ipv6
+    struct sockaddr_storage peername_storage;
+    // most code wants a sockaddr; cast it once to avoid doing it all over the place
+    struct sockaddr * peername = (struct sockaddr *)&peername_storage;
     GETPEERNAME_ARG3_TYPE  namelen = sizeof(peername);
     int sock = -1;                      /* incoming connection fd */
     short xmitlen;
@@ -296,9 +329,10 @@ main(int argc, char *argv[])
 
     if (port) {
         int acc;
-        struct sockaddr_in sockin;
+        struct sockaddr_in6 sockin;
+        memset(&sockin, 0, sizeof(sockin));
 
-        if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+        if ((sock = socket(PF_INET6, SOCK_STREAM, 0)) < 0) {
             mylog(LOG_ERR, "socket: %m");
             exit(3);
         }
@@ -306,9 +340,8 @@ main(int argc, char *argv[])
         (void) setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&on,
                           sizeof(on));
 
-        sockin.sin_family = AF_INET;
-        sockin.sin_addr.s_addr = 0;
-        sockin.sin_port = htons(port);
+        sockin.sin6_family = AF_INET6;
+        sockin.sin6_port = htons(port);
         if (bind(sock, (struct sockaddr *) &sockin, sizeof(sockin))) {
             mylog(LOG_ERR, "bind: %m");
             exit(3);
@@ -319,7 +352,8 @@ main(int argc, char *argv[])
         }
         signal(SIGCHLD, SIG_IGN);
         while (1) {
-            if ((acc = accept(sock, (struct sockaddr *)&peername, &namelen)) == -1){
+            namelen = sizeof(peername_storage);
+            if ((acc = accept(sock, peername, &namelen)) == -1){
                 mylog(LOG_ERR, "accept: %m");
                 exit(3);
             }
@@ -334,18 +368,19 @@ main(int argc, char *argv[])
         close(sock);
         sock = 0;
     } else {
+        namelen = sizeof(peername_storage);
         /*
          * To verify authenticity, we need to know the address of the
          * client.
          */
-        if (getpeername(0, (struct sockaddr *)&peername, &namelen) < 0) {
+        if (getpeername(0, peername, &namelen) < 0) {
             mylog(LOG_DEBUG, "getpeername: %m");
             exit(1);
         }
         sock = 0;
     }
 
-    mylog(LOG_DEBUG, "connection from %s", inet_ntoa(peername.sin_addr));
+    mylog(LOG_DEBUG, "connection from %s", ntoa(peername));
 
     retval = krb5_recvauth(context, &auth_context, (krb5_pointer)&sock,
                            SAMPLE_VERSION, server,
@@ -463,7 +498,7 @@ main(int argc, char *argv[])
     message = "";
 
 done:
-    mylog(LOG_DEBUG, "returning message to client %s for user %s %s", inet_ntoa(peername.sin_addr), username, message);
+    mylog(LOG_DEBUG, "returning message to client %s for user %s %s", ntoa(peername), username, message);
 
     xmitlen = htons(strlen(message));
     if ((retval = krb5_net_write(context, 0, (char *)&xmitlen,
