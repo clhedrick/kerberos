@@ -229,7 +229,6 @@ int main(int argc, char *argv[])
     char realname[1024];
     char realccname[1024];
     char tempname[1024];
-    struct hostent* host;
     krb5_keytab hostkeytab = NULL;
     krb5_creds hostcreds;
     int havecreds = 0;
@@ -254,6 +253,8 @@ int main(int argc, char *argv[])
      int haveusercreds = 0;
      char * mainret = NULL;
      sigjmp_buf env;
+     struct addrinfo hints;
+     struct addrinfo * addrs;
 
      // this has to be internal, because it needs pamh, which is a local
      void __attribute__ ((format (printf, 2, 3))) mylog (int level, const char *format, ...) {
@@ -313,7 +314,11 @@ int main(int argc, char *argv[])
          siglongjmp(env, 1);
      }
 
+
      recv_data.data = NULL;
+     memset(&hints, 0, sizeof(hints));
+     hints.ai_family = AF_UNSPEC;
+     hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME;
 
      /*
       * Parse command line arguments
@@ -417,10 +422,13 @@ int main(int argc, char *argv[])
     // our hostname
     realhost[sizeof(realhost)-1] = '\0';
     gethostname(realhost, sizeof(realhost)-1);
-    host = gethostbyname(realhost);
-    if (host == NULL) {
-        mylog(LOG_ERR, "hostname %s not found", hostname);
-        goto done;
+    retval = getaddrinfo(realhost, NULL, &hints, &addrs);
+    if (retval || !addrs->ai_canonname) {
+        mylog(LOG_ERR, "hostname %s not found", realhost);
+        // use result of gethostname
+    } else {
+        strncpy(realhost, addrs->ai_canonname, sizeof(realhost)-1);
+        freeaddrinfo(addrs);
     }
     
     // Realhost is our actual host
@@ -460,7 +468,7 @@ int main(int argc, char *argv[])
 
         // FQ hostname is now host->h_name
 
-        if ((retval = krb5_build_principal(context, &client, strlen(default_realm), default_realm, "host", host->h_name, NULL))) {
+        if ((retval = krb5_build_principal(context, &client, strlen(default_realm), default_realm, "host", realhost, NULL))) {
             mylog(LOG_ERR,"unable to make principal for this host %s", error_message(retval));
             goto done;
         }
