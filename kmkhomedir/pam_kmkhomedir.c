@@ -163,7 +163,8 @@ int main(int argc, char *argv[])
     char *service = "mkhomedird";
     char realhost[1024];
     char *hostname = NULL;
-    struct hostent* host;
+    struct addrinfo hints;
+    struct addrinfo * addrs;
     krb5_keytab hostkeytab = NULL;
     krb5_creds hostcreds;
     int have_cred = 0;
@@ -174,6 +175,10 @@ int main(int argc, char *argv[])
     unsigned debug = 0;
     char *message = NULL;
     char *testfile = NULL;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME;
 
      /*
       * Parse command line arguments
@@ -272,13 +277,16 @@ int main(int argc, char *argv[])
 
     realhost[sizeof(realhost)-1] = '\0';
     gethostname(realhost, sizeof(realhost)-1);
-    host = gethostbyname(realhost);
-    if (!host) {
-        message = "Can't find my own hostname";
-        goto done;
+    retval = getaddrinfo(realhost, NULL, &hints, &addrs);
+    if (retval || !addrs->ai_canonname) {
+        mylog(LOG_ERR, "hostname %s not found", realhost);
+        // use result of gethostname
+    } else {
+        strncpy(realhost, addrs->ai_canonname, sizeof(realhost)-1);
+        freeaddrinfo(addrs);
     }
-    
-    hostname = host->h_name;
+
+    hostname = realhost;
 
     if ((retval = krb5_build_principal(context, &client, strlen(default_realm), default_realm, "host", hostname, NULL))) {
         message = "Unable to make principal for this host";
