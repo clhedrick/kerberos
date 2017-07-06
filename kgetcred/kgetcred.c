@@ -257,15 +257,22 @@ int main(int argc, char *argv[])
 
      // this has to be internal, because it needs pamh, which is a local
      void __attribute__ ((format (printf, 2, 3))) mylog (int level, const char *format, ...) {
+#ifndef PAM
+         char *message;
+#endif
          va_list args;
          va_start (args, format);
 #ifdef PAM
          pam_vsyslog(pamh, level, format, args);
 #else
-         vprintf(format, args);
-         if (level != LOG_DEBUG)
-             vsyslog(level, format, args);
-         printf("\n");
+         // it's really hard to use the arg list twice
+         // safer to print to a malloced string
+         if (vasprintf(&message, format, args) >= 0) {
+             printf("%s\n", message);
+             if (level != LOG_DEBUG)
+                 syslog(level, "%s", message);
+             free(message);
+         }
 #endif
          va_end(args);
      }
@@ -517,9 +524,9 @@ int main(int argc, char *argv[])
         if ((retval = krb5_get_init_creds_password(context, &usercreds, client, NULL, krb5_prompter_posix, NULL,
                                                    0, NULL, opts))) {
             if (retval == KRB5KRB_AP_ERR_BAD_INTEGRITY)
-                mylog(LOG_ERR, "Password incorrect -- note that if you are using a one-time password this utility can't work %s", error_message(retval));
+                mylog(LOG_ERR, "Password incorrect -- note that if you are using a one-time password this utility can't work: %s", error_message(retval));
             else
-                mylog(LOG_ERR, "getting initial ticket %s", error_message(retval));
+                mylog(LOG_ERR, "Error getting initial ticket -- note that if you are using a one-time password this utility can't work: %s", error_message(retval));
             goto done;
         }
         haveusercreds = 1;
