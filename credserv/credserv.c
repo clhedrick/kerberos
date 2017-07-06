@@ -253,9 +253,6 @@ char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char
    inetd. It probably won't work.
 */
 
-// NOTE while the v6 code here seems to work, there's more 
-// conversion needed before the program actually works with v6
-
 const char *ntoa(struct sockaddr *peername);
 const char *ntoa(struct sockaddr *peername) {
     char *name = malloc(1024);
@@ -264,24 +261,65 @@ const char *ntoa(struct sockaddr *peername) {
         return inet_ntop(AF_INET, &((struct sockaddr_in *)peername)->sin_addr, name, 1023);
     }
     if (family == AF_INET6) {
-        return inet_ntop(AF_INET6, &((struct sockaddr_in6 *)peername)->sin6_addr, name, 1023);
+        // see if it's actually IPv4. that has ::ff:ff at the beginning
+        struct sockaddr_in6 *aa2 = (struct sockaddr_in6 *)peername;
+        // this is the v4 prefix
+        unsigned char v4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255};
+        int i;
+        char *retval;
+
+        // if it's not v4, just call inet_ntop
+        for (i = 0; i < 12; i++)
+            if (aa2->sin6_addr.s6_addr[i] != v4[i])
+                return inet_ntop(AF_INET6, &((struct sockaddr_in6 *)peername)->sin6_addr, name, 1023);
+        // v4, but can't call normal ntoa because it's an array not a struct
+        asprintf(&retval, "%d.%d.%d.%d", 
+                 aa2->sin6_addr.s6_addr[12],
+                 aa2->sin6_addr.s6_addr[13],
+                 aa2->sin6_addr.s6_addr[14],
+                 aa2->sin6_addr.s6_addr[14]);
+        return retval;
     }
     return NULL;
 }
 
 int compare_addrs(struct sockaddr *a1, struct sockaddr *a2);
 int compare_addrs(struct sockaddr *a1, struct sockaddr *a2) {
-    if (a1->sa_family != a2->sa_family)
-        return 0;
-    if (a1->sa_family == AF_INET) {
+    // easy if types match
+    if (a1->sa_family == AF_INET && a2->sa_family == AF_INET) {
         struct sockaddr_in *aa1 = (struct sockaddr_in *)a1;
         struct sockaddr_in *aa2 = (struct sockaddr_in *)a2;
         return aa1->sin_addr.s_addr == aa2->sin_addr.s_addr;
     }
-    if (a1->sa_family == AF_INET6) {
+    if (a1->sa_family == AF_INET6 && a2->sa_family == AF_INET6) {
         struct sockaddr_in6 *aa1 = (struct sockaddr_in6 *)a1;
         struct sockaddr_in6 *aa2 = (struct sockaddr_in6 *)a2;
         return memcmp(&(aa1->sin6_addr), &(aa2->sin6_addr), sizeof(struct in6_addr)) == 0;
+    }
+    // if one is v4 and other is v6, put the v6 in a2
+    if (a1->sa_family == AF_INET6 && a2->sa_family == AF_INET) {
+        struct sockaddr *temp = a2;
+        a2 = a1;
+        a1 = temp;
+    }
+    // now a1 is 4 and a2 is 6
+    {
+        struct sockaddr_in *aa1 = (struct sockaddr_in *)a1;
+        struct sockaddr_in6 *aa2 = (struct sockaddr_in6 *)a2;
+        // prefix for v4 in v6
+        unsigned char v4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255};
+        unsigned long addr = 0;
+        int i;
+
+        // if it's not v4 in v6, can't possibly match a v4 address
+        for (i = 0; i < 12; i++)
+            if (aa2->sin6_addr.s6_addr[i] != v4[i])
+                return 0;
+        // it is, convert last 4 bytes to a long
+        for (i = 12; i < 16; i++)
+            addr = (addr << 8) | aa2->sin6_addr.s6_addr[i];
+        // now compare
+        return addr == ntohl(aa1->sin_addr.s_addr);
     }
     return 0;
 }
@@ -292,7 +330,10 @@ main(int argc, char *argv[])
     krb5_context context;
     krb5_auth_context auth_context = NULL;
     krb5_ticket * ticket;
-    struct sockaddr peername;
+    // sockaddr_storage is largest possible sockaddr, currently ipv6
+    struct sockaddr_storage peername_storage;
+    // most code wants a sockaddr; cast it once to avoid doing it all over the place
+    struct sockaddr * peername = (struct sockaddr *)&peername_storage;
     struct addrinfo * addrs;
     struct addrinfo * addrsp;
     socklen_t namelen;
@@ -311,7 +352,6 @@ main(int argc, char *argv[])
     char *progname;
     int on = 1;
     char hostbuf[1024];
-    struct hostent* host;
     char *myhostname = NULL;
     // args from kgetcred
     char op; // operation: G - get creds, S - set creds; future delete and list
@@ -328,12 +368,16 @@ main(int argc, char *argv[])
     int found = 0;
     krb5_data realm_data;
     char *default_realm = NULL;
+    struct addrinfo hints;
+
 
     // in case we're run by a user from the command line, get a known environment
     clearenv();
 
     memset(&usercreds, 0, sizeof(usercreds));
-
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME;
 
     progname = *argv;
 
@@ -419,13 +463,14 @@ main(int argc, char *argv[])
     // We're generating the local host principal needed for the forward call
     hostbuf[sizeof(hostbuf)-1] = '\0';
     gethostname(hostbuf, sizeof(hostbuf)-1);
-    host = gethostbyname(hostbuf);
-    if (host == NULL) {
+    i = getaddrinfo(hostbuf, NULL, &hints, &addrs);
+    if (i || !addrs->ai_canonname) {
         mylog(LOG_ERR, "hostname %s not found", hostbuf);
         goto cleanup;
     }
-    myhostname = malloc(strlen(host->h_name) + 1);
-    strcpy(myhostname, host->h_name);
+    myhostname = malloc(strlen(addrs->ai_canonname) + 1);
+    strcpy(myhostname, addrs->ai_canonname);
+    freeaddrinfo(addrs);
 
     // Mutual authentication, so we need credentials.
     // Ours comes from /etc/krb5.conf
@@ -467,9 +512,10 @@ main(int argc, char *argv[])
 
     if (port) {
         int acc;
-        struct sockaddr_in sockin;
+        struct sockaddr_in6 sockin;
+        memset(&sockin, 0, sizeof(sockin));
 
-        if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+        if ((sock = socket(AF_INET6, SOCK_STREAM, 0)) < 0) {
             mylog(LOG_ERR, "socket: %m");
             exit(3);
         }
@@ -477,9 +523,8 @@ main(int argc, char *argv[])
         (void) setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&on,
                           sizeof(on));
 
-        sockin.sin_family = AF_INET;
-        sockin.sin_addr.s_addr = 0;
-        sockin.sin_port = htons(port);
+        sockin.sin6_family = AF_INET6;
+        sockin.sin6_port = htons(port);
         if (bind(sock, (struct sockaddr *) &sockin, sizeof(sockin))) {
             mylog(LOG_ERR, "bind: %m");
             exit(3);
@@ -489,9 +534,16 @@ main(int argc, char *argv[])
             exit(3);
         }
         signal(SIGCHLD, SIG_IGN);
+        if (debug) {
+            namelen = sizeof(peername_storage);
+            if ((acc = accept(sock, peername, &namelen)) == -1){
+                mylog(LOG_ERR, "accept: %m");
+                exit(3);
+            }
+        } else {
         while (1) {
-            namelen = sizeof(peername);
-            if ((acc = accept(sock, &peername, &namelen)) == -1){
+            namelen = sizeof(peername_storage);
+            if ((acc = accept(sock, peername, &namelen)) == -1){
                 mylog(LOG_ERR, "accept: %m");
                 exit(3);
             }
@@ -500,6 +552,7 @@ main(int argc, char *argv[])
             } else {
                 break;  // in child -- leave loop
             }
+        }
         }
         // now in child
         dup2(acc, 0);
@@ -510,8 +563,8 @@ main(int argc, char *argv[])
          * To verify authenticity, we need to know the address of the
          * client.
          */
-        namelen = sizeof(peername);
-        if (getpeername(0, &peername, &namelen) < 0) {
+        namelen = sizeof(peername_storage);
+        if (getpeername(0, peername, &namelen) < 0) {
             mylog(LOG_DEBUG, "getpeername: %m");
             exit(1);
         }
@@ -519,12 +572,12 @@ main(int argc, char *argv[])
     }
 
 
-    if (peername.sa_family != AF_INET && peername.sa_family != AF_INET6) {
-        mylog(LOG_ERR, "request not IPv4 or 6 %d", peername.sa_family);
+    if (peername->sa_family != AF_INET && peername->sa_family != AF_INET6) {
+        mylog(LOG_ERR, "request not IPv4 or 6 %d", peername->sa_family);
         exit(1);
     }
 
-    mylog(LOG_DEBUG, "connection from %s", ntoa(&peername));
+    mylog(LOG_DEBUG, "connection from %s", ntoa(peername));
 
     // I'm not sure why this is needed, but we've seen hung forks
 
@@ -564,7 +617,7 @@ main(int argc, char *argv[])
     if (!hostname)
         exit(1);
 
-    mylog(LOG_DEBUG, "operation %c for user %s principal %s from host %s", op, username, principal, ntoa(&peername));
+    mylog(LOG_DEBUG, "operation %c for user %s principal %s from host %s", op, username, principal, ntoa(peername));
     // Get client name (i.e. principal by which client authenticated ) from ticket.
     // This is typically the user running kgetcred, except that for the 'G' operation
     // it's the host principal from /etc/krb5.keytab on the client side.
@@ -583,10 +636,6 @@ main(int argc, char *argv[])
 
         char *hoststart;
         char *hostend;
-        struct addrinfo hints;
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME;
     
         // cname is the principal the client was authenticated as. In this
         // case it's host/HOSTNAME@DOMAIN
@@ -622,14 +671,14 @@ main(int argc, char *argv[])
             // first entry is canon name
             if (addrsp == addrs)
                 strncpy(hostbuf, addrsp->ai_canonname, sizeof(hostbuf));            
-            if (compare_addrs(addrsp->ai_addr, &peername)) {
+            if (compare_addrs(addrsp->ai_addr, peername)) {
                 found = 1;
                 break;
             }
         }
         if (!found) {
             mylog(LOG_ERR, "peer address %s doesn't match hostname %s",
-                  ntoa(&peername), hoststart+1);
+                  ntoa(peername), hoststart+1);
             goto cleanup;
         }
         *hostend = '@';  // put back punctuation so we have the whole principal again
@@ -639,7 +688,7 @@ main(int argc, char *argv[])
         freeaddrinfo(addrs);
     } else {
         //all we have is an ip address. just do reverse lookup
-        if (getnameinfo(&peername, namelen, hostbuf, sizeof(hostbuf), NULL, 0, NI_NAMEREQD)) {
+        if (getnameinfo(peername, namelen, hostbuf, sizeof(hostbuf), NULL, 0, NI_NAMEREQD)) {
             mylog(LOG_ERR, "can't find hostname from IP %m");
             goto cleanup;
         }        
@@ -660,7 +709,7 @@ main(int argc, char *argv[])
     // return the results to the client
     if (errmsg == NULL) {
         char status[1];
-        mylog(LOG_DEBUG, "returning data to client %s for user %s length %d", ntoa(&peername), username, data.length);
+        mylog(LOG_DEBUG, "returning data to client %s for user %s length %d", ntoa(peername), username, data.length);
 
         if (op == 'G')
             status[0] = 'c'; // credentials
@@ -687,7 +736,7 @@ main(int argc, char *argv[])
         // error message. return the message
         char status[1];
         status[0] = 'e'; // error message
-        mylog(LOG_DEBUG, "returning error to client %s for user %s %s", ntoa(&peername), username, errmsg);
+        mylog(LOG_DEBUG, "returning error to client %s for user %s %s", ntoa(peername), username, errmsg);
 
         if ((retval = krb5_net_write(context, 0, (char *)status, 1)) < 0) {
             mylog(LOG_ERR, "%m: while writing len to client");
