@@ -266,7 +266,6 @@ const char *ntoa(struct sockaddr *peername) {
         // this is the v4 prefix
         unsigned char v4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255};
         int i;
-        char *retval;
 
         // if it's not v4, just call inet_ntop
         for (i = 0; i < 12; i++)
@@ -278,7 +277,7 @@ const char *ntoa(struct sockaddr *peername) {
                  aa2->sin6_addr.s6_addr[13],
                  aa2->sin6_addr.s6_addr[14],
                  aa2->sin6_addr.s6_addr[15]);
-        return retval;
+        return name;
     }
     return NULL;
 }
