@@ -129,7 +129,7 @@ int isprived(char *principal);
 
 const char *ntoa(struct sockaddr *peername);
 const char *ntoa(struct sockaddr *peername) {
-    char *name = malloc(1024);
+    static char name[1024];
     int family = peername->sa_family;
     if (family == AF_INET) {
         return inet_ntop(AF_INET, &((struct sockaddr_in *)peername)->sin_addr, name, 1023);
@@ -140,19 +140,18 @@ const char *ntoa(struct sockaddr *peername) {
         // this is the v4 prefix
         unsigned char v4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255};
         int i;
-        char *retval;
 
         // if it's not v4, just call inet_ntop
         for (i = 0; i < 12; i++)
             if (aa2->sin6_addr.s6_addr[i] != v4[i])
                 return inet_ntop(AF_INET6, &((struct sockaddr_in6 *)peername)->sin6_addr, name, 1023);
         // v4, but can't call normal ntoa because it's an array not a struct
-        asprintf(&retval, "%d.%d.%d.%d", 
+        snprintf(name, 1023, "%d.%d.%d.%d", 
                  aa2->sin6_addr.s6_addr[12],
                  aa2->sin6_addr.s6_addr[13],
                  aa2->sin6_addr.s6_addr[14],
-                 aa2->sin6_addr.s6_addr[14]);
-        return retval;
+                 aa2->sin6_addr.s6_addr[15]);
+        return name;
     }
     return NULL;
 }
