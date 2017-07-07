@@ -142,6 +142,9 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
     char *putstr = NULL;
     char *ldapurl;
     krb5_data realm_data;
+    char *oldval = NULL;
+    char *oldvalcopy = NULL;
+    int resetenv = 0;
 
     realm_data.data = realm;
     realm_data.length = strlen(realm);
@@ -184,9 +187,18 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
         goto err;
     }
 
+    oldval = getenv("KRB5CCNAME");
+    // memory is inside libc, doesn't get returned
+    // putenv may overwrite, so copy it
+    if (oldval) {
+        oldvalcopy = malloc(strlen(oldval) + 1);
+        strcpy(oldvalcopy, oldval);
+    }
+    resetenv = 1;
+
     asprintf(&putstr, "KRB5CCNAME=MEMORY:%s", krb5_cc_get_name(context, cache));
     putenv(putstr);
-    free(putstr);
+    // can't release this string, as it becomes part of the env
 
     // make sure everything is written before we use it
     krb5_cc_close(context, cache);
@@ -217,6 +229,15 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
         ldap_unbind_ext(ld, NULL, NULL);
     ld = NULL;
  ok:
+    if (resetenv) {
+        if (oldvalcopy) {
+            asprintf(&putstr, "KRB5CCNAME=%s", oldvalcopy);
+            putenv(putstr); // becomes part of env, don't free it
+            free(oldvalcopy); // but this is no longer needed
+        } else {
+            unsetenv("KRB5CCNAME");
+        }
+    }
     if (cache)
       krb5_cc_close(context, cache);
     if (havecreds)
@@ -473,8 +494,13 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    unsetenv("KRB5CCNAME");
+
     ld = krb_ldap_open(context, gservice, ghostname, grealm);
 
+    printf("env %s\n", getenv("KRB5CCNAME"));
+
+#ifdef undef    
     if (getLdapData(context, ld, grealm, targetuser, &rules, &keytab, &dn) == 0) {
         printf("dn %s\n", dn);
         if (rules) {
@@ -497,7 +523,6 @@ int main(int argc, char *argv[]) {
 
     freeLdapData(rules, keytab, dn);
 
-#ifdef undef    
     realm_data.data = grealm;
     realm_data.length = strlen(grealm);
 
