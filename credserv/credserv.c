@@ -840,7 +840,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
 
         r = getLdapData(context, ld, default_realm,  username, &rules, &keytab, &dn);
         if (r) {
-            mylog(LOG_ERR, "get ldap data failed");
+            mylog(LOG_ERR, "get ldap data failed for %s for user %s to host %s", principal, username, hostname);
             return GENERIC_ERR;
         }
 

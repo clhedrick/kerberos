@@ -279,6 +279,7 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct
     entry = ldap_first_entry(ld, msg);
     if (entry == NULL) {
         mylog(LOG_ERR, "no ldap entry for %s", user);
+        return 1;
     }
 
     *dn = ldap_get_dn(ld, entry);
