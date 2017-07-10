@@ -968,7 +968,7 @@ int main(int argc, char *argv[])
             // register this credential in the session keyring.
             // renewd uses this to check which credential caches are
             // still active and so need to be renewed
-            serial = add_key("user", "krbrenewd:ccname", realccname, strlen(realccname), KEY_SPEC_SESSION_KEYRING);
+            serial = add_key("user", "kgetcred:ccname", realccname, strlen(realccname), KEY_SPEC_SESSION_KEYRING);
             if (serial == -1) {
                 mylog(LOG_ERR, "kgetcred can't register credential file");
             }

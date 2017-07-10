@@ -38,12 +38,14 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <regex.h>
+#include <pwd.h>
 
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <syslog.h>
 #include <time.h>
 #include <sys/socket.h>
@@ -83,6 +85,7 @@ struct cc_entry {
   uid_t  uid;
   char * name;
   ENTRY *entry;
+  int getcred;  // used getcred, so it should be renewed that way
   struct cc_entry *next;
 };
 
@@ -143,7 +146,7 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
    renew would fail, also return 0, since there's nothing we can do with it
 */
 int
-needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
+needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft, int getcred) {
     krb5_error_code code, code2;
     krb5_cc_cursor cur = NULL;
     krb5_creds creds;
@@ -184,7 +187,8 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
 	}
 	// not, is it renewable? Need to be able to get at least 10 min or it's silly
 	// and it must not be expired or it can't be renewed
-	if ((creds.times.endtime >= now) && ((creds.times.renew_till - now) > (10*60))) {
+	// if getcred, we'll use kgetcred, so ok if ticket is expired
+	if (getcred || ((creds.times.endtime >= now) && ((creds.times.renew_till - now) > (10*60)))) {
 	  // yup. but keep searching in case there's more than one
 	  // and another one is still current
 	  found_tgt = TRUE;
@@ -235,7 +239,7 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft) {
  * by that time we'll have it back the way it should be.
  */
 static krb5_error_code
-renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
+renew(krb5_context ctx, krb5_ccache ccache, time_t minleft, int getcred, uid_t uid, char *ccname) {
     krb5_error_code code;
     krb5_principal user = NULL;
     krb5_creds creds;
@@ -244,6 +248,7 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
     krb5_ccache newcache = NULL;
     char *oldname = NULL;
     char *newname = NULL;
+    char *principal = NULL;
 
     memset(&creds, 0, sizeof(creds));
 
@@ -252,11 +257,80 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft) {
     code = krb5_cc_get_principal(ctx, ccache, &user);
     if (code != 0) {
       // file is probably empty. Can't renew if there's no principal
-      mylog(LOG_ERR, "error reading ticket cache");
+      mylog(LOG_ERR, "error reading ticket cache %s", error_message(code));
       goto done;
     }
 
     // the actual renew operation
+
+    if (getcred) {
+      // ticket came from kgetcred. renew it by getting a new one
+      // that makes sure we can do it even after a network failure
+      // has caused the ticket to expire
+      pid_t child;
+      int status;
+
+      code = krb5_unparse_name(ctx, user, &principal);
+      if (code != 0) {
+	mylog(LOG_ERR, "can't make sense of principal %s", error_message(code));
+	goto done;
+      }
+
+      child = fork();
+
+      if (child == 0) {
+        int fd;
+	struct passwd *pwd;
+	char *env;
+
+        // in child
+        for ( fd=getdtablesize(); fd>=0; --fd) 
+	  close(fd);
+
+        fd = open("/dev/null",O_RDWR, 0);
+	
+        if (fd != -1) {          
+	  dup2 (fd, STDIN_FILENO);
+	  dup2 (fd, STDOUT_FILENO);
+	  dup2 (fd, STDERR_FILENO);
+	  if (fd > 2)
+	    close (fd);
+        }
+
+	pwd = getpwuid(uid);
+	if (!pwd) {
+	  mylog(LOG_ERR, "can't find user %d", uid);
+	  exit(1);
+	}
+
+	setreuid(uid, uid);
+
+	asprintf(&env, "KRB5CCNAME=%s", ccname);
+	putenv(env);
+
+        execl("/bin/kgetcred", "-U", pwd->pw_name, principal, NULL);
+        mylog(LOG_ERR, "exec of kgetcred failed");
+	exit(1);
+
+      }
+
+      // in parent
+
+      waitpid(child, &status, 0);
+
+      if (WEXITSTATUS(status)) {
+	// kgetcred failed
+        mylog(LOG_ERR, "kgetcred failed for %u %s", WEXITSTATUS(status), principal);
+	code = status;
+	goto done;
+      }
+      // finished
+      mylog(LOG_INFO, "renewed %s for %d using kgetcred", ccname, uid);
+
+      // success
+      code = 0;
+      goto done;
+    }
 
     code = krb5_get_renewed_creds(ctx, &creds, user, ccache, NULL);
     creds_valid = 1;
@@ -342,6 +416,8 @@ done:
     if (ccache != NULL)
       krb5_cc_close(ctx, ccache);
     */
+    if (principal)
+      krb5_free_unparsed_name(ctx, principal);
     if (ccache)
       krb5_cc_close(ctx, ccache);
     if (newcache)
@@ -405,7 +481,8 @@ void getccs() {
     if (!description)
       continue;
 
-    if (strncmp(description, "krbrenewd:ccname:", strlen("krbrenewd:ccname:")) != 0)
+    if (strncmp(description, "krbrenewd:ccname:", strlen("krbrenewd:ccname:")) != 0 &&
+	strncmp(description, "kgetcred:ccname:", strlen("kgetcred:ccname:")) != 0)
       continue;
 
     // found one, get the cc name
@@ -457,6 +534,9 @@ void getccs() {
       nentry->uid = uid;
 
       entry.key = nentry->name;
+      // set 1 if it credential gottne with kgetcred
+      nentry->getcred = (strncmp(description, "kgetcred:ccname:", strlen("kgetcred:ccname:")) == 0);
+
       entry.data = (void *)nentry;
 
       cclist = nentry;
@@ -500,8 +580,8 @@ void renewall(krb5_context ctx, time_t minleft) {
       continue;
     }
 			   
-    if (needs_renew(ctx, cache, minleft) && !test) {
-	renew(ctx, cache, minleft);
+    if (needs_renew(ctx, cache, minleft, entry->getcred) && !test) {
+      renew(ctx, cache, minleft, entry->getcred, entry->uid, entry->name);
       // renew closes
     } else {
       krb5_cc_close(ctx, cache);
@@ -683,7 +763,7 @@ void delete_old(krb5_context kcontext, int only_valid) {
 
 
 void usage(char * progname) {
-  printf("%s [-w waittime][-d]\n    Waittime - time between main loops, minutes; default 60\n       Should be less than default ticket lifetime by at least 10 minutes\n    -d says to run in the foreground and print log messages to terminal\n", progname);
+  printf("%s [-w waittime][-m minleft][-d]\n    Waittime - time between main loops, minutes\n    Minleft - renew if less than this left, minutes\n       Should be less than default ticket lifetime by at least 10 minutes\n    -d says to run in the foreground and print log messages to terminal\n", progname);
   exit(0);
 }
 
@@ -693,8 +773,11 @@ int main(int argc, char *argv[])
   extern char * optarg;
   char *progname;
   char ch;
-  unsigned long wait = 50; // 50 min, for key lifetime of 60
-
+  unsigned long wait = 13; // active every N minutes
+  unsigned long minleft = 41; // must have that much left or renew
+  char *wait_str = NULL;
+  char *min_str = NULL;
+  char *default_str;
   krb5_context context;
   char *default_realm = NULL;
   int err = 0;
@@ -706,10 +789,13 @@ int main(int argc, char *argv[])
   progname = *argv;
 
   opterr = 0;
-  while ((ch = getopt(argc, argv, "w:dt")) != -1) {
+  while ((ch = getopt(argc, argv, "w:m:dt")) != -1) {
     switch (ch) {
     case 'w':
-      wait = atoi(optarg);
+      wait_str = optarg;
+      break;
+    case 'm':
+      min_str = optarg;
       break;
     case 'd':
       debug++;
@@ -783,6 +869,16 @@ int main(int argc, char *argv[])
   krb5_appdefault_string(context, "renewd", &realm_data, "pattern", "^krb5cc_", &pattern);
   krb5_appdefault_string(context, "renewd", &realm_data, "delete", "all", &delete_mode);
   krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", "", &pattern2);
+  krb5_appdefault_string(context, "renewd", &realm_data, "wait", "13", &default_str);
+  if (wait_str) // overridden by arg
+    wait = atol(wait_str);
+  else
+    wait = atol(default_str);
+  krb5_appdefault_string(context, "renewd", &realm_data, "minleft", "30", &default_str);
+  if (min_str) // overriden by arg
+    minleft = atoi(min_str);
+  else
+    minleft = atoi(default_str);
 
   // if we just want to look at ones we create:
   // if(regcomp(&regex, "^krb5cc_.*_cron$", 0)) {
@@ -845,7 +941,7 @@ int main(int argc, char *argv[])
 
     getccs(); // put uids of all procs into the hash
 
-    renewall(context, 60 * (wait + 10));
+    renewall(context, 60 * minleft);
 
     if (test)
       exit(1);
