@@ -1,5 +1,7 @@
 #define PAM_SM_SESSION
 #include <sys/types.h>
+#include <sys/errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -64,6 +66,53 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
   return princ->length == 2 && data_eq(princ->realm, *realm) &&
     data_eq_string(princ->data[0], KRB5_TGS_NAME) &&
     data_eq(princ->data[1], *realm);
+}
+
+#define RENEWDCCS "/run/renewdccs/"
+
+void register_for_delete(pam_handle_t *pamh, const char *cache) {
+  char *newname;
+  const char *cp;
+  char *cp2;
+  int fd;
+
+  newname = malloc(strlen(cache) + strlen(RENEWDCCS) + 1);
+
+  strcpy(newname, RENEWDCCS);
+  cp2 = newname + strlen(RENEWDCCS);
+
+  // none of our cache names use \, so map / to \
+
+  cp = cache;
+
+  while (*cp) {
+    char ch = *cp;
+    if (ch == '/')
+      *cp2 = '\\';
+    else
+      *cp2 = ch;
+    cp++;
+    cp2++;
+  }
+  *cp2 = '\0';
+  fd = open(newname, O_CREAT|O_WRONLY, 0600);
+  if (fd < 0 && errno == ENOENT) {
+    fd = mkdir(RENEWDCCS, 700);
+    if (fd < 0) {
+      pam_syslog(pamh, LOG_ERR, "unable to create %s", RENEWDCCS);
+      free(newname);
+      return;
+    }
+  }
+  close(fd);
+  fd = open(newname, O_CREAT|O_WRONLY, 0600);
+  if (fd < 0) {
+    pam_syslog(pamh, LOG_ERR, "unable to create %s", newname);
+    free(newname);
+    return;
+  }
+  free(newname);
+  close(fd);
 }
 
 char *
@@ -139,8 +188,11 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   time_t now;
   krb5_deltat minlife;
   char *minlife_st;
+  const void *getcred;
+  int iscron = 0;
+  char *key;
 
-  pam_syslog(pamh, LOG_ERR, "ccname %s", ccname);
+  pam_syslog(pamh, LOG_INFO, "registering ccname %s", ccname);
 
   if (!ccname) 
     return PAM_SUCCESS;  // nothing to do
@@ -248,7 +300,15 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   }
   // now register the cache for renewd
 
-  serial = add_key("user", "krbrenewd:ccname", ccname, strlen(ccname), KEY_SPEC_SESSION_KEYRING);
+  if (pam_get_data(pamh, "kgetcred_test", &getcred) == PAM_SUCCESS)
+    iscron = 1;
+
+  if (iscron)
+    key = "kgetcred:ccname";
+  else
+    key = "krbrenewd:ccname";
+
+  serial = add_key("user", key, ccname, strlen(ccname), KEY_SPEC_SESSION_KEYRING);
   if (serial == -1)
     pam_syslog(pamh, LOG_ERR, "Problem registering your Kerberos credentials 1 %s. They may expire during your session. %m\n", ccname);
   // we are presumably root at this point, but have to change permission to allow
@@ -256,7 +316,12 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   
   if (keyctl_setperm(serial, 0x3f3f0000))
     pam_syslog(pamh, LOG_ERR, "Problem registering your Kerberos credentials 2 %s. They may expire during your session. %m\n", ccname);
+  // and register for deletion
+  register_for_delete(pamh, ccname);
 
+  // don't need warning or second copy for cron
+
+  if (!iscron) {
   // now make a copy in FILE:/var/lib/gssproxy/clients/krb5cc_%U if asked.
   // That makes sure it's always available for NFS even if the user changes the primary cache
 
@@ -268,8 +333,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   ret = krb5_string_to_deltat(minlife_st, &minlife);
   if (ret)
     goto err;
-
-  pam_syslog(pamh, LOG_ERR, "minlife %d", minlife);
 
   if (minlife) {
 
@@ -348,6 +411,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     ret = krb5_cc_resolve(context, ccname, &firstcache);
     if (ret) goto err;
     finalcred = build_cache_name(credcopy, pwd->pw_uid, username);
+    pam_syslog(pamh, LOG_INFO, "registering copy %s", finalcred);
 
     if ((strncmp(finalcred, "FILE:", 5) == 0 ||
     	 strncmp(finalcred, "/", 1) == 0) &&
@@ -388,8 +452,12 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     // it to be read by a different root session
     if (keyctl_setperm(serial, 0x3f3f0000))
       pam_syslog(pamh, LOG_ERR, "Problem registering copy of your Kerberos credentials 2 %s. They may expire during your session %m", finalcred);
+    // and register for deletion
+    register_for_delete(pamh, finalcred);
 
-  }  
+  } // end of copy cred
+
+  } // end if iscron
 
  err:
   if (ret)

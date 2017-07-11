@@ -174,7 +174,6 @@ int write_lasthost(char *buf) {
     return 0;
 }
 
-
 /*
  The program is setuid, so we have to think about security. The other end needs to be able to believe who we are.
  That's why we use host/foo.cs.rutgers.edu as our principal. It lets the other end verify tht we have access
@@ -193,7 +192,6 @@ char *pam_kgetcred(char *krb5ccname, struct passwd * pwd, krb5_context context, 
 
 char *pam_kgetcred(char *krb5ccname, struct passwd * pwd, krb5_context context, pam_handle_t *pamh)
 {
-    key_serial_t serial;
 #else
 int main(int argc, char *argv[])
 {
@@ -965,19 +963,6 @@ int main(int argc, char *argv[])
 
 #ifdef PAM            
             mylog(LOG_INFO, "User %s created credentials for %s in %s", username, principal, realccname);
-            // register this credential in the session keyring.
-            // renewd uses this to check which credential caches are
-            // still active and so need to be renewed
-            serial = add_key("user", "kgetcred:ccname", realccname, strlen(realccname), KEY_SPEC_SESSION_KEYRING);
-            if (serial == -1) {
-                mylog(LOG_ERR, "kgetcred can't register credential file");
-            }
-
-            // others must be able to view and read, for renewd to see it
-            if (keyctl_setperm(serial, 0x3f000003)) {
-                mylog(LOG_ERR, "kgetcred can't set permissions for credential file");
-            }
-
 #endif 
 
 
@@ -1235,6 +1220,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   snprintf(ccput, sizeof(ccput)-1, "KRB5CCNAME=%s", mainret);
 
   pam_putenv(pamh, ccput);
+
+  pam_set_data(pamh, "kgetcred_test", (void *)"true", NULL);
 
   free(mainret);
 

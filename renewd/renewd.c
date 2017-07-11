@@ -177,8 +177,10 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft, int getcre
     found_tgt = FALSE;   // found a TGT that isn't current
     found_current_tgt = FALSE;   // found a TGT that is current
     while (!(code = krb5_cc_next_cred(kcontext, cache, &cur, &creds))) {
+      time_t allowedexpire;
       // only renewable creds are worth looking at. and must be TGT
       if ((creds.ticket_flags & TKT_FLG_RENEWABLE) && is_local_tgt(creds.server, &princ->realm)) {
+	
 	// enough time left, it's current
 	if ((creds.times.endtime - now) > minleft) {
 	  found_current_tgt = TRUE;
@@ -186,9 +188,14 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft, int getcre
 	  break;
 	}
 	// not, is it renewable? Need to be able to get at least 10 min or it's silly
-	// and it must not be expired or it can't be renewed
-	// if getcred, we'll use kgetcred, so ok if ticket is expired
-	if (getcred || ((creds.times.endtime >= now) && ((creds.times.renew_till - now) > (10*60)))) {
+	//   and it must not be expired or it can't be renewed
+	// if getcred, we'll use kgetcred, so ok if ticket is expired, but no
+	//   point continuing to try tickets that have failed for a week
+	if (getcred)
+	  allowedexpire = (60 * 60 * 24 * 7);
+	else
+	  allowedexpire = 0;
+	if (((creds.times.endtime + allowedexpire) >= now) && ((creds.times.renew_till - now) > (10*60))) {
 	  // yup. but keep searching in case there's more than one
 	  // and another one is still current
 	  found_tgt = TRUE;
@@ -462,6 +469,7 @@ void getccs() {
     char *normalized;
     uid_t uid;
     ENTRY entry;
+    int isgetcred;
 
     // remove trailing new line
     i = strlen(buffer);
@@ -485,6 +493,8 @@ void getccs() {
 	strncmp(description, "kgetcred:ccname:", strlen("kgetcred:ccname:")) != 0)
       continue;
 
+    isgetcred = strncmp(description, "kgetcred:ccname:", strlen("kgetcred:ccname:")) == 0;
+
     // found one, get the cc name
     serial = strtoul(id, NULL, 16);
     len = keyctl_read(serial, buffer, sizeof(buffer) - 1);
@@ -494,7 +504,7 @@ void getccs() {
     }
     buffer[len] = '\0';
 
-    mylog(LOG_DEBUG, "cache registered with session: %s", buffer);
+    mylog(LOG_DEBUG, "cache %sregistered with session: %s", (isgetcred?"for kgetcred ":""), buffer);
 
     // buffer should now be a cache name. normalize it
     if (strncmp(buffer, "FILE:", 5) == 0)
@@ -516,8 +526,10 @@ void getccs() {
       char *uidend = strchr(uidstr, ':');
       if (uidend)
 	*uidend = '\0';
-      normalized = buffer;
       uid = atoi(uidstr);
+      if (uidend)
+	*uidend = ':'; // put it back so we store the right thing
+      normalized = buffer;
     } else {
       mylog(LOG_ERR, "unsupported CC name %s", normalized);
       continue;
@@ -602,126 +614,83 @@ void renewall(krb5_context ctx, time_t minleft) {
    name is just the file name assume it's got /tmp in front of it
 */
 void
-maybe_delete(krb5_context kcontext, char *name, char *dir, int only_valid) {
+maybe_delete(krb5_context kcontext, char *name, int only_valid) {
     krb5_error_code code;
-    krb5_cc_cursor cur = NULL;
-    krb5_creds creds;
-    krb5_principal princ = NULL;
     krb5_ccache cache = NULL;
-    krb5_boolean ok = FALSE;
-    time_t now;
-    char filename[1024];
+    char *filename;
     ENTRY entry;
-    struct stat statbuf;
+    char *cp, *cp2;
     
-    snprintf(filename, sizeof(filename)-1, "%s/%s", dir,  name);
+    char *newname;
 
-    // 1. is it in the hash?
+    if (strcmp(name, ".") == 0 ||
+	strcmp(name, "..") == 0)
+      return;
+
+    // 0. normalize the name
+    newname = malloc(strlen(name) + 1);
+    cp = name;
+    cp2 = newname;
+    while (*cp) {
+      char ch = *cp;
+      if (ch == '\\')
+	*cp2 = '/';
+      else
+	*cp2 = ch;
+      cp++;
+      cp2++;
+    }
+    *cp2 = '\0';
+    if (strncmp(newname, "FILE:", 5) == 0)
+      filename = newname + 5;
+    else 
+      filename = newname;
+
+    // 1. is it in the hash, i.e. still in use?
+    // we'll keep it around even if it is expired
+    // that should only happen if renew failed
 
     // now have name in normalized and uid in uid
     entry.key = filename;
     if (hsearch(entry, FIND)) {
       if (debug > 1)
 	mylog(LOG_DEBUG, "In hash: %s", filename);	
+      free(newname);
       return; // yes, it's still in use, return without doing anything
     }
       
-    // 2. is it an unexpired cache?
+    // not in use. kill it
 
     code = krb5_cc_resolve(kcontext, filename, &cache);
 
-    if (!code)
-      code = krb5_cc_get_principal(kcontext, cache, &princ);
-
-    if (code && only_valid) {
-      // not a valid cache, user has asked us to delete only valid ones
-      if (debug > 1)
-	mylog(LOG_DEBUG, "Not valid: %s", filename);	
-      if (princ)
-	krb5_free_principal(kcontext, princ);
-      if (cache)
-	krb5_cc_close(kcontext, cache);
-      return;
-    }
-      
-    if (!code)
-      code = krb5_cc_start_seq_get(kcontext, cache, &cur);
-
-    now = time(0);
-
     if (!code) {
-      while (!(code = krb5_cc_next_cred(kcontext, cache, &cur, &creds))) {
-	// only renewable creds are worth looking at. and must be TGT
-	if ((creds.ticket_flags & TKT_FLG_RENEWABLE) && is_local_tgt(creds.server, &princ->realm)) {
-	  // enough time left, it's current
-	  if ((creds.times.endtime - now) >= 0) {
-	    ok = TRUE;
-	    krb5_free_cred_contents(kcontext, &creds);
-	    break;
-	  }
-	}
-	krb5_free_cred_contents(kcontext, &creds);
-      }
+      code = krb5_cc_destroy(kcontext, cache);
+      if (code)
+	mylog(LOG_DEBUG, "Delete old cache failed %s %s", filename, error_message(code));
+      else 
+	mylog(LOG_INFO, "Deleted old cache %s", filename);
+    } else {
+      mylog(LOG_DEBUG, "Old cache to be deleted not found: %s %s", filename, error_message(code));
+      if (cache)
+	krb5_cc_close(kcontext, cache); // not likely we have a cache if resolv failed
     }
 
-    if (princ)
-      krb5_free_principal(kcontext, princ);
-    if (cur)
-      krb5_cc_end_seq_get(kcontext, cache, &cur);
-    if (cache) {
-      krb5_cc_close(kcontext, cache);
-    }
+    free(newname);
 
-    if (ok) {
-      if (debug > 1)
-	mylog(LOG_DEBUG, "Ticket OK: %s", filename);	
-      return;  // yes, unexpired cache, nothing to do
-    }
+    // remove entry from /run/renewdccs
 
-    // 3. created within the last 5 minutes
-
-    if (stat(filename, &statbuf)) 
-      return; // can't find it, nothing useful to do
-
-    if (!S_ISREG(statbuf.st_mode)) {
-      // not a file, don't try to unlink other stuff
-      if (debug > 1)
-	mylog(LOG_DEBUG, "Not a regular file: %s", filename);	
-      return; 
-    }
-
-    if ((now - statbuf.st_mtime) < (5 * 60)) {
-      if (debug > 1)
-	mylog(LOG_DEBUG, "File recent: %s", filename);	
-      return; // recent, nothign to do
-    }
-
-    unlink(filename);
-
-    mylog(LOG_DEBUG, "Deleting old cache: %s", filename);
+    asprintf(&newname, "/run/renewdccs/%s", name);
+    unlink(newname);
+    free(newname);
 
 }
-
-regex_t regex;
-regex_t regex2;
-char *dir2 = NULL;
-
-int myfilter (const struct dirent *d) {
-  return regexec(&regex, d->d_name, 0, NULL, 0) == 0;
-}
-  
-int myfilter2 (const struct dirent *d) {
-  return regexec(&regex2, d->d_name, 0, NULL, 0) == 0;
-}
-  
-
 
 void delete_old(krb5_context kcontext, int only_valid) {
   struct dirent **namelist;
   int numdirs;
   int i;
 
-  numdirs = scandir("/tmp", &namelist, myfilter, alphasort);
+  numdirs = scandir("/run/renewdccs", &namelist, NULL, alphasort);
   if (numdirs < 0) {
     mylog(LOG_ERR, "Couldn't scan /tmp");
     return;
@@ -732,38 +701,17 @@ void delete_old(krb5_context kcontext, int only_valid) {
   for (i = 0; i < numdirs; i++) {
     if (debug > 2)
       mylog(LOG_DEBUG, "checking %s", namelist[i]->d_name);
-    maybe_delete(kcontext, namelist[i]->d_name, "/tmp", only_valid);
+    maybe_delete(kcontext, namelist[i]->d_name, only_valid);
     free(namelist[i]);
   }
 
   free(namelist);
 
-  // do we have to check something like /var/lib/gssproxy/client?
-  if (dir2) {
-    numdirs = scandir(dir2, &namelist, myfilter2, alphasort);
-    if (numdirs < 0) {
-      mylog(LOG_ERR, "Couldn't scan %s", dir2);
-      return;
-    }
-
-    // this is safer than opendir because the semantics of
-    // that aren't well defined if you delete files
-    for (i = 0; i < numdirs; i++) {
-      if (debug > 2)
-	mylog(LOG_DEBUG, "checking %s", namelist[i]->d_name);
-      maybe_delete(kcontext, namelist[i]->d_name, dir2, only_valid);
-      free(namelist[i]);
-    }
-    
-    free(namelist);
-
-  }
-
 }
 
 
 void usage(char * progname) {
-  printf("%s [-w waittime][-m minleft][-d]\n    Waittime - time between main loops, minutes\n    Minleft - renew if less than this left, minutes\n       Should be less than default ticket lifetime by at least 10 minutes\n    -d says to run in the foreground and print log messages to terminal\n", progname);
+  printf("%s [-w waittime][-m minleft][-r renewwait][-d]\n    Waittime - time between main loops, minutes\n    Renewwait - time between attempts to renew a ticket, minutes\n    Minleft - renew if less than this left, minutes\n       Should be less than default ticket lifetime by at least 10 minutes\n    -d says to run in the foreground and print log messages to terminal\n", progname);
   exit(0);
 }
 
@@ -773,29 +721,33 @@ int main(int argc, char *argv[])
   extern char * optarg;
   char *progname;
   char ch;
-  unsigned long wait = 13; // active every N minutes
-  unsigned long minleft = 41; // must have that much left or renew
+  unsigned long wait = 5; // active every N minutes
+  unsigned long minleft = 12 * 60; // must have that much left or renew
+  unsigned long renewwait = 60; // attempt renew every N minutes
   char *wait_str = NULL;
   char *min_str = NULL;
+  char *rwait_str = NULL;
   char *default_str;
+  time_t nextrenew = 0;
   krb5_context context;
   char *default_realm = NULL;
   int err = 0;
   krb5_data realm_data;
-  char *pattern;
   char *delete_mode;
-  char *pattern2;
 
   progname = *argv;
 
   opterr = 0;
-  while ((ch = getopt(argc, argv, "w:m:dt")) != -1) {
+  while ((ch = getopt(argc, argv, "w:m:r:dt")) != -1) {
     switch (ch) {
     case 'w':
       wait_str = optarg;
       break;
     case 'm':
       min_str = optarg;
+      break;
+    case 'r':
+      rwait_str = optarg;
       break;
     case 'd':
       debug++;
@@ -866,67 +818,22 @@ int main(int argc, char *argv[])
   realm_data.data = default_realm;
   realm_data.length = strlen(default_realm);
 
-  krb5_appdefault_string(context, "renewd", &realm_data, "pattern", "^krb5cc_", &pattern);
   krb5_appdefault_string(context, "renewd", &realm_data, "delete", "all", &delete_mode);
-  krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", "", &pattern2);
-  krb5_appdefault_string(context, "renewd", &realm_data, "wait", "13", &default_str);
+  krb5_appdefault_string(context, "renewd", &realm_data, "wait", "5", &default_str);
   if (wait_str) // overridden by arg
     wait = atol(wait_str);
   else
     wait = atol(default_str);
-  krb5_appdefault_string(context, "renewd", &realm_data, "minleft", "30", &default_str);
+  krb5_appdefault_string(context, "renewd", &realm_data, "minleft", "720", &default_str);
   if (min_str) // overriden by arg
     minleft = atoi(min_str);
   else
     minleft = atoi(default_str);
-
-  // if we just want to look at ones we create:
-  // if(regcomp(&regex, "^krb5cc_.*_cron$", 0)) {
-  if(regcomp(&regex, pattern, 0)) {
-    mylog(LOG_ERR, "Couldn't compile regex");
-    exit(1);
-  }
-
-  // second place to scan?
-  if (strlen(pattern2) > 0) {
-    char *pat;
-    char *cp = rindex(pattern2, '/');
-    char *cp2;
-
-    if (!cp) {
-      mylog(LOG_ERR, "krb5.conf/register-cc/credcopy doesn't have a slash");
-      exit(1);
-    }
-    // copy directory portion to dir2
-    dir2 = malloc((cp - pattern2) + 1);
-    strncpy(dir2, pattern2, (cp - pattern2));
-    dir2[cp - pattern2] = '\0';
-
-    // make a patern for stuff after /
-    cp++; // get beyond slash
-    pat = (char *)malloc(2 * strlen(cp) + 1);
-
-    cp2 = pat;
-    while (*cp) {
-      if (*cp == '%' && (*(cp+1) == 'U' || *(cp+1) == 'u')) {
-	*cp2++ = '.';
-	*cp2++ = '*';
-	cp += 2;
-      } else if (index("^.*[$\\", *cp) != NULL) {
-	*cp2++ = '\\';
-	*cp2++ = *cp++;
-      } else {
-	*cp2++ = *cp++;
-      }
-    }
-    *cp2 = '\0';
-
-    // needs to be extended, since \ has opposite meaning for some chars in basic
-    if(regcomp(&regex2, pat, 0)) {
-      mylog(LOG_ERR, "Couldn't compile regex2");
-      exit(1);
-    }
-  }
+  krb5_appdefault_string(context, "renewd", &realm_data, "renewwait", "60", &default_str);
+  if (rwait_str) // overriden by arg
+    renewwait = atoi(rwait_str);
+  else
+    renewwait = atoi(default_str);
 
   while (1) {
 
@@ -941,7 +848,11 @@ int main(int argc, char *argv[])
 
     getccs(); // put uids of all procs into the hash
 
-    renewall(context, 60 * minleft);
+    if (now >= nextrenew) {
+      mylog(LOG_DEBUG, "doing renewal");
+      renewall(context, 60 * minleft);
+      nextrenew = now + 60 * renewwait;
+    }
 
     if (test)
       exit(1);

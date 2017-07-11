@@ -3,7 +3,7 @@
 renewd \- renew Kerberos credentials for all users automatically
 .SH SYNOPSIS
 .B renewd
-[-w waittime][ -d ][ -t ]
+[-w waittime][-r renewwait][-m mintime][ -d ][ -t ]
 .SH DESCRIPTION
 .I  renewd
 renews credentials. It only watches credentials that have been
@@ -19,16 +19,9 @@ some rules.
 .PP 
 Because multiple login sessions (particularly via sshd) can share the 
 same credemtials, you don't do kdestroy on logout, nor can you allow sshd
-to do it via GSSAPICleanupCredentials. To avoid having credentials hang
-out too long, we are going to set ticket_lifetime in krb5.conf fairly short.
-The default parameters for renewd assume it's about an hour. That way
-credentials will go away within an hour after logout, but will be renewed
-automatically while you're logged in.
+to do it via GSSAPICleanupCredentials. Instead, renewd will delete
+credentials that no longer correspond to any active session.
 .PP 
-If we can be sure that credentaisl won't be destroyed, then renewd
-can simply keep renewing all active credentials while the user still
-has a session alive, with one exception: 
-.PP
 For NFS to work reliably credentials must be either the primary
 credential in KEYRING:persistebt:UID, in a file
 in /tmp owned by the user, or in a credential listed in
@@ -39,59 +32,35 @@ sessions to /var/lib/gssproxy/clients/krb5cc_%U, which is used
 by gssproxy.
 .SH DELETION
 .PP
-In addition to renewing, renewd can remove out of date credential
-files in /tmp. By detault, it will remove files matching /tmp/krb5cc_*
-if they don't have an unexpired ticket-granting ticket. 
-Regular files that aren't Kerberos credential caches at all but match that
-name pattern will be removed.
-(This can be changed.)
-.PP
-You can change the pattern of files that renewd examines for removal
-by using the pattern argument. E.g. to look at both /tmp/krb5cc_* and
-/tmp/tkt*, in krb5.conf, specify the following. Note that regcomp is
-called with no arguments, so this is a "basic regexp." That's why the
-\\ is needed before the |
-.PP
-.nf
-[appdefaults]
-renewd = {
-    pattern = ^krb5cc_\\|^tkt
-}
-.fi
-.PP
-Renewd will also examine files in a second directory, typically
-/var/lib/gssproxy/clients. See pam_reg_cc for how this is used.
-For consistency, it uses the same configuration as pam_reg_cc, e.g.
-.pp
-.nf
-[appdefaults]
-register-cc = {
-    credcopy = /var/lib/gssproxy/clients/krb5cc_%U
-}
-.fi
-.PP
-The pattern renewd looks for replaces %U and %u with wildcards, i.e. ".*".
-It is assumed that these character occur only in the file name, not any
-of the directory names.
-.PP 
-By default, renewd removes all regular files (i.e. not directories,
-pipes, etc) matching the pattern that aren't
-valid credential files. You can use the "delete" parameter to change
-this. E.g. the following will cause only valid (but expired) 
-credential files to be removed:
-.PP
-.nf
-[appdefaults]
-renewd = {
-    delete = valid
-}
-.fi
-.PP
-delete = none can be used to disable deletion.
+In addition to renewing, renewd can remove out of date credential caches.
+pam_reg_cc touches files in /run/renewdccs to show what credentials
+it has registered. The
+name of the file is based on the credential cache name. Renewd
+will remove any of those credential caches if they aren't currently
+registered with an active session.
 .SH OPTIONS
 .PP
 waittime is the amount of time between successive runs. It defaults
-to 50 minutes, which is appropriate for a default ticket lifetime of 1 hour.
+to 5 minutes.
+.PP
+renewwait is the amount of time between checks for tickets to renew.
+It defaults to 60 min, which is OK for fairly long ticket lifetimes
+such as the default 1 day.
+.PP
+mintime. If a ticket doesn't have at least this much life left, renewd
+will attempt to renew it. If that fails for some reason, it will continue
+to attempt to renew it until the ticket expires. Mintime defaults to
+mintime defaults to 12 hours, wihch is appropriate for 1 day ticket
+lifetimes. That allows 12 hours to renew the ticket. This is intentionally
+long, to allow us to survive possible failtures of network or services.
+.PP
+Tickets gotten using pam_kgetcred (typically tickets for cron jobs)
+are handled specially: they are "renewed" by calling kgetcred.
+We do this to deal with network failures. A long network failure could
+conceivably cause tickets to expire. At that point they can't be renewed.
+But kgetcred can get a new ticket whether or not the original is expired.
+We will attempt to use kgetcred for up to a week after the original ticket
+expires.
 .PP
 renewd normally detaches from the terminal, and logs to syslog.
 If -d is supplied it remains attached to the terminal, and prints
@@ -99,6 +68,22 @@ debug and error messasges there. -d can be given more than once
 to increase the level of debugging.
 .PP
 -t will show the current registered tickets and exit
+.PP
+The time parameters can also be set in krb5.conf. Parameters
+on the command line will override those set in krb5.conf. Here
+are all the parameters that can be specified in krb5.conf, 
+with their default values.
+Set delete = none to disable deleting out of date credential files.
+.PP
+.nf
+[appdefaults]
+renewd = {
+  wait = 5
+  renewwait = 60
+  minleft = 720
+  delete = all    
+}
+.fi
 .PP
 renewd must run as root. Most Kerberos operations are performed as
 the user that owns the cache.
