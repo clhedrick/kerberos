@@ -201,7 +201,7 @@ There you can finish the process of adding the users you have identified.
 	    throw new NoFilterException();
 	}	
 
-        filter = filter + "(!(rulinkRutgersEduHidden=true))(rulinkRutgersEduStatus=active))";
+        filter = filter + "(!(rutgersEduHidden=true))(rutgersEduStatus=active))";
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
@@ -246,9 +246,9 @@ There you can finish the process of adding the users you have identified.
 		if (j >= 0)
 		    address = address.substring(0, j);
 	    }
-  	    unit = oneVal(userData.get("rulinkrutgersedustudentunit"));	    
-  	    month = oneVal(userData.get("rulinkrutgersedustudentgradmonth"));	    
-	    year = oneVal(userData.get("rulinkrutgersedustudentgradyear"));	    
+  	    unit = oneVal(userData.get("rutgersedustudentunit"));	    
+  	    month = oneVal(userData.get("rutgersedustudentgradmonth"));	    
+	    year = oneVal(userData.get("rutgersedustudentgradyear"));	    
 	    mail = oneVal(userData.get("mail"));	    
 	    phone = oneVal(userData.get("telephonenumber"));	    
 
