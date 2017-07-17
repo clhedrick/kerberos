@@ -43,7 +43,7 @@ function checknewowner() {
 		 hasempty = true;
 	 });
      if (!hasempty) {
-	 $(".addowner").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label><br>");
+	 $(".addowner").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label>");
 
 	 $(".addowner").change(checknewowner);
      }
