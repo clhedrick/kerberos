@@ -19,5 +19,10 @@ trap 'KRB5CCNAME="$ANONCC" kdestroy' 2
 # the actual kinit
 kinit -T "$ANONCC" "$@" 
 
+STAT=$?
+
 KRB5CCNAME="$ANONCC" kdestroy
+
+exit $STAT
+
 

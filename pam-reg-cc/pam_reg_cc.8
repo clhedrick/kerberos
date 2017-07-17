@@ -35,7 +35,10 @@ For that reason, you may request this module to copy the credential to
 a second location. That way changes to the primary cache won't affect
 NFS access. There are two reasonable locations: a file in /tmp,
 or the file name in gssproxy.conf, usually 
-/var/lib/gssproxy/clients/krb5cc_%U. To make this happen,
+/var/lib/gssproxy/clients/krb5cc_%U. Note that the copy isn't
+done for credentials that come from pam_kgetcred. That's because
+cron jobs are assumed not to put credentials at risk in the same
+way. To make this happen,
 configure krb5.conf with credcopy, e.g.
 .PP
 .nf
