@@ -11,50 +11,76 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
+
 
 public class docommand {
 
-    public static AtomicInteger commandIndex = new AtomicInteger(); // initialized to 0
+    public static ConcurrentSkipListSet<Integer> cachesUsed = new ConcurrentSkipListSet<Integer>();
 
     public static int docommand (String[]command, String[]env){
 	return docommand(command, env, null);
     }
     public static int docommand (String[]command, String[]env, JspWriter out){
      
-	boolean didincr = false;
+ 	 Integer cacheUsed = null;
          Logger logger = null;
    	 logger = LogManager.getLogger();
 
          int retval = -1;
 	 Process p = null;
 
-	 List<String> intEnv;
-	 if (env == null) {
-	     intEnv = new ArrayList<String>();
-	     Set<Map.Entry<String, String>> envSet = System.getenv().entrySet();
+	 // IPA doesn't synchronize its cache. So if we run two copies at once,
+	 // the cache could get corrupted. We can fix this by using different
+	 // values of "XDG_CACHE_HOME". If the user has specified it as an
+	 // environment variable, we just use it. Otherwise we generate a name.
+	 // To get the most caching, we want to reuse names. So we allocate 
+	 // numerical names, and use the first one that's free. Use a
+	 // concurrent set to keep track of what's in use.
 
-	     for (Map.Entry<String, String> envEntry: envSet) {
-		 intEnv.add(envEntry.getKey() + "=" + envEntry.getValue());
+
+	 // if "XDG_CACHE_HOME" is specified and we're using system env,
+	 // nothing to do, so skip this absurd code
+	 if (System.getenv("XDG_CACHE_HOME") == null || env != null) {
+	     // can't add stuff to either the env array or the map that comes from System.getenv
+	     // so we convert to an arrayList, and then back to an array
+	     List<String> envList;
+	     if (env == null) {
+		 // using system env, so convert it
+		 envList = new ArrayList<String>();
+		 Set<Map.Entry<String, String>> envSet = System.getenv().entrySet();
+		 for (Map.Entry<String, String> envEntry: envSet) {
+		     envList.add(envEntry.getKey() + "=" + envEntry.getValue());
+		 }
+	     } else {
+		 envList = new ArrayList<String>(Arrays.asList(env));
 	     }
-	 } else {
-	     intEnv = new ArrayList<String>(Arrays.asList(env));
-	 }
 
-	 // if env ==  null, we got intenv from System.env, so it already
-	 // has XDG_CACHE_HOME if any
-	 if (System.getenv("XDG_CACHE_HOME") != null && env != null) {
-	     intEnv.add("XDG_CACHE_HOME=" + System.getenv("XDG_CACHE_HOME"));
-	 } else {
-	     intEnv.add("XDG_CACHE_HOME=" + System.getProperty("user.home") + "/" + commandIndex.addAndGet(1));
-	     didincr = true;
+	     // now have the environment in envList. Add "XDG_CACHE_HOME"
+	     if (System.getenv("XDG_CACHE_HOME") != null)
+		 envList.add("XDG_CACHE_HOME=" + System.getenv("XDG_CACHE_HOME"));
+	     else {
+		 // need to find the first free 
+		 // not sure whether we should put a limit here or not. 100 sees safe
+		 for (cacheUsed = 0; cacheUsed < 100; cacheUsed++) {
+		     if (cachesUsed.add(cacheUsed))
+			 break;
+		 }
+		 // we now have the first free cache in cacheUsed
+		 envList.add("XDG_CACHE_HOME=" + System.getProperty("user.home") + "/" + cacheUsed);
+	     }
+
+	     System.out.println("env: " + envList);
+	     // have full env, convert list back to array
+	     env = envList.toArray(new String[envList.size()]);
 	 }
 
 	 try {
-	     p = Runtime.getRuntime().exec(command, intEnv.toArray(new String[intEnv.size()]));
+	     p = Runtime.getRuntime().exec(command, env);
 	 } catch (Exception e) {
 	     logger.error("unable to run command " + Arrays.toString(command) + " " + e);
-	     if (didincr)
-		 commandIndex.decrementAndGet();
+	     if (cacheUsed != null)
+		 cachesUsed.remove(cacheUsed);
              return -1;
 	 }
 
@@ -66,8 +92,6 @@ public class docommand {
 
 		 // if it worked, no need to print a message
 		 if (retval == 0) {
-		     if (didincr)
-			 commandIndex.decrementAndGet();
 		     return 0;
 		 }
 
@@ -97,8 +121,8 @@ public class docommand {
 	     logger.error("Password check process interrupted");
 	 }
 	 finally {
-	     if (didincr)
-		 commandIndex.decrementAndGet();
+	     if (cacheUsed != null)
+		 cachesUsed.remove(cacheUsed);
 	     if (p != null)
 		 p.destroy();
 	 }
