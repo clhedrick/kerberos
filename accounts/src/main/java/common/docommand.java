@@ -70,7 +70,6 @@ public class docommand {
 		 envList.add("XDG_CACHE_HOME=" + System.getProperty("user.home") + "/" + cacheUsed);
 	     }
 
-	     System.out.println("env: " + envList);
 	     // have full env, convert list back to array
 	     env = envList.toArray(new String[envList.size()]);
 	 }
