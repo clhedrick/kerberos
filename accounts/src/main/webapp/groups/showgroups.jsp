@@ -20,16 +20,26 @@
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
-function deletegroup() {
-  var group = $(this).next().val();
+function deletegroup(event) {
+  var group = $(event.target).next().val();
   if (!confirm("Are you sure you want to delete this group?"))
     return;
   $("#deleteInput").val(group);
   $("#deleteSubmit").click();
 }
 
+function deleteKeyPress(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 32 || event.keyCode === 13) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    deletegroup(event);
+  }
+}
+
 $(document).ready(function(){
     $(".deleteButton").click(deletegroup);
+    $(".deleteButton").keypress(deleteKeyPress);
     });
 
 </script>
@@ -88,7 +98,7 @@ ArrayList<HashMap<String, ArrayList<String>>> groups = action.val;
 
 <% for (HashMap<String, ArrayList<String>> group: groups) { String name=lu.oneVal(group.get("cn")); %>
 
-<a href="showgroup.jsp?name=<%= URLEncoder.encode(name) %>"><%= lu.esc(name) %></a> <%= (lu.hasVal(group.get("gidnumber")) ? lu.esc(lu.oneVal(group.get("gidnumber"))) : "") %><img role="button" tabindex="1" style="height:1em;margin-left:1em" src="delete.png" title="Delete group <%= lu.esc(name) %>" class="deleteButton"><input type="hidden" name="deleteName" value="<%= lu.esc(name) %>"><br>
+<a href="showgroup.jsp?name=<%= URLEncoder.encode(name) %>"><%= lu.esc(name) %></a> <%= (lu.hasVal(group.get("gidnumber")) ? lu.esc(lu.oneVal(group.get("gidnumber"))) : "") %><img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete group <%= lu.esc(name) %>" class="deleteButton"><input type="hidden" name="deleteName" value="<%= lu.esc(name) %>"><br>
 
 <% }} %>
 </div>

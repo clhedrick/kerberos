@@ -49,26 +49,47 @@ function checknewowner() {
      }
  };
 
-function deleteMember() {
-  var member = $(this).next().val();
+function deleteMember(event) {
+  var member = $(event.target).next().val();
   if (!confirm("Are you sure you want to delete this member?"))
     return;
   $("#deleteInput").val(member);
   $("#deleteSubmit").click();
 }
 
-function deleteOwner() {
-  var owner = $(this).next().val();
+function deleteMemberKeyPress(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 32 || event.keyCode === 13) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    deleteMember(event);
+  }
+}
+
+
+function deleteOwner(event) {
+  var owner = $(event.target).next().val();
   if (!confirm("Are you sure you want to delete this owner?"))
     return;
   $("#deleteOwnerInput").val(owner);
   $("#deleteOwnerSubmit").click();
 }
 
+function deleteOwnerKeyPress(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 32 || event.keyCode === 13) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    deleteOwner(event);
+  }
+}
+
 $(document).ready(function(){
     $(".addowner").change(checknewowner);
     $(".deleteMemberButton").click(deleteMember);
+    $(".deleteMemberButton").keypress(deleteMemberKeyPress);
     $(".deleteOwnerButton").click(deleteOwner);
+    $(".deleteOwnerButton").keypress(deleteOwnerKeyPress);
     });
 
 
@@ -176,7 +197,7 @@ List<String> hosts = lu.valList(attrs.get("host"));
 <div class="inset" style="margin-top:0.5em">
 <% if (lu.hasVal(attrs.get("member"))) { %>
 <% for (String m: attrs.get("member")) { String member = lu.dn2user(m); %>
-<%= lu.esc(member) %> <img role="button" tabindex="1" style="height:1em;margin-left:1em" src="delete.png" title="Delete member <%= lu.esc(member) %>" class="deleteMemberButton"><input type="hidden" name="deleteName" value="<%= lu.esc(member) %>"><br>
+<%= lu.esc(member) %> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete member <%= lu.esc(member) %>" class="deleteMemberButton"><input type="hidden" name="deleteName" value="<%= lu.esc(member) %>"><br>
 
 <% }} %>
 
@@ -196,7 +217,7 @@ List<String> hosts = lu.valList(attrs.get("host"));
 <% } %>
 
 <% if (attrs.get("owner") != null) { for (String o: attrs.get("owner")) { String owner = lu.dn2user(o); %>
-<%= lu.esc(owner) %> <img role="button" tabindex="1" style="height:1em;margin-left:1em" src="delete.png" title="Delete owner <%= lu.esc(owner) %>" class="deleteOwnerButton"><input type="hidden" name="deleteOwnerName" value="<%= lu.esc(owner) %>"><br>
+<%= lu.esc(owner) %> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete owner <%= lu.esc(owner) %>" class="deleteOwnerButton"><input type="hidden" name="deleteOwnerName" value="<%= lu.esc(owner) %>"><br>
 
 <% }}} %>
 <h4>Add Owner</h4>
