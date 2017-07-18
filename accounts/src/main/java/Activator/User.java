@@ -198,7 +198,11 @@ public class User {
 	if (action.val != null && action.val.size() > 0) {
 	    // normal group, return set of clusters it's valid for
 	    // make a set out of the values of the host attribute
-	    Set<String> clusters = new HashSet<String>(action.val.get(0).get("host"));
+	    Set<String> clusters;
+	    if (action.val.get(0).get("host") != null)
+		clusters = new HashSet<String>(action.val.get(0).get("host"));
+	    else 
+		clusters = new HashSet<String>();
 	    loginClusterCache.put(groupName, clusters);
 	    return clusters;
 	}
