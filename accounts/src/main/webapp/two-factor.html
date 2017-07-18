@@ -13,6 +13,12 @@ background-color: #ffffdd;
 .textblock2 {
 background-color: #eeeeee;
 }
+h3 {
+margin-top: 2em;
+}
+h4 {
+margin-top: 1.75em;
+letter-spacing: 1px;}
 </style>
 <head><link href="usertool.css" rel="stylesheet" type="text/css">
 </head>
@@ -29,17 +35,50 @@ can be used, as in the past.
 <p> There are things to think about before using two-factor authentication.
 See the section at the end.
 
+<p> For more detailed documentation, see the <a href="https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Linux_Domain_Identity_Authentication_and_Policy_Guide/otp.html"> Redhat one-time password documentation</a>.
+
+
+<h3> Enabling Two-factor Authentication</h3>
+
 <p> To use two-factor authentication, login to the
 <a href="https://krb1.cs.rutgers.edu"> IPA Administrative Application</a>.
 Note that once you've enabled two-factor authentication,
 if you forget the device it uses, 
 you'll need to come in person to get us to disable it.
 
+<p> Alternatively, you can do this from the command line:
+<blockquote>
+ipa user-mod YOURNETID --user-auth-type=otp<br>
+ipa otptoken-add<br>
+</blockquote>
+The second command will display a QR code. In the phone app,
+hit the QR icon and use the camera to scan the QR code displayed.
+
+<p> To enable Yubikey, you have to use a command-line program,
+<blockquote>
+ipa otptoken-add-yubikey
+</blockquote>
+
+<p> If you use Yubikey, we recommend also using the other type
+of OTP, since Yubikey won't let you ssh from a non-CS system
+such as your home computer.
+
+<h3>Mobile Device Clients</h3>
+
 <p> Clients for TOTP and HOTP are available for IOS and Android. Look for
 "FreeOTP" in the appropriate store. The web application will display a QR
 code when you scan with the phone application to configure it.
 
-<p> FreeOTP will display a 6-digit code. To login, type your normal password,
+<p> Note that FreeOTP should be compatible with Google authenticator,
+in both directions. If you're using something other than an iPhone or Android, we suggest
+checking for an implementation of Google Authenticator for your system.
+
+<p> FreeOTP is apparently a fork of Google Authenticator's last
+open-source Android version. It's licensed under Apache 2.0.
+
+<h4>USING THE CLIENT</h4>
+
+<p> FreeOTP on your mobile device will display a 6-digit code. To login, type your normal password,
 adding the 6 digits to the end.
 
 <p> If you're worried about forgetting or losing your phone, one approach is
@@ -48,17 +87,6 @@ TOTP for normal use. If you lose your phone, you can login with the keys
 from your wallet until you can replace it or ask us to remove two-factor
 authentication.
 
-<p> To enable Yubikey, you have to use a command-line program,
-<blockquote>
-ipa otptoken-add-yubikey
-</blockquote>
-
-<p> See the <a href="https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Linux_Domain_Identity_Authentication_and_Policy_Guide/otp.html"> Redhat one-time password documentation</a> for instructions
-on all of these options.
-
-<p> Yubikey will only let you get credentials on a system you are actually
-sitting at. If you use it we recommend enabling at least one of HOTP or TOTP.
-That will let you work from home.
 
 <h3> Possible problems </h3>
 
@@ -75,7 +103,7 @@ and also need to use cron:
 <li> Use <a href="https://www.cs.rutgers.edu/~makmur/howto/googleauthenticator/index.whtml">Google authenticator</a>. This is a form of two-factor 
 authentication that is checked only for interactive login. It's not
 as secure, because if someone is able to become root, and knows your
-password, they can access your files. However for many users it 
+password, they can access your files without the second factor. However for many users it 
 may be good enough. It works with cron jobs, though you'll still
 need to use "kgetcred -r" to register any system where you run
 cron jobs.
@@ -89,6 +117,7 @@ to help@cs.rutgers.edu. (Alternatively, you could use two-factor
 authentication for the second userid and not your primary userid.)
 <li> Store all files needed by the cron job on local file systems.
 For many systems that's /freespace. Note however that freespace is
-not backed up, and is likely to get wiped between semesters.
+not backed up, and is likely to get wiped between semesters. For that
+reason we recommend keeping a copy of the file in your home directory.
 </ul>
 

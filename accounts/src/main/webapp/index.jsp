@@ -48,7 +48,7 @@ your University password, you can change your CS password.
 This will show you a Computer Science login screen.
 <li> <a href="<%=Activator.Config.getConfig().usermgmturl%>">Kerberos user management (two factor authentication).</a> This lets you look for users and change your own
 user information. Note that the information here isn't really visible to anyone. So the only real usefulness of this
-tool is the ability to enable two factor authentication for your account. See <a href="two-factor.html"> two factor authentication</a> for specifics. This page will show you a Computer Science login screen.
+tool is the ability to enable two factor authentication for your account. See <a href="two-factor.html"> two factor authentication</a> for specifics. This page will show you a Computer Science login screen. If you have trouble with the web application, the <a href="two-factor.html"> two-factor web page</a> gives instructions for enabling it from the command line.
 </ul>
 <div class="textblock" style="margin-top:3em">
 <p>NOTE on <b>cron jobs</b>: For systems that use these accounts, 
