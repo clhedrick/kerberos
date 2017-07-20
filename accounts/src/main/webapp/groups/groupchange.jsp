@@ -6,6 +6,10 @@
 <%@ page import="javax.naming.directory.*" %>
 <%@ page import="javax.naming.ldap.*" %>
 <%@ page import="java.io.*" %>
+<%@ page import="java.text.SimpleDateFormat" %>
+<%@ page import="java.util.Date" %>
+<%@ page import="java.util.Locale" %>
+<%@ page import="java.util.TimeZone" %>
 <%@ page import="com.sun.security.auth.callback.TextCallbackHandler" %>
 <%@ page import="java.util.Hashtable" %>
 <%@ page import="java.util.ArrayList" %>
@@ -95,6 +99,10 @@
 	   }
        }
 
+       SimpleDateFormat format = new SimpleDateFormat("yyyyMMddHHmmss");
+       format.setTimeZone(TimeZone.getTimeZone("UTC"));
+       String dateString = format.format(new Date());
+
        ArrayList<String> command = new ArrayList<String>();
        command.add("ipa");
        command.add("group-add");
@@ -102,10 +110,12 @@
 	   command.add("--nonposix");
        if (guests)
 	   command.add("--setattr=businesscategory=login");
+       command.add("--setattr=dateOfCreate=" + dateString + "Z");
        command.add(name);
        logger.info(command);
        if (docommand.docommand(command.toArray(new String[1]), env) != 0)
 	   ok = false;
+
    }
 
    if (ok)
