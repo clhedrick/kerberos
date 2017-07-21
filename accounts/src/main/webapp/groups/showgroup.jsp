@@ -123,6 +123,12 @@ $(document).ready(function(){
 <%= utils.getCsrf(request) %>
 <%
 
+// TODO:
+// if dateOfModidy is set, owners have been notified to revalidate the group
+// display an extra box with date of last validatation (dateOfCreate), date
+// of notification (dateOfModify) and a button "verify". The button will update
+// dateOfCreate to current date and remove dateOfModify
+
  // This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.
  // This JndiAction junk is needed to execute the LDAP code in a context that's authenticated by
  // that Subject.

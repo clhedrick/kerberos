@@ -110,6 +110,8 @@
 	   command.add("--nonposix");
        if (guests)
 	   command.add("--setattr=businesscategory=login");
+       // dateOfCreate is most recent revalidation by the owner
+       // dateOfModify will be used for date owners were notified to revalidate
        command.add("--setattr=dateOfCreate=" + dateString + "Z");
        command.add(name);
        logger.info(command);

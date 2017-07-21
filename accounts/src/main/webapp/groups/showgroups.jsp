@@ -37,9 +37,23 @@ function deleteKeyPress(event) {
   }
 }
 
+function validateSubmit(event) {
+  if (! ($("#sharing").prop("checked") || $("guests").prop("checked"))) {
+    alert("Sharing and/or guests must be checked");
+    event.preventDefault();
+    return;
+  }
+  if ($("#name").val() == '') {
+    alert("Name for the new group must be supplied");
+    event.preventDefault();
+    return;
+  }
+}
+
 $(document).ready(function(){
     $(".deleteButton").click(deletegroup);
     $(".deleteButton").keypress(deleteKeyPress);
+    $("#submit").click(validateSubmit);
     });
 
 </script>
@@ -106,13 +120,13 @@ ArrayList<HashMap<String, ArrayList<String>>> groups = action.val;
 <h3 style="margin-top:2em"> Add Group </h3>
 
 <div class="inset" style="margin-top:1em">
-<label>Group Name: <input type="text" name="name"/></label>
+<label>Group Name: <input type="text" name="name" id="name"/></label>
 <br>
-<label><input type="checkbox" name="sharing"> Group should be available for file sharing.</label>
+<label><input type="checkbox" name="sharing" id="sharing"> Group should be available for file sharing.</label>
 <br>
-<label><input type="checkbox" name="guests"> Users in group should be able to login.</label>
+<label><input type="checkbox" name="guests" id="guests"> Users in group may be guests. Accounts for them will be added if they don't already exist.</label>
 <p>
-<input type="submit">
+<input type="submit" id="submit">
 </div>
 </form>
 <div class="explanation" style="margin-top:2em">
