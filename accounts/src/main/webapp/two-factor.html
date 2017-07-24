@@ -32,6 +32,16 @@ letter-spacing: 1px;}
 authentication: TOTP, HOTP, and Yubikey. In addition, Google authenticator
 can be used, as in the past. 
 
+<p> TOTP and HOTP both work with an application on your phone or other
+device. The application displays a 6-digit number, which you need to add at
+the end of your password to login. 
+
+<p> TOTP and HOTP use slightly different algorithms.
+TOTP is based on the time. The same code works for about 30 sec. HOTP is based
+on count. That is, the next number applies no matter when you use it. 
+That means you can generate numbers from HOTP and keep them in your wallet.
+With TOTP you need your phone with you to login. 
+
 <p> There are things to think about before using two-factor authentication.
 See the section at the end.
 
@@ -40,21 +50,25 @@ See the section at the end.
 
 <h3> Enabling Two-factor Authentication</h3>
 
-<p> To use two-factor authentication, login to the
-<a href="https://krb1.cs.rutgers.edu"> IPA Administrative Application</a>.
-Note that once you've enabled two-factor authentication,
-if you forget the device it uses, 
-you'll need to come in person to get us to disable it.
+<p> Two-factor authentication uses "tokens." For TOTP and HOTP, a token is simply
+an item that shows in your mobile app. The same mobile app can have tokens for many different
+systems. You can also have more than one token for a system, e.g. one for TOTP and one for
+HOTP.
 
-<p> Alternatively, you can do this from the command line:
+<p> To enable two-factor authentication, log into one of our systems.
+To add a TOTP token, type
 <blockquote>
-ipa user-mod YOURNETID --user-auth-type=otp<br>
 ipa otptoken-add<br>
 </blockquote>
-The second command will display a QR code. In the phone app,
-hit the QR icon and use the camera to scan the QR code displayed.
+This command will display a QR code. In the phone app,
+hit the QR icon and use the camera to scan the QR code displayed. This uses
+TOTP. To add a HOTP token, use 
+<blockquote>
+ipa otptoken-add --type=hotp
+</blockquote>
 
-<p> To enable Yubikey, you have to use a command-line program,
+<p> Yubikey is a physical device that you carry with you and plug into a USB port.
+If you have a Yubikey, you can use it with our system. Insert your key, and then type the command
 <blockquote>
 ipa otptoken-add-yubikey
 </blockquote>
@@ -65,16 +79,14 @@ such as your home computer.
 
 <h3>Mobile Device Clients</h3>
 
-<p> Clients for TOTP and HOTP are available for IOS and Android. Look for
-"FreeOTP" in the appropriate store. The web application will display a QR
-code when you scan with the phone application to configure it.
+<p> Clients for TOTP and HOTP are available for many devices. For IOS and Android, look for
+"FreeOTP" in the appropriate app store. The ipa otptoken-add command will display a QR
+code, which you scan with the phone application to configure it.
 
-<p> Note that FreeOTP should be compatible with Google authenticator,
-in both directions. If you're using something other than an iPhone or Android, we suggest
-checking for an implementation of Google Authenticator for your system.
+<p> Because the TOTP and HOTP standards are also used by Google authenticator, you can
+also use a Google authenticator implementation on your device. For devices other than IOS and
+Android, we recommend looking for a Google authenticator implementation.
 
-<p> FreeOTP is apparently a fork of Google Authenticator's last
-open-source Android version. It's licensed under Apache 2.0.
 
 <h4>USING THE CLIENT</h4>
 
@@ -84,8 +96,9 @@ adding the 6 digits to the end.
 <p> If you're worried about forgetting or losing your phone, one approach is
 to add both HOTP and TOTP. Generate several keys using HOTP and keep them in your wallet. Then use
 TOTP for normal use. If you lose your phone, you can login with the keys
-from your wallet until you can replace it or ask us to remove two-factor
-authentication.
+from your wallet until you can replace it or remove two-factor
+authentication. (Use "ipa otptoken-find" to list your tokens, and "ipa otptoken-del UNIQUEID" to
+remove one.)
 
 
 <h3> Possible problems </h3>
@@ -100,9 +113,10 @@ userid automatically when the system restarts.
 and also need to use cron:
 
 <ul>
-<li> Use <a href="https://www.cs.rutgers.edu/~makmur/howto/googleauthenticator/index.whtml">Google authenticator</a>. This is a form of two-factor 
-authentication that is checked only for interactive login. It's not
-as secure, because if someone is able to become root, and knows your
+<li> Use <a href="https://www.cs.rutgers.edu/~makmur/howto/googleauthenticator/index.whtml">Google authenticator</a>.
+While Google authenticator uses the same technology as the two-factor code in Kerberos, it's
+checked a different way. Login checks Google authenticator but cron does not.
+It's not quite as secure, because if someone is able to become root, and knows your
 password, they can access your files without the second factor. However for many users it 
 may be good enough. It works with cron jobs, though you'll still
 need to use "kgetcred -r" to register any system where you run
@@ -118,6 +132,6 @@ authentication for the second userid and not your primary userid.)
 <li> Store all files needed by the cron job on local file systems.
 For many systems that's /freespace. Note however that freespace is
 not backed up, and is likely to get wiped between semesters. For that
-reason we recommend keeping a copy of the file in your home directory.
+reason we recommend keeping a copy of the files in your home directory.
 </ul>
 
