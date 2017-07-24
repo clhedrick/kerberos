@@ -38,7 +38,7 @@ function deleteKeyPress(event) {
 }
 
 function validateSubmit(event) {
-  if (! ($("#sharing").prop("checked") || $("guests").prop("checked"))) {
+  if (! ($("#sharing").prop("checked") || $("#guests").prop("checked"))) {
     alert("Sharing and/or guests must be checked");
     event.preventDefault();
     return;

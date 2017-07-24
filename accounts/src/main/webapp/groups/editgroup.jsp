@@ -306,9 +306,18 @@ class JndiAction implements java.security.PrivilegedAction {
    }
 
    ArrayList<String> clusters = new ArrayList<String>();
-   clusters.add("ilab");
-   clusters.add("grad");
-   
+
+   Config aconfig = new Config();
+   try {
+       aconfig.loadConfig();
+   } catch (Exception e) {
+       out.println("<p> Unable to load configuration.");
+       return;
+   }
+
+   for (Config.Cluster cluster: aconfig.clusters)
+       clusters.add(cluster.name);
+
    String hosts[] = request.getParameterValues("hosts"); 
    List<String>newhosts = null;
    if (hosts == null)

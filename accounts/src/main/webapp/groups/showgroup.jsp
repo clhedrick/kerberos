@@ -16,37 +16,25 @@
 <%@ page import="common.lu" %>
 <%@ page import="common.utils" %>
 <%@ page import="common.JndiAction" %>
+<%@ page import="Activator.Config" %>
 
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
 function checknewmember() {
-     var hasempty = false;
-     $(".newmember").each(function() {
-	     if (!$(this).val())
-		 hasempty = true;
-	 });
-     if (!hasempty) {
 	 $(".newmember").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as member</span>: <input class=\"newmember\" type=\"text\" name=\"newmember\"></label>");
-	 $(".newmember").change(checknewmember);
-     }
+	 $(".newmember").off('input', checknewmember);
+	 $(".newmember").last().on('input', checknewmember);
  };
 
 $(document).ready(function(){
-    $(".newmember").change(checknewmember);
+	 $(".newmember").on('input', checknewmember);
     });
 
 function checknewowner() {
-     var hasempty = false;
-     $(".addowner").each(function() {
-	     if (!$(this).val())
-		 hasempty = true;
-	 });
-     if (!hasempty) {
 	 $(".addowner").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label>");
-
-	 $(".addowner").change(checknewowner);
-     }
+	 $(".addowner").off('input', checknewowner);
+	 $(".addowner").last().on('input', checknewowner);
  };
 
 function deleteMember(event) {
@@ -85,7 +73,7 @@ function deleteOwnerKeyPress(event) {
 }
 
 $(document).ready(function(){
-    $(".addowner").change(checknewowner);
+    $(".addowner").on('input', checknewowner);
     $(".deleteMemberButton").click(deleteMember);
     $(".deleteMemberButton").keypress(deleteMemberKeyPress);
     $(".deleteOwnerButton").click(deleteOwner);
@@ -122,12 +110,6 @@ $(document).ready(function(){
 <form action="editgroup.jsp" method="post">
 <%= utils.getCsrf(request) %>
 <%
-
-// TODO:
-// if dateOfModidy is set, owners have been notified to revalidate the group
-// display an extra box with date of last validatation (dateOfCreate), date
-// of notification (dateOfModify) and a button "verify". The button will update
-// dateOfCreate to current date and remove dateOfModify
 
  // This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.
  // This JndiAction junk is needed to execute the LDAP code in a context that's authenticated by
@@ -188,8 +170,17 @@ List<String>categories = attrs.get("businesscategory");
 boolean islogin = (categories != null && categories.contains("login"));
 
 List<String> clusters = new ArrayList<String>();
-clusters.add("ilab");
-clusters.add("grad");
+
+Config aconfig = new Config();
+try {
+    aconfig.loadConfig();
+} catch (Exception e) {
+    out.println("<p> Unable to load configuration.");
+    return;
+}
+
+for (Config.Cluster cluster: aconfig.clusters)
+    clusters.add(cluster.name);
 
 List<String> hosts = lu.valList(attrs.get("host"));
 
