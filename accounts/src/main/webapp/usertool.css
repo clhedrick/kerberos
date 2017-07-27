@@ -40,3 +40,39 @@ h3 {
   font: 16pt Arial, Helvetica;
   margin-bottom: 0.25em;
 }
+h4 {
+  font: 12pt Arial, Helvetica;
+  margin-bottom: 0.25em;
+}
+.addarea {
+  display: inline-block;
+  margin-top: 1em;
+  margin-left: 1em;
+  background-color: #eee;
+  padding: 0.5em;
+  padding-right: 1em;
+  border: 1px solid;
+  border-color: #aaa;
+}
+.addarea h4 {
+  margin-top: 0px;
+}
+.inset {
+  margin-left: 1em;
+}
+.explanation {
+  margin-top: 1em;
+  background-color: #eee;
+  padding-left: 1em;
+  padding-right: 1em;
+  border: 1px solid;
+  border-color: #aaa;
+}
+.hidden {
+  position:absolute;
+  left:-10000px;
+  top:auto;
+  width:1px;
+  height:1px;
+  overflow:hidden;
+}

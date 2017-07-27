@@ -57,12 +57,12 @@ public class Config {
     }
 
     public class Cluster {
-	String name;
+	public String name;
 	List<Rule> rules;
 	Set<String> groups;
     }
     
-    List<Cluster> clusters = new ArrayList<Cluster>();
+    public List<Cluster> clusters = new ArrayList<Cluster>();
     Cluster managed = null;
     Cluster departments = null;
 

@@ -16,42 +16,71 @@
 <%@ page import="common.lu" %>
 <%@ page import="common.utils" %>
 <%@ page import="common.JndiAction" %>
+<%@ page import="Activator.Config" %>
 
 <head><link href="../usertool.css" rel="stylesheet" type="text/css">
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
 function checknewmember() {
-     var hasempty = false;
-     $(".newmember").each(function() {
-	     if (!$(this).val())
-		 hasempty = true;
-	 });
-     if (!hasempty) {
-	 $(".newmember").last().parent().after("<br/><label>User name to add as member: <input class=\"newmember\" type=\"text\" name=\"newmember\"></label>");
-	 $(".newmember").change(checknewmember);
-     }
+	 $(".newmember").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as member</span>: <input class=\"newmember\" type=\"text\" name=\"newmember\"></label>");
+	 $(".newmember").off('input', checknewmember);
+	 $(".newmember").last().on('input', checknewmember);
  };
 
 $(document).ready(function(){
-    $(".newmember").change(checknewmember);
+	 $(".newmember").on('input', checknewmember);
     });
 
 function checknewowner() {
-     var hasempty = false;
-     $(".addowner").each(function() {
-	     if (!$(this).val())
-		 hasempty = true;
-	 });
-     if (!hasempty) {
-	 $(".addowner").last().parent().after("<br/><label>User name to add as owner: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label><br>");
-
-	 $(".addowner").change(checknewowner);
-     }
+	 $(".addowner").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label>");
+	 $(".addowner").off('input', checknewowner);
+	 $(".addowner").last().on('input', checknewowner);
  };
 
+function deleteMember(event) {
+  var member = $(event.target).next().val();
+  if (!confirm("Are you sure you want to delete this member?"))
+    return;
+  $("#deleteInput").val(member);
+  $("#deleteSubmit").click();
+}
+
+function deleteMemberKeyPress(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 32 || event.keyCode === 13) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    deleteMember(event);
+  }
+}
+
+
+function deleteOwner(event) {
+  var owner = $(event.target).next().val();
+  if (!confirm("Are you sure you want to delete this owner?"))
+    return;
+  $("#deleteOwnerInput").val(owner);
+  $("#deleteOwnerSubmit").click();
+}
+
+function deleteOwnerKeyPress(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 32 || event.keyCode === 13) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    deleteOwner(event);
+  }
+}
+
 $(document).ready(function(){
-    $(".addowner").change(checknewowner);
+    $(".addowner").on('input', checknewowner);
+    $(".deleteMemberButton").click(deleteMember);
+    $(".deleteMemberButton").keypress(deleteMemberKeyPress);
+    $(".deleteOwnerButton").click(deleteOwner);
+    $(".deleteOwnerButton").keypress(deleteOwnerKeyPress);
     });
+
+
 
 </script>
 </head>
@@ -62,6 +91,21 @@ $(document).ready(function(){
 <h2> Show and Edit Group </h2>
 
 
+
+<% String gname = request.getParameter("name"); %>
+
+<form action="editgroup.jsp" method="post" id="deleteForm" style="display:none">
+<%= utils.getCsrf(request) %>
+<input type="text" name="del" id="deleteInput"/>
+<input type="hidden" name="groupname" value="<%=lu.esc(gname)%>">
+<input type="submit" id="deleteSubmit"/>
+</form>
+<form action="editgroup.jsp" method="post" id="deleteOwnerForm" style="display:none">
+<%= utils.getCsrf(request) %>
+<input type="text" name="delowner" id="deleteOwnerInput"/>
+<input type="hidden" name="groupname" value="<%=lu.esc(gname)%>">
+<input type="submit" id="deleteOwnerSubmit"/>
+</form>
 
 <form action="editgroup.jsp" method="post">
 <%= utils.getCsrf(request) %>
@@ -100,8 +144,6 @@ if (subject == null) {
     return;
 }
 
-String gname = request.getParameter("name");
-
 // This acton isn't done until it's called by doAs
 common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + gname + "))", "", "cn", "member", "host", "businessCategory", "dn", "gidNumber", "owner", "creatorsName"});
 
@@ -128,8 +170,17 @@ List<String>categories = attrs.get("businesscategory");
 boolean islogin = (categories != null && categories.contains("login"));
 
 List<String> clusters = new ArrayList<String>();
-clusters.add("ilab");
-clusters.add("grad");
+
+Config aconfig = new Config();
+try {
+    aconfig.loadConfig();
+} catch (Exception e) {
+    out.println("<p> Unable to load configuration.");
+    return;
+}
+
+for (Config.Cluster cluster: aconfig.clusters)
+    clusters.add(cluster.name);
 
 List<String> hosts = lu.valList(attrs.get("host"));
 
@@ -138,33 +189,44 @@ List<String> hosts = lu.valList(attrs.get("host"));
 <input type="hidden" name="groupname" value="<%=lu.esc(gname)%>">
 <p> Group: <%= lu.esc(gname) %><%= gid %>
 
-<% if (lu.hasVal(attrs.get("member"))) { %>
-<h3>Members</h3>
 
+<h3>Members</h3>
+<div class="inset" style="margin-top:0.5em">
+<% if (lu.hasVal(attrs.get("member"))) { %>
 <% for (String m: attrs.get("member")) { String member = lu.dn2user(m); %>
-<%= lu.esc(member) %> <input type="checkbox" name="del" value="<%= lu.esc(member) %>" title="Delete member <%= lu.esc(member) %>"> <br>
+<%= lu.esc(member) %> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete member <%= lu.esc(member) %>" class="deleteMemberButton"><input type="hidden" name="deleteName" value="<%= lu.esc(member) %>"><br>
+
 <% }} %>
 
-<h3>Add member</h3>
-<label>User name to add as member: <input class="newmember" type="text" name="newmember"></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br>
+<h4>Add member</h4>
+<div class="inset">
+<label>User name <span class="hidden"> to add as member</span>: <input class="newmember" type="text" name="newmember"></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br>
 
 <% if (lu.hasVal(attrs.get("creatorsname")) || lu.hasVal(attrs.get("owner"))) { %>
-<h3>Owners</h3>
 
+<input type="submit" style="margin-top:0.5em"/>
+</div>
+</div>
+<h3 style="margin-top:1.5em">Owners</h3>
+<div class="inset" style="margin-top:0.5em">
 <% if (lu.hasVal(attrs.get("creatorsname"))) {  %>
 <%= lu.esc(lu.dn2user(lu.oneVal(attrs.get("creatorsname")))) %><br>
 <% } %>
 
 <% if (attrs.get("owner") != null) { for (String o: attrs.get("owner")) { String owner = lu.dn2user(o); %>
-<%= lu.esc(owner) %> <input type="checkbox" name="delowner" value="<%= lu.esc(owner) %>" title="Delete owner <%= lu.esc(owner) %>"><br>
+<%= lu.esc(owner) %> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete owner <%= lu.esc(owner) %>" class="deleteOwnerButton"><input type="hidden" name="deleteOwnerName" value="<%= lu.esc(owner) %>"><br>
 
 <% }}} %>
-
-<h3>Add Owner</h3>
-<label>User name to add as owner: <input class="addowner" type="text" name="newowner"></label><br>
+<h4>Add Owner</h4>
+<div class="inset">
+<label>User name<span class="hidden"> to add as owner</span>: <input class="addowner" type="text" name="newowner"></label><br>
+<input type="submit" style="margin-top:0.5em"/>
+</div>
+</div>
 
 <h3>Login Ability</h3>
 
+<div class="inset">
 <p><label><input type="checkbox" name="login" <%= (islogin ? "checked" : "") %>> Members of group can login to specified clusters<p>
 <% for (String c: clusters) { %>
 <label><input type="checkbox" name="hosts" value="<%=c%>" <%= (hosts.contains(c) ? "checked" : "") %>> <%= c %><br>
@@ -172,4 +234,5 @@ List<String> hosts = lu.valList(attrs.get("host"));
 
 <p>
 <input type="submit">
+</div>
 </form>

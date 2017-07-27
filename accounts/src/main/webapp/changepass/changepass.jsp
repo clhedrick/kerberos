@@ -44,7 +44,7 @@ password, but we're not going to force you to do that.
 
 <% } else { %>
 
-<h2> Password reset for Computer Science Dept password </h2>
+<h2> Set or reset password for Computer Science Dept systems </h2>
 
 <p> The Computer Science Department has passwords that are separate
 from University passwords. This allows us to provide improved security
@@ -52,7 +52,7 @@ for your data.
 
 <p>The CS Dept password is used for login to computers in labs and in offices. In contrast to these login passwords, most of our web applications use your University password. 
 
-<p>This form allows you to change CS Dept password.
+<p>This form allows you to set or reset your CS Dept password.
 
 <p> We don't ask for your old password, because you have already logged in with
 your University password.
@@ -60,9 +60,9 @@ your University password.
 <p> It is preferable to use a password that's different from your University
 password, but we're not going to force you to do that.
 
-<h2> How to change your password </h2>
+<h2> How to set or reset your password </h2>
 
-<p> This web application lets you change your CS password as long as you
+<p> This web application lets you reset your CS password as long as you
 remember your University password. It's convenient if you forget your CS
 password, or haven't set one up yet.
 
@@ -110,7 +110,7 @@ for (int i = 0; i < 1000; i++) {
 }
 %>
 
-<h2> Change password here</h2>
+<h2> Set password here</h2>
 
 <p>
 <form action="changepass1.jsp" method="post">
