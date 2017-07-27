@@ -1,4 +1,5 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<%@ taglib prefix = "c" uri = "http://java.sun.com/jsp/jstl/core" %>
 <%@ page import="javax.security.auth.*" %>
 <%@ page import="javax.security.auth.callback.*" %>
 <%@ page import="javax.security.auth.login.*" %>
@@ -10,7 +11,9 @@
 <%@ page import="java.util.Hashtable" %>
 <%@ page import="java.util.Set" %>
 <%@ page import="java.util.ArrayList" %>
+<%@ page import="java.util.List" %>
 <%@ page import="java.util.HashMap" %>
+<%@ page import="java.util.Map" %>
 <%@ page import="org.apache.commons.lang3.StringEscapeUtils" %>
 <%@ page import="java.net.URLEncoder" %>
 <%@ page import="common.lu" %>
@@ -101,22 +104,38 @@ Subject.doAs(subject, action);
 // look at the results of the LDAP query
 ArrayList<HashMap<String, ArrayList<String>>> groups = action.val;
 
+// format for display
+List<Map<String,String>> groupList = new ArrayList<Map<String,String>>();
+
+for (HashMap<String, ArrayList<String>> group: groups) {
+   // fields to show
+   Map<String,String> gDisplay = new HashMap<String,String>();
+   String name = lu.oneVal(group.get("cn"),"");
+   gDisplay.put("name", name);
+   gDisplay.put("nameu", URLEncoder.encode(name));
+   String gid = lu.oneVal(group.get("gidnumber"), "");  // if no gid, leave blank
+   gDisplay.put("gid", gid);
+   groupList.add(gDisplay);
+}
+
+pageContext.setAttribute("groupList", groupList);
 
 %>
 
-<% if (groups.size() > 0) { %>
+<c:if test="${! empty groupList}">
 
 <h3>Current groups owned by you</h3>
 
 <div class="inset" style="padding-top:0.5em">
 
-<% for (HashMap<String, ArrayList<String>> group: groups) { String name=lu.oneVal(group.get("cn")); %>
+<c:forEach items="${groupList}" var="g">
 
-<a href="showgroup.jsp?name=<%= URLEncoder.encode(name) %>"><%= lu.esc(name) %></a> <%= (lu.hasVal(group.get("gidnumber")) ? lu.esc(lu.oneVal(group.get("gidnumber"))) : "") %><img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete group <%= lu.esc(name) %>" class="deleteButton"><input type="hidden" name="deleteName" value="<%= lu.esc(name) %>"><br>
+<a href="showgroup.jsp?name=${g.nameu}"><c:out value="${g.name}"/></a> <c:out value="${g.gid}"/><img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete group <c:out value="${g.name}"/>" class="deleteButton"><input type="hidden" name="deleteName" value="<c:out value="${g.name}"/>"><br>
 
-<% }} %>
+</c:forEach>
+
 </div>
-
+</c:if>
 <h3 style="margin-top:2em"> Add Group </h3>
 
 <div class="inset" style="margin-top:1em">

@@ -1,4 +1,5 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<%@ taglib prefix = "c" uri = "http://java.sun.com/jsp/jstl/core" %>
 <%@ page import="javax.security.auth.*" %>
 <%@ page import="javax.security.auth.callback.*" %>
 <%@ page import="javax.security.auth.login.*" %>
@@ -8,6 +9,7 @@
 <%@ page import="com.sun.security.auth.callback.TextCallbackHandler" %>
 <%@ page import="java.util.Hashtable" %>
 <%@ page import="java.util.HashMap" %>
+<%@ page import="java.util.Map" %>
 <%@ page import="java.util.ArrayList" %>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.Set" %>
@@ -159,6 +161,9 @@ if (action.val.size() != 1) {
 
 HashMap<String, ArrayList<String>> attrs = action.val.get(0);
 
+// the rest of this code is preparing the data model in a form appropriate
+// for JSTL to display
+
 String gid = lu.oneVal(attrs.get("gidnumber"));
 if (gid == null)
     gid = "";
@@ -169,8 +174,6 @@ else
 List<String>categories = attrs.get("businesscategory");
 boolean islogin = (categories != null && categories.contains("login"));
 
-List<String> clusters = new ArrayList<String>();
-
 Config aconfig = new Config();
 try {
     aconfig.loadConfig();
@@ -179,44 +182,80 @@ try {
     return;
 }
 
+// convert list from member dn to member name
+List<String> members = new ArrayList<String>();
+for (String m: attrs.get("member")) {
+   members.add(lu.dn2user(m));
+}
+
+pageContext.setAttribute("members", members);
+pageContext.setAttribute("gname", gname);
+pageContext.setAttribute("gid", gid);
+
+String creatorsname = lu.oneVal(attrs.get("creatorsname"));
+if (creatorsname != null)
+   creatorsname = lu.dn2user(creatorsname);				    
+pageContext.setAttribute("creatorsname", creatorsname);
+
+// convert list from owner dn to owner name
+List<String> owners = new ArrayList<String>();
+for (String o: attrs.get("owner")) {
+   owners.add(lu.dn2user(o));
+}
+pageContext.setAttribute("owners", owners);
+
+pageContext.setAttribute("islogin", (islogin?"checked":""));
+
+List<String> clusters = new ArrayList<String>();
 for (Config.Cluster cluster: aconfig.clusters)
     clusters.add(cluster.name);
+pageContext.setAttribute("clusters", clusters);
 
 List<String> hosts = lu.valList(attrs.get("host"));
+Map<String,String> hostMap = new HashMap<String,String>();
+for (String cluster:clusters) {
+    hostMap.put(cluster, "");  // default is not there
+}
+for (String host: hosts) {
+    hostMap.put(host,"checked=\"checked\"");  // set for the ones that are
+}
+pageContext.setAttribute("hosts", hostMap);
 
 %>
 
-<input type="hidden" name="groupname" value="<%=lu.esc(gname)%>">
-<p> Group: <%= lu.esc(gname) %><%= gid %>
+<input type="hidden" name="groupname" value="<c:out value="${gname}"/>">
+<p> Group: <c:out value="${gname}"/><c:out value="${gid}"/>
 
 
 <h3>Members</h3>
 <div class="inset" style="margin-top:0.5em">
-<% if (lu.hasVal(attrs.get("member"))) { %>
-<% for (String m: attrs.get("member")) { String member = lu.dn2user(m); %>
-<%= lu.esc(member) %> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete member <%= lu.esc(member) %>" class="deleteMemberButton"><input type="hidden" name="deleteName" value="<%= lu.esc(member) %>"><br>
+<c:if test="${! empty members}">
+<c:forEach items="${members}" var="m">
+<c:out value="${m}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete member <c:out value="${m}"/>" class="deleteMemberButton"><input type="hidden" name="deleteName" value="<c:out value="${m}"/>"><br>
 
-<% }} %>
+</c:forEach>
+</c:if>
 
 <h4>Add member</h4>
 <div class="inset">
 <label>User name <span class="hidden"> to add as member</span>: <input class="newmember" type="text" name="newmember"></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br>
 
-<% if (lu.hasVal(attrs.get("creatorsname")) || lu.hasVal(attrs.get("owner"))) { %>
-
 <input type="submit" style="margin-top:0.5em"/>
 </div>
 </div>
+<c:if test="${(! empty creatorsname) || (! empty owners)}">
 <h3 style="margin-top:1.5em">Owners</h3>
 <div class="inset" style="margin-top:0.5em">
-<% if (lu.hasVal(attrs.get("creatorsname"))) {  %>
-<%= lu.esc(lu.dn2user(lu.oneVal(attrs.get("creatorsname")))) %><br>
-<% } %>
 
-<% if (attrs.get("owner") != null) { for (String o: attrs.get("owner")) { String owner = lu.dn2user(o); %>
-<%= lu.esc(owner) %> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete owner <%= lu.esc(owner) %>" class="deleteOwnerButton"><input type="hidden" name="deleteOwnerName" value="<%= lu.esc(owner) %>"><br>
+<c:if test="${! empty creatorsname}">
+<c:out value="${creatorsname}"/><br>
+</c:if>
 
-<% }}} %>
+<c:forEach items="${owners}" var="o">
+<c:out value="${o}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete owner <c:out value="${o}"/>" class="deleteOwnerButton"><input type="hidden" name="deleteOwnerName" value="<c:out value="${o}"/>"><br>
+</c:forEach>
+</c:if>
+
 <h4>Add Owner</h4>
 <div class="inset">
 <label>User name<span class="hidden"> to add as owner</span>: <input class="addowner" type="text" name="newowner"></label><br>
@@ -227,10 +266,10 @@ List<String> hosts = lu.valList(attrs.get("host"));
 <h3>Login Ability</h3>
 
 <div class="inset">
-<p><label><input type="checkbox" name="login" <%= (islogin ? "checked" : "") %>> Members of group can login to specified clusters<p>
-<% for (String c: clusters) { %>
-<label><input type="checkbox" name="hosts" value="<%=c%>" <%= (hosts.contains(c) ? "checked" : "") %>> <%= c %><br>
-<% } %>
+<p><label><input type="checkbox" name="login" ${islogin}> Members of group can login to specified clusters<p>
+<c:forEach items="${clusters}" var="c">
+<label><input type="checkbox" name="hosts" value="<c:out value="${c}"/>" ${hosts[c]}> <c:out value="${c}"/><br>
+</c:forEach>
 
 <p>
 <input type="submit">
