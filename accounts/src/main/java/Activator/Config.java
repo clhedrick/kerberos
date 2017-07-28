@@ -60,6 +60,7 @@ public class Config {
 	public String name;
 	List<Rule> rules;
 	Set<String> groups;
+	public String getName(){return name;}
     }
     
     public List<Cluster> clusters = new ArrayList<Cluster>();

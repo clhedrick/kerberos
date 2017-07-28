@@ -161,19 +161,6 @@ if (action.val.size() != 1) {
 
 HashMap<String, ArrayList<String>> attrs = action.val.get(0);
 
-// the rest of this code is preparing the data model in a form appropriate
-// for JSTL to display
-
-String gid = lu.oneVal(attrs.get("gidnumber"));
-if (gid == null)
-    gid = "";
-else
-    gid = ", " + gid;
-
-
-List<String>categories = attrs.get("businesscategory");
-boolean islogin = (categories != null && categories.contains("login"));
-
 Config aconfig = new Config();
 try {
     aconfig.loadConfig();
@@ -182,56 +169,30 @@ try {
     return;
 }
 
-// convert list from member dn to member name
-List<String> members = new ArrayList<String>();
-for (String m: attrs.get("member")) {
-   members.add(lu.dn2user(m));
-}
+// set up model for JSTL to display
 
-pageContext.setAttribute("members", members);
+pageContext.setAttribute("members", attrs.get("member"));
 pageContext.setAttribute("gname", gname);
-pageContext.setAttribute("gid", gid);
-
-String creatorsname = lu.oneVal(attrs.get("creatorsname"));
-if (creatorsname != null)
-   creatorsname = lu.dn2user(creatorsname);				    
-pageContext.setAttribute("creatorsname", creatorsname);
-
-// convert list from owner dn to owner name
-List<String> owners = new ArrayList<String>();
-for (String o: attrs.get("owner")) {
-   owners.add(lu.dn2user(o));
-}
-pageContext.setAttribute("owners", owners);
-
-pageContext.setAttribute("islogin", (islogin?"checked":""));
-
-List<String> clusters = new ArrayList<String>();
-for (Config.Cluster cluster: aconfig.clusters)
-    clusters.add(cluster.name);
-pageContext.setAttribute("clusters", clusters);
-
-List<String> hosts = lu.valList(attrs.get("host"));
-Map<String,String> hostMap = new HashMap<String,String>();
-for (String cluster:clusters) {
-    hostMap.put(cluster, "");  // default is not there
-}
-for (String host: hosts) {
-    hostMap.put(host,"checked=\"checked\"");  // set for the ones that are
-}
-pageContext.setAttribute("hosts", hostMap);
+pageContext.setAttribute("gid", attrs.get("gidnumber"));
+pageContext.setAttribute("creatorsname", lu.oneVal(attrs.get("creatorsname")));
+pageContext.setAttribute("owners", attrs.get("owner"));
+List<String>categories = attrs.get("businesscategory");
+boolean islogin = (categories != null && categories.contains("login"));
+pageContext.setAttribute("islogin", islogin);
+pageContext.setAttribute("clusters", aconfig.clusters);
+pageContext.setAttribute("hosts", lu.valList(attrs.get("host")));
 
 %>
 
 <input type="hidden" name="groupname" value="<c:out value="${gname}"/>">
-<p> Group: <c:out value="${gname}"/><c:out value="${gid}"/>
-
+<p> Group: <c:out value="${gname}"/><c:if test="${not empty gid}"><c:out value=", ${gid[0]} "/></c:if>
 
 <h3>Members</h3>
 <div class="inset" style="margin-top:0.5em">
 <c:if test="${! empty members}">
-<c:forEach items="${members}" var="m">
-<c:out value="${m}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete member <c:out value="${m}"/>" class="deleteMemberButton"><input type="hidden" name="deleteName" value="<c:out value="${m}"/>"><br>
+<c:forEach items="${members}" var="mdn">
+<c:set var="m" value="${lu.dn2user(mdn)}"/>
+<c:out value="${(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete member <c:out value="${m}"/>" class="deleteMemberButton"><input type="hidden" name="deleteName" value="<c:out value="${m}"/>"><br>
 
 </c:forEach>
 </c:if>
@@ -247,11 +208,9 @@ pageContext.setAttribute("hosts", hostMap);
 <h3 style="margin-top:1.5em">Owners</h3>
 <div class="inset" style="margin-top:0.5em">
 
-<c:if test="${! empty creatorsname}">
-<c:out value="${creatorsname}"/><br>
-</c:if>
-
-<c:forEach items="${owners}" var="o">
+<c:out value="${lu.dn2user(creatorsname)}" default=""/><br>
+<c:forEach items="${owners}" var="odn">
+<c:set var="o" value="${lu.dn2user(odn)}"/>
 <c:out value="${o}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete owner <c:out value="${o}"/>" class="deleteOwnerButton"><input type="hidden" name="deleteOwnerName" value="<c:out value="${o}"/>"><br>
 </c:forEach>
 </c:if>
@@ -266,9 +225,9 @@ pageContext.setAttribute("hosts", hostMap);
 <h3>Login Ability</h3>
 
 <div class="inset">
-<p><label><input type="checkbox" name="login" ${islogin}> Members of group can login to specified clusters<p>
+<p><label><input type="checkbox" name="login" ${islogin ? 'checked="checked"' : ""}> Members of group can login to specified clusters<p>
 <c:forEach items="${clusters}" var="c">
-<label><input type="checkbox" name="hosts" value="<c:out value="${c}"/>" ${hosts[c]}> <c:out value="${c}"/><br>
+<label><input type="checkbox" name="hosts" value="<c:out value="${c.name}"/>" <c:if test="${hosts.contains(c.name)}">checked="checked"</c:if> > <c:out value="${c.name}"/><br>
 </c:forEach>
 
 <p>

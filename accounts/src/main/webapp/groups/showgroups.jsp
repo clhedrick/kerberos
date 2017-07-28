@@ -104,33 +104,20 @@ Subject.doAs(subject, action);
 // look at the results of the LDAP query
 ArrayList<HashMap<String, ArrayList<String>>> groups = action.val;
 
-// format for display
-List<Map<String,String>> groupList = new ArrayList<Map<String,String>>();
-
-for (HashMap<String, ArrayList<String>> group: groups) {
-   // fields to show
-   Map<String,String> gDisplay = new HashMap<String,String>();
-   String name = lu.oneVal(group.get("cn"),"");
-   gDisplay.put("name", name);
-   gDisplay.put("nameu", URLEncoder.encode(name));
-   String gid = lu.oneVal(group.get("gidnumber"), "");  // if no gid, leave blank
-   gDisplay.put("gid", gid);
-   groupList.add(gDisplay);
-}
-
-pageContext.setAttribute("groupList", groupList);
+// set up model for JSTL to output
+pageContext.setAttribute("groups", groups);
 
 %>
 
-<c:if test="${! empty groupList}">
+<c:if test="${groups.size() > 0}">
 
 <h3>Current groups owned by you</h3>
 
 <div class="inset" style="padding-top:0.5em">
 
-<c:forEach items="${groupList}" var="g">
+<c:forEach items="${groups}" var="g">
 
-<a href="showgroup.jsp?name=${g.nameu}"><c:out value="${g.name}"/></a> <c:out value="${g.gid}"/><img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete group <c:out value="${g.name}"/>" class="deleteButton"><input type="hidden" name="deleteName" value="<c:out value="${g.name}"/>"><br>
+<a href="showgroup.jsp?name=${URLEncoder.encode(g['cn'][0])}"><c:out value="${g['cn'][0]}"/></a> <c:out value="${g['gidnumber'][0]}" default=""/><img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete group <c:out value="${g['cn'][0]}"/>" class="deleteButton"><input type="hidden" name="deleteName" value="<c:out value="${g['cn'][0]}"/>"><br>
 
 </c:forEach>
 
