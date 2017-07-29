@@ -1,4 +1,5 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<%@ taglib prefix = "c" uri = "http://java.sun.com/jsp/jstl/core" %>
 <%@ page import="java.io.BufferedReader" %>
 <%@ page import="java.io.InputStreamReader" %>
 <%@ page import="java.io.PrintWriter" %>
@@ -141,13 +142,15 @@
        break;
    }
 
+   pageContext.setAttribute("retval", retval);
+
 %>
 
 <p>
 <ul>
-<% if (retval != 0) { %>
+<c:if test="${retval != 0}">
 <li><a href="changepass.jsp"> Try again </a>
-<%}%>
+</c:if>
 <li><a href="../index.jsp"> Account Management </a>
 </ul>
 
