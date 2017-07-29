@@ -1,4 +1,5 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<%@ taglib prefix = "c" uri = "http://java.sun.com/jsp/jstl/core" %>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.ArrayList" %>
 <%@ page import="Activator.User" %>
@@ -32,11 +33,16 @@
    if (username.equals("hedrick"))
       username = "dsmith";
 
-   if (User.doUser(username, null, null, null, cluster, false, false, true)) {
-      if (utils.needsPassword(username))
-         response.sendRedirect("../changepass/changepass.jsp?cluster=" + URLEncoder.encode(cluster));
+   boolean ok = User.doUser(username, null, null, null, cluster, false, false, true);
+   if (ok && utils.needsPassword(username))
+       response.sendRedirect("../changepass/changepass.jsp?cluster=" + URLEncoder.encode(cluster));
+
+   pageContext.setAttribute("ok", ok);
+   pageContext.setAttribute("helpmail", Activator.Config.getConfig().helpmail);
 
 %>
+
+<c:if test="${ok}">
 
 <p> You have been properly activated on cluster <%= cluster %>. 
 
@@ -52,12 +58,9 @@ your normal University password.
 <li> If you know your Computer Science password, you are finished,
 or you can <a href="activate.jsp"> Activate an account on another cluster.</a>
 </ul>
-<%
-   } else {
-     String helpmail = Activator.Config.getConfig().helpmail;
-%>
-<p> Account activation failed. Please contact <a href="mailto:<%=helpmail%>"> <%=helpmail%></a> for help.
-<%
-   }
+</c:if> <%-- end of if ok --%>
 
-%>
+<c:if test="${!ok}">
+<p> Account activation failed. Please contact 
+<a href="mailto:${helpmail}"><c:out value="${helpmail}"/></a> for help.
+</c:if>
