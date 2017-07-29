@@ -1,4 +1,5 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<%@ taglib prefix = "c" uri = "http://java.sun.com/jsp/jstl/core" %>
 <%@ page import="java.util.Map" %>
 <%@ page import="common.utils" %>
 <%@ page import="common.genpassword" %>
@@ -24,26 +25,43 @@
    String user = request.getRemoteUser();
    if ("hedrick".equals(user))
       user = "clh";
-   if (!utils.allowChangePassword(user)) {
-      out.println("<p>You have previously requested that we disable this function for your account.<p>If you know your current password, you can use \"kpasswd\" on any of our systems.<p>If you've forgotten your password, please come in person to our help desk or systems staff.");
-      return;
+
+   pageContext.setAttribute("allowchange", utils.allowChangePassword(user));
+
+   String pass = genpassword.generate(10);
+   for (int i = 0; i < 1000; i++) {
+       if (dict.checkdict(out, pass)) {
+	   pageContext.setAttribute("suggestion", pass);
+	   break;
+       }
+       pass = genpassword.generate(10);          
    }
-   String cluster = filtername(request.getParameter("cluster"));
-   if (cluster != null && cluster.trim().length() > 0) {
+
+   pageContext.setAttribute("cluster", filtername(request.getParameter("cluster")));
+
+
 %>
 
+<c:if test="${!allowchange}">
+<p>You have previously requested that we disable this function for your account.
+<p>If you know your current password, you can use "kpasswd" on any of our systems.
+<p>If you've forgotten your password, please come in person to our help desk or systems staff.
+</c:if>
+
+<c:if test="${allowchange}">
+<c:if test="${! empty cluster}">
 <h2> Set password </h2>
 
-<p> You have successfully created an account on cluster <%=cluster%>. In order
+<p> You have successfully created an account on cluster <c:out value="${cluster}"/>. In order
 to login, you also need to create a password. This password will be good on 
 systems in Computer Science labs and office. (In contrast, most of our
 web applications use your University password.)
 
 <p> It is preferable to use a password that's different from your University
 password, but we're not going to force you to do that.
+</c:if>
 
-<% } else { %>
-
+<c:if test="${empty cluster}">
 <h2> Set or reset password for Computer Science Dept systems </h2>
 
 <p> The Computer Science Department has passwords that are separate
@@ -68,8 +86,7 @@ password, or haven't set one up yet.
 
 <p> If you remember your password, you can also change it on any CS system
 that uses this passwords by using the command "kpasswd".
-
-<% } %>
+</c:if>
 
 <h2> Password rules </h2>
 
@@ -98,17 +115,9 @@ better than passwords if you pick actual phrases. Most people choose them from p
 don't force you to change it in the first place).
 </ul>
 
-
-<%
-String pass = genpassword.generate(10);
-for (int i = 0; i < 1000; i++) {
-   if (dict.checkdict(out, pass)) {
-     out.println("<p> In case you want a suggestion, here's a random, pronouncable 10-character password: " + pass);
-     break;
-   }
-   pass = genpassword.generate(10);   
-}
-%>
+<c:if test="${! empty suggestion}">
+<p> In case you want a suggestion, here's a random, pronouncable 10-character password: <c:out value="${suggestion}"/>
+</c:if>
 
 <h2> Set password here</h2>
 
@@ -121,4 +130,5 @@ for (int i = 0; i < 1000; i++) {
 <input type="submit">
 </form>
 
+</c:if> <%-- end of allowchange --%>
 
