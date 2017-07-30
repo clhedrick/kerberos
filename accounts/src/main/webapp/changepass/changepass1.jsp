@@ -44,15 +44,15 @@
    if ("hedrick".equals(user))
       user = "clh";
 
-   if (!utils.allowChangePassword(user)) {
-      out.println("<p>You have requested that we disable automatic password changes for your account. Please come in person to our help desk or systems staff to change your password.");
-      return;
-   }
-
    List<String> messages = new ArrayList<String>();
 
 // stupid. to simulate goto
    while (true) {
+
+       if (!utils.allowChangePassword(user)) {
+	   messages.add("You have requested that we disable automatic password changes for your account. Please come in person to our help desk or systems staff to change your password.");
+	   break;
+       }
 
        if (newpass == null) {
 	   messages.add("No password specified");
