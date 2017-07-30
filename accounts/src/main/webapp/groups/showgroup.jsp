@@ -86,31 +86,8 @@ $(document).ready(function(){
 
 </script>
 </head>
-<div id="masthead"></div>
-<div id="main">
-<a href="../"> Account Management</a> | <a href="showgroups.jsp">Group list</a>
-
-<h2> Show and Edit Group </h2>
-
-
-
 <% String gname = request.getParameter("name"); %>
 
-<form action="editgroup.jsp" method="post" id="deleteForm" style="display:none">
-<%= utils.getCsrf(request) %>
-<input type="text" name="del" id="deleteInput"/>
-<input type="hidden" name="groupname" value="<%=lu.esc(gname)%>">
-<input type="submit" id="deleteSubmit"/>
-</form>
-<form action="editgroup.jsp" method="post" id="deleteOwnerForm" style="display:none">
-<%= utils.getCsrf(request) %>
-<input type="text" name="delowner" id="deleteOwnerInput"/>
-<input type="hidden" name="groupname" value="<%=lu.esc(gname)%>">
-<input type="submit" id="deleteOwnerSubmit"/>
-</form>
-
-<form action="editgroup.jsp" method="post">
-<%= utils.getCsrf(request) %>
 <%
 
  // This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.
@@ -171,26 +148,41 @@ try {
 
 // set up model for JSTL to display
 
-pageContext.setAttribute("members", attrs.get("member"));
 pageContext.setAttribute("gname", gname);
-pageContext.setAttribute("gid", attrs.get("gidnumber"));
-pageContext.setAttribute("creatorsname", lu.oneVal(attrs.get("creatorsname")));
-pageContext.setAttribute("owners", attrs.get("owner"));
-List<String>categories = attrs.get("businesscategory");
-boolean islogin = (categories != null && categories.contains("login"));
-pageContext.setAttribute("islogin", islogin);
 pageContext.setAttribute("clusters", aconfig.clusters);
-pageContext.setAttribute("hosts", lu.valList(attrs.get("host")));
+pageContext.setAttribute("group", attrs);
 
 %>
 
+<div id="masthead"></div>
+<div id="main">
+<a href="../"> Account Management</a> | <a href="showgroups.jsp">Group list</a>
+
+<h2> Show and Edit Group </h2>
+
+
+<form action="editgroup.jsp" method="post" id="deleteForm" style="display:none">
+<%= utils.getCsrf(request) %>
+<input type="text" name="del" id="deleteInput"/>
 <input type="hidden" name="groupname" value="<c:out value="${gname}"/>">
-<p> Group: <c:out value="${gname}"/><c:if test="${not empty gid}"><c:out value=", ${gid[0]} "/></c:if>
+<input type="submit" id="deleteSubmit"/>
+</form>
+<form action="editgroup.jsp" method="post" id="deleteOwnerForm" style="display:none">
+<%= utils.getCsrf(request) %>
+<input type="text" name="delowner" id="deleteOwnerInput"/>
+<input type="hidden" name="groupname" value="<c:out value="${gname}"/>">
+<input type="submit" id="deleteOwnerSubmit"/>
+</form>
+
+<form action="editgroup.jsp" method="post">
+<%= utils.getCsrf(request) %>
+<input type="hidden" name="groupname" value="<c:out value="${gname}"/>">
+<p> Group: <c:out value="${gname}"/><c:if test="${not empty group.gidnumber}"><c:out value=", ${group.gidnumber[0]} "/></c:if>
 
 <h3>Members</h3>
 <div class="inset" style="margin-top:0.5em">
-<c:if test="${! empty members}">
-<c:forEach items="${members}" var="mdn">
+<c:if test="${! empty group.member}">
+<c:forEach items="${group.member}" var="mdn">
 <c:set var="m" value="${lu.dn2user(mdn)}"/>
 <c:out value="${(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete member <c:out value="${m}"/>" class="deleteMemberButton"><input type="hidden" name="deleteName" value="<c:out value="${m}"/>"><br>
 
@@ -204,12 +196,12 @@ pageContext.setAttribute("hosts", lu.valList(attrs.get("host")));
 <input type="submit" style="margin-top:0.5em"/>
 </div>
 </div>
-<c:if test="${(! empty creatorsname) || (! empty owners)}">
+<c:if test="${(! empty group.creatorsname) || (! empty group.owner)}">
 <h3 style="margin-top:1.5em">Owners</h3>
 <div class="inset" style="margin-top:0.5em">
 
-<c:out value="${lu.dn2user(creatorsname)}" default=""/><br>
-<c:forEach items="${owners}" var="odn">
+<c:out value="${lu.dn2user(group.creatorsname[0])}" default=""/><br>
+<c:forEach items="${group.owner}" var="odn">
 <c:set var="o" value="${lu.dn2user(odn)}"/>
 <c:out value="${o}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" title="Delete owner <c:out value="${o}"/>" class="deleteOwnerButton"><input type="hidden" name="deleteOwnerName" value="<c:out value="${o}"/>"><br>
 </c:forEach>
@@ -225,9 +217,9 @@ pageContext.setAttribute("hosts", lu.valList(attrs.get("host")));
 <h3>Login Ability</h3>
 
 <div class="inset">
-<p><label><input type="checkbox" name="login" ${islogin ? 'checked="checked"' : ""}> Members of group can login to specified clusters<p>
+<p><label><input type="checkbox" name="login" ${group.businesscategory.contains("login") ? 'checked="checked"' : ""}> Members of group can login to specified clusters<p>
 <c:forEach items="${clusters}" var="c">
-<label><input type="checkbox" name="hosts" value="<c:out value="${c.name}"/>" <c:if test="${hosts.contains(c.name)}">checked="checked"</c:if> > <c:out value="${c.name}"/><br>
+<label><input type="checkbox" name="hosts" value="<c:out value="${c.name}"/>" <c:if test="${group.host.contains(c.name)}">checked="checked"</c:if> > <c:out value="${c.name}"/><br>
 </c:forEach>
 
 <p>
