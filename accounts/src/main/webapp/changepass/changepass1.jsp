@@ -13,6 +13,8 @@
 <%@ page import="java.sql.SQLException" %>
 <%@ page import="java.sql.Types" %>
 <%@ page import="java.util.HashSet" %>
+<%@ page import="java.util.List" %>
+<%@ page import="java.util.ArrayList" %>
 <%@ page import="common.lu" %>
 <%@ page import="common.utils" %>
 <%@ page import="common.dict" %>
@@ -47,29 +49,31 @@
       return;
    }
 
+   List<String> messages = new ArrayList<String>();
+
 // stupid. to simulate goto
    while (true) {
 
        if (newpass == null) {
-	   out.println("<p>No password specified<p>");
+	   messages.add("No password specified");
 	   break;
        }
 
        if (!newpass.equals(newpass2)) {
-	   out.println("<p>Your two copies of the password don't match<p>");
+	   messages.add("Your two copies of the password don't match");
 	   break;
         }
 
        String testpass = newpass.toLowerCase();
 
        if (testpass.length() < 10) {
-	   out.println("<p>Password must be at least 10 characters<p>");
+	   messages.add("Password must be at least 10 characters");
 	   break;
        }
 
        if (!dict.checkdict(out, testpass)) {
 	   logger.info("User " + user + " new password in dictionary");
-	   out.println("<p>Password is in our dictionary of common passwords<p>");
+	   messages.add("Password is in our dictionary of common passwords");
 	   break;
        }
 
@@ -105,9 +109,8 @@
 	       if (retval != 0 && retval != 2) {
 		   String line=reader2.readLine();
 
-		   out.println("<p>");
 		   while (line != null) {    
-		       out.println(lu.esc(line) + "<br/>");
+		       messages.add(line);
 		       logger.error(line);
 		       line = reader2.readLine();
 		   }
@@ -117,11 +120,11 @@
 	   }
        catch(IOException e1) {
 	   logger.error("Error talking to process to change password");
-	   out.println("<p>Error talking to process to change password<p>");
+	   messages.add("Error talking to process to change password");
        }
        catch(InterruptedException e2) {
 	   logger.error("Password change process interrupted");
-	   out.println("<p>Password change process interrupted<p>");
+	   messages.add("Password change process interrupted");
        } 
        finally {
 	   p.destroy();
@@ -129,12 +132,12 @@
 
        if (retval == 2) {
 	   logger.info("User " + user + " attempted password change but not in our system");
-	   out.println("<p>You don't have a computer science account. If you are eligible, please register at URL.<p>");
+	   messages.add("You don't have a computer science account. If you are eligible, please register using the Account Management Link at the bottom of this page");
 	   break;
        }
        if (retval == 0) {
 	   logger.info("User " + user + " password change ok");
-	   out.println("<p>Password changed.");
+	   messages.add("Password changed.");
 	   break;
        }
 
@@ -142,10 +145,15 @@
        break;
    }
 
+   pageContext.setAttribute("messages", messages);
    pageContext.setAttribute("retval", retval);
 
 %>
 
+<p>
+<c:forEach items="${messages}" var="m">
+<c:out value="${m}"/><br/>
+</c:forEach>
 <p>
 <ul>
 <c:if test="${retval != 0}">
