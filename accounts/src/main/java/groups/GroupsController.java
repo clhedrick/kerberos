@@ -45,7 +45,7 @@ import org.apache.logging.log4j.Logger;
 public class GroupsController {
 
     @Autowired
-    private ApplicationContext context;
+    private LoginController loginController;
 
     public String filtername(String s) {
 	if (s == null)
@@ -68,7 +68,7 @@ public class GroupsController {
 	    List<String> messages = new ArrayList<String>();
 	    messages.add("Session has expired");
 	    model.addAttribute("messages", messages);
-	    return context.getBean(LoginController.class).loginGet(request, response, model);
+	    return loginController.loginGet(request, response, model); 
 	}
 
 	// I use an API I wrote around Sun's API support.
