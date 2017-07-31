@@ -76,3 +76,6 @@ h4 {
   height:1px;
   overflow:hidden;
 }
+.messages {
+  color:red;
+}
