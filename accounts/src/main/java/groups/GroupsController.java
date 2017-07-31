@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.security.auth.*;
@@ -42,7 +44,8 @@ import org.apache.logging.log4j.Logger;
 @Controller
 public class GroupsController {
 
-    public List<String>messages = new ArrayList<String>();
+    @Autowired
+    private ApplicationContext context;
 
     public String filtername(String s) {
 	if (s == null)
@@ -59,13 +62,13 @@ public class GroupsController {
 	// This JndiAction junk is needed to execute the LDAP code in a context that's authenticated by
 	// that Subject.
 
-	model.addAttribute("messages", messages);
-
+	
 	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
 	if (subject == null) {
+	    List<String> messages = new ArrayList<String>();
 	    messages.add("Session has expired");
-	    model.addAttribute("tryagain", true);
-	    return "groups/showgroups";
+	    model.addAttribute("messages", messages);
+	    return context.getBean(LoginController.class).loginGet(request, response, model);
 	}
 
 	// I use an API I wrote around Sun's API support.
@@ -97,6 +100,7 @@ public class GroupsController {
 			       HttpServletRequest request, HttpServletResponse response,
 			       Model model) {
 
+	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
 
 	Logger logger = null;

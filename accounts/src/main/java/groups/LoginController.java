@@ -32,9 +32,7 @@ import Activator.Config;
 @Controller
 public class LoginController {
 
-    public List<String>messages;
-
-    String makeCC (String user, String pass) {
+    String makeCC (String user, String pass, List<String> messages) {
      
 	int retval = -1;
 	// create temporary cc and rename it for two reasons:
@@ -137,10 +135,10 @@ public class LoginController {
 
 
     @GetMapping("/groups/login")
-    public String loginGet(HttpServletRequest request, HttpServletResponse response) {
+    public String loginGet(HttpServletRequest request, HttpServletResponse response, Model model) {
 	try {
 	    if (request.getSession().getAttribute("krb5subject") != null)
-		response.sendRedirect("/accounts/groups/showgroups");
+		response.sendRedirect("showgroups");
 	} catch (Exception e){
 	}
         return "groups/login";
@@ -152,7 +150,7 @@ public class LoginController {
 			      HttpServletRequest request, HttpServletResponse response,
 			      Model model) {
 
-	messages = new ArrayList<String>();
+	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
 
 	LoginContext lc = null;
@@ -161,15 +159,15 @@ public class LoginController {
 
 	if (!username.equals(user)) {
 	    messages.add("Bad username or password");
-	    return "groups/login";
+	    return loginGet(request, response, model);
 	}
 
 	// make credentials cache   
 
-	String cc = makeCC (username, password);
+	String cc = makeCC (username, password, messages);
 	if (cc == null) {
 	    // should have gotten error message already
-	    return "groups/login";
+	    return loginGet(request, response, model);
 	}
 
 	// do the actuall login. Output is a Subject.
@@ -180,16 +178,16 @@ public class LoginController {
 	    lc.login();
 	} catch (LoginException le) {
 	    messages.add("Cannot create LoginContext. " + le.getMessage());
-	    return "groups/login";
+	    return loginGet(request, response, model);
 	} catch (SecurityException se) {
 	    messages.add("Cannot create LoginContext. " + se.getMessage());
-	    return "groups/login";
+	    return loginGet(request, response, model);
 	}
 
 	Subject subj = lc.getSubject();  
 	if (subj == null) {
 	    messages.add("Login failed");
-	    return "groups/login";	    
+	    return loginGet(request, response, model);
 	}
 
 	// the following JndAction will verify that they're in the right group,
@@ -208,14 +206,14 @@ public class LoginController {
 	    request.getSession().setAttribute("krb5subject", subj);
 	    request.getSession().setAttribute("krb5user", username);
 	    try {
-		response.sendRedirect("/accounts/groups/showgroups");
+		response.sendRedirect("showgroups");
 	    } catch (Exception e) {
 		messages.add("Unable to redirect to main application: " + e);
-		return "groups/login";	    		
+		return loginGet(request, response, model);
 	    }
 	} else {
 	    messages.add("You're not authorized to manaage groups. If you should be, please send email to " + conf.helpmail + ".");
-	    return "groups/login";	    
+	    return loginGet(request, response, model);
 	} 
 
 	// shouldn't happen
