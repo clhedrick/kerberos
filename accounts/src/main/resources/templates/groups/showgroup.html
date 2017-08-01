@@ -1,0 +1,147 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
+<script type="text/javascript">
+/*<![CDATA[*/
+function checknewmember() {
+	 $(".newmember").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as member</span>: <input class=\"newmember\" type=\"text\" name=\"newmember\"></label>");
+	 $(".newmember").off('input', checknewmember);
+	 $(".newmember").last().on('input', checknewmember);
+ };
+
+$(document).ready(function(){
+	 $(".newmember").on('input', checknewmember);
+    });
+
+function checknewowner() {
+	 $(".addowner").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label>");
+	 $(".addowner").off('input', checknewowner);
+	 $(".addowner").last().on('input', checknewowner);
+ };
+
+function deleteMember(event) {
+  var member = $(event.target).next().val();
+  if (!confirm("Are you sure you want to delete this member?"))
+    return;
+  $("#deleteInput").val(member);
+  $("#deleteSubmit").click();
+}
+
+function deleteMemberKeyPress(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 32 || event.keyCode === 13) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    deleteMember(event);
+  }
+}
+
+
+function deleteOwner(event) {
+  var owner = $(event.target).next().val();
+  if (!confirm("Are you sure you want to delete this owner?"))
+    return;
+  $("#deleteOwnerInput").val(owner);
+  $("#deleteOwnerSubmit").click();
+}
+
+function deleteOwnerKeyPress(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 32 || event.keyCode === 13) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    deleteOwner(event);
+  }
+}
+
+$(document).ready(function(){
+    $(".addowner").on('input', checknewowner);
+    $(".deleteMemberButton").click(deleteMember);
+    $(".deleteMemberButton").keypress(deleteMemberKeyPress);
+    $(".deleteOwnerButton").click(deleteOwner);
+    $(".deleteOwnerButton").keypress(deleteOwnerKeyPress);
+    });
+
+/*]]>*/
+</script>
+</head>
+<div id="masthead"></div>
+<div id="main">
+<div class="messages">
+<p th:each="msg : ${messages}" th:text="${msg}" />
+</div>
+
+<a href="../"> Account Management</a> | <a href="showgroups.jsp">Group list</a>
+
+<h2> Show and Edit Group </h2>
+
+
+<form th:action="@{/groups/showgroup}" method="post" id="deleteForm" style="display:none">
+<input type="text" name="del" id="deleteInput"/>
+<input type="hidden" name="groupname" th:value="${gname}"/>
+<input type="submit" id="deleteSubmit"/>
+</form>
+<form th:action="@{/groups/showgroup}" method="post" id="deleteOwnerForm" style="display:none">
+<input type="text" name="delowner" id="deleteOwnerInput"/>
+<input type="hidden" name="groupname" th:value="${gname}"/>
+<input type="submit" id="deleteOwnerSubmit"/>
+</form>
+
+<form th:action="@{/groups/showgroup}" method="post">
+<input type="hidden" name="groupname" th:value="${gname}"/>
+<p> Group: <span th:text="${gname}"/><span th:if="${group['gidnumber'] != null}" th:text="${', ' + group.gidnumber[0]}"/></p>
+
+<h3>Members</h3>
+<div class="inset" style="margin-top:0.5em">
+<div th:if="${group.member != null}">
+<div th:each="m: ${group.member}">
+<span th:text="${lu.dn2user(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
+</div>
+</div>
+
+<h4>Add member</h4>
+<div class="inset">
+<label>User name <span class="hidden"> to add as member</span>: <input class="newmember" type="text" name="newmember"/></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br/>
+
+<input type="submit" style="margin-top:0.5em"/>
+</div>
+</div>
+
+<h3 style="margin-top:1.5em">Owners</h3>
+<div class="inset" style="margin-top:0.5em">
+<div th:if="${group['creatorsname'] != null or group['owner'] != null}">
+<span th:if="${group['creatorsname'] != null}" th:text="${lu.dn2user(group.creatorsname[0])}"/><br/>
+<div th:if="${group['owner'] != null}">
+<div th:each="o: ${group.owner}">
+<c:set var="o" value="${lu.dn2user(odn)}"/>
+<span th:text="${lu.dn2user(o)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete owner ' + lu.dn2user(o)}" class="deleteOwnerButton"/><input type="hidden" name="deleteOwnerName" th:value="${lu.dn2user(o)}"/><br/>
+</div>
+</div>
+</div>
+
+<h4>Add Owner</h4>
+<div class="inset">
+<label>User name<span class="hidden"> to add as owner</span>: <input class="addowner" type="text" name="newowner"/></label><br/>
+<input type="submit" style="margin-top:0.5em"/>
+</div>
+</div>
+
+<h3>Login Ability</h3>
+
+<div class="inset">
+<p><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></p>
+<div th:each="c: ${clusters}">
+<label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label><br/>
+</div>
+
+<p>
+<input type="submit"/>
+</p>
+</div>
+</form>
+</div>
+
+
+
+
+
