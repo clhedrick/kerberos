@@ -3,6 +3,7 @@
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
+/*<![CDATA[*/
 function deletegroup(event) {
   var group = $(event.target).next().val();
   if (!confirm("Are you sure you want to delete this group?"))
@@ -39,6 +40,7 @@ $(document).ready(function(){
     $("#submit").click(validateSubmit);
     });
 
+/*]]>*/
 </script>
 </head>
 <div id="masthead"></div>
@@ -70,7 +72,7 @@ $(document).ready(function(){
 
 <div th:each="g : ${groups}">
 
-<a th:href="@{showgroup.jsp(name=${g.cn[0]})}"><span th:text="${g.cn[0]}"/></a>
+<a th:href="@{showgroup(name=${g.cn[0]})}"><span th:text="${g.cn[0]}"/></a>
 <span th:if="${g['gidnumber'] != null}" th:text="${g.gidnumber[0]}"/>
 <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete group ' + g.cn[0]}" class="deleteButton"/>
 <input type="hidden" name="deleteName" th:value="${g.cn[0]}"/>
