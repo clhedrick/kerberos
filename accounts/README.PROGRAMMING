@@ -1,0 +1,85 @@
+This file is intended for someone who needs to make changes to this
+web application, but doesn't know much about its structure.
+
+The application is written with Spring Boot. This is the simplet web
+framework I could find. The core of the application is contained in
+several java files in src/main/java/groups, etc. Look for files that
+look like fooController.java. Each web page has a controller
+file. Thats the java code for the page.
+
+Each Java file is paired a template, which is HTML plus annotations.
+They are in src/main/resources/templates/groups, etc.
+
+If you look at the controllers, you'll see that each one has two main
+methods, one for GET requests, which display the page, the other for
+POST requests, which handle submits and other changes the user
+requests on the page.
+
+The methods look like
+
+    @GetMapping("/groups/showgroups")
+    public String groupsGet(HttpServletRequest request, HttpServletResponse response, Model model) {
+
+That handles GET for the URL groups/showgroups. The whole application
+is /accounts, so the actual URL is /accounts/groups/showgroups.
+Model is basically just a map. You fill it in with variable names
+paired with values. Those variables are available to the template, and
+provide the main content for the page.
+
+When the user clicks submit, the other method is called, e.g.
+
+    @PostMapping("/groups/showgroups")
+    public String groupsSubmit(@RequestParam(value="name", required=false) String name,
+                               @RequestParam(value="sharing", required=false) String sharingSt,
+                               @RequestParam(value="guests", required=false) String guestSt,
+                               @RequestParam(value="del", required=false) List<String>del,
+                               HttpServletRequest request, HttpServletResponse response,
+                               Model model) {
+
+Each name used in an HTML INPUT tag turns into a variable if you
+supply a @RequestParam declaration for it.  Things like checklists
+with multiple values for a given input name can be retrieved as lists,
+as shown here.
+
+The methods return the name of the template to use, e.g.
+
+    return "groups/showgroups";
+
+For some errors, I go to a different page by calling its GET method,
+e.g.
+
+    return loginController.loginGet(request, response, model);
+
+To get a reference to another controller, you need to ask Spring to
+"autowire" the reference for you, e.g.
+
+    @Autowired
+    LoginController loginController;
+
+That causes Spring to look for an instance of the class
+LoginController and stick it in the variable. The controllers are all
+"singletons," meaning they have only one instance.
+
+You'll see that all of my templates start by displaying a list of
+messages, if there are any. So you can add error messages to the model
+before calling the other controller, or before displaying your own
+template.
+
+The templates use Thymeleaf. You'll find good online documentation.
+
+The controllers are only part of the application. There is also a
+library ofseparate classes that the controller calls. They are
+utilities such as getting data from a database or LDAP. Any methods
+that are used by more than one page were pulled out into this
+library of classes. So were complex things that didn't make sense
+to put in the web layer, e.g. the actual decision-making for the
+activator.
+
+Those library methods are in src/main/java/common and
+src/main/java/Activator.
+
+There are some reasonable tutorials online for Spring
+Boot. There's also a reference manual.
+
+
+

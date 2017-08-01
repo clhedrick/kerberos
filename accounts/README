@@ -1,3 +1,8 @@
+If you're here because you need to make changes to the activator or group
+manager, see README.PROGRAMMING.
+
+-------------
+
 Deploys in tomcat/webapps/ROOT
 
 See INTRO.TOMCAT and INTRO.MAVEN if you don't know the tools
