@@ -5,7 +5,7 @@
 <div id="masthead"></div>
 <div id="main">
 
-<div class="messages" th:if="${messages != null}">
+<div class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 

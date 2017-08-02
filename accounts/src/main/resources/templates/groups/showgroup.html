@@ -67,7 +67,7 @@ $(document).ready(function(){
 </head>
 <div id="masthead"></div>
 <div id="main">
-<div class="messages" th:if="${messages?.size() > 0}">
+<div class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
