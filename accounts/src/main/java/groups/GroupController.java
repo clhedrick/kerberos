@@ -238,13 +238,18 @@ public class GroupController {
 	List<String> oldhosts = attrs.get("host");
 	if (oldhosts == null)
 	    oldhosts = new ArrayList<String>();
-	List<String> oldmembers = attrs.get("member");
-	if (oldmembers == null)
-	    oldmembers = new ArrayList<String>();
-	List<String> oldowners = attrs.get("owner");
-	if (oldowners == null)
-	    oldowners = new ArrayList<String>();
-
+	List<String> oldmembers = new ArrayList<String>();
+	if (attrs.get("member") != null) {
+	    for (String m: attrs.get("member")) {
+		oldmembers.add(lu.dn2user(m));
+	    }
+	}
+	List<String> oldowners = new ArrayList<String>();
+	if (attrs.get("owner") != null) {
+	    for (String m: attrs.get("owner")) {
+		oldowners.add(lu.dn2user(m));
+	    }
+	}
 	boolean ok = true;
 
 	String user = (String)request.getSession().getAttribute("krb5user");
@@ -323,7 +328,7 @@ public class GroupController {
 		    }
 		    logger.info("ipa group-mod " + name + " --addattr=owner=uid=" + filtername(n) + conf.usersuffix);	     
 		    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=owner=uid=" + filtername(n) + conf.usersuffix}, env) != 0) {
-			messages.add("Unable to adf user " + n + " as owner.");
+			messages.add("Unable to add user " + n + " as owner.");
 			continue;
 		    }
 		}
