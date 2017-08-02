@@ -71,7 +71,7 @@ $(document).ready(function(){
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
-<a href="../"> Account Management</a> | <a href="showgroups.jsp">Group list</a>
+<a href="../"> Account Management</a> | <a href="showgroups">Group list</a>
 
 <h2> Show and Edit Group </h2>
 
@@ -93,8 +93,8 @@ $(document).ready(function(){
 
 <h3>Members</h3>
 <div class="inset" style="margin-top:0.5em">
-<div th:if="${group.member != null}">
-<div th:each="m: ${group.member}">
+<div th:if="${group['member'] != null}">
+<div th:each="m: ${group['member']}">
 <span th:text="${lu.dn2user(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
 </div>
 </div>

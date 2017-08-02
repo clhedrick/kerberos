@@ -73,7 +73,7 @@ $(document).ready(function(){
 <div th:each="g : ${groups}">
 
 <a th:href="@{showgroup(name=${g.cn[0]})}"><span th:text="${g.cn[0]}"/></a>
-<span th:if="${g['gidnumber'] != null}" th:text="${g.gidnumber[0]}"/>
+<span th:text="${g['gidnumber']?.get(0)}"/>
 <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete group ' + g.cn[0]}" class="deleteButton"/>
 <input type="hidden" name="deleteName" th:value="${g.cn[0]}"/>
 
