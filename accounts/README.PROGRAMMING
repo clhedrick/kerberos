@@ -2,10 +2,22 @@ This file is intended for someone who needs to make changes to this
 web application, but doesn't know much about its structure.
 
 The application is written with Spring Boot. This is the simplet web
-framework I could find. The core of the application is contained in
-several java files in src/main/java/groups, etc. Look for files that
-look like fooController.java. Each web page has a controller
-file. Thats the java code for the page.
+framework I could find. It's also part of Spring, which is a huge
+project with lots of features. Spring Boot sets up reasonable defaults.
+I've changed almost nothing from the defaults. But you've got all of
+Spring available if you need it.
+
+While Spring is a tier 1 platform, I'm using a templating system,
+Thymeleaf, that's newer. Most Spring Boot tutorials seem to recommend
+it. It has some features that make me like it, particularly in how it
+handles quoting. But if it becomes unavailable it wouldn't be hard to
+move to a different template system. After all, the templates are just
+annotated HTML, and the HTML wouldn't change.
+
+The core of the application is contained in several java files in
+src/main/java/groups, etc. Look for files that look like
+fooController.java. Each web page has a controller file. Thats the
+java code for the page.
 
 Each Java file is paired a template, which is HTML plus annotations.
 They are in src/main/resources/templates/groups, etc.
@@ -24,7 +36,17 @@ That handles GET for the URL groups/showgroups. The whole application
 is /accounts, so the actual URL is /accounts/groups/showgroups.
 Model is basically just a map. You fill it in with variable names
 paired with values. Those variables are available to the template, and
-provide the main content for the page.
+provide the main content for the page. 
+
+Note that the variables can have complex values, such as lists of
+maps. I'm normally presenting data from LDAP, so one of my variables
+has either the LDAP data for one group or for a list of groups. I
+represent LDAP data as a map, much as PHP does. So LDAP data for a
+user might be 'sn' -> ['Hedrick'], 'givenname' -> ['Charles']. Note
+that the values are lists, since each LDAP attribute can have multiple
+values.  E.g a group can have multiple members. (The members are
+stored as LDAP DN's, not simple usernames, so dn2user has to be used
+to get the username.)
 
 When the user clicks submit, the other method is called, e.g.
 
@@ -70,16 +92,112 @@ The templates use Thymeleaf. You'll find good online documentation.
 The controllers are only part of the application. There is also a
 library ofseparate classes that the controller calls. They are
 utilities such as getting data from a database or LDAP. Any methods
-that are used by more than one page were pulled out into this
-library of classes. So were complex things that didn't make sense
-to put in the web layer, e.g. the actual decision-making for the
-activator.
+that are used by more than one page were pulled out into this library
+of classes. So were complex things that didn't make sense to put in
+the web layer, e.g. the actual decision-making for the activator.
 
 Those library methods are in src/main/java/common and
 src/main/java/Activator.
 
-There are some reasonable tutorials online for Spring
-Boot. There's also a reference manual.
+There are some reasonable tutorials online for Spring Boot. There's
+also a reference manual.
 
+In general I get data from LDAP queries but change it using IPA
+commands. Both of these use Kerberos authentication.  The APIs aren't
+simple, so a fair amount of code is just setting up to do
+authenticated operations. The code is well commented, so you should be
+able to follow what it's doing.
 
+The group management logic is mostly in the controllers.  The
+activator is mostly in src/main/java/Activator/User.java, which is
+called by the controller for the activator web pages (and also the
+activate command-line tool).
 
+If you want to change how the activator works, you probably will
+change src/main/java/Activator/User.java. If you want to change how
+web pages look and act, you'll mostly be changing the controllers and
+templates.
+
+Before changing the activator, look carefully at
+/etc/activator.config. Most things you want to do should be possible
+using the config file.
+
+-----
+
+BUILDING AND DEPLOYING
+
+In thi directory, you'll see 2 scripts:
+
+./build will compile the java. If that works it will put the java
+classes and other files into a WAR file.  That's just a ZIP file.
+
+./install will copy the WAR file to
+/var/www/tomcat/webapps/accounts.war. Tomcat watches for tht file. If
+it's updated, Tomcat will remove the old copy of the application and
+install the new one. Note that all current users will have to login
+again.
+
+This technology can all be used from Eclipse. The scripts are intended
+for people who work with a text editor.
+
+------------
+
+SECURITY
+
+Spring does two things for you that help security:
+
+* The template system makes sure that data you display is properly
+encoded or quoted. So if there's an HTML tag in the data, it will be
+displayed as text, not executed.
+
+* Spring will expect all POSTs to have a CSRF token.  You can look in
+Wikipedia for what CSRF is and why this is needed. As long as all your
+forms are generated by Thymeleaf, the necessary taken will always be
+there.  At least if you use th:action to define the action attribute
+of the FORM tag.
+
+------------
+
+THYMELEAF ISSUE
+
+Data on groups comes from LDAP as a map. E.g. if "group" has the
+map, group.cn  is the common name field. Since fields can have
+multiple values, to get the first (and presumably only) value,
+use group.cn[0]. Groups always have one cn. But not all groups
+have gid's. In theory group.gidnumber[0] should work, and give
+a blank if there's no GID. 
+
+However there's a problem. The Spring code that processes this
+doesn't check for errors properly for map values. You should
+actually have to do something like this:
+
+<span th:if="${group['gidnumber'] != null}" th:text="${group['gidnumber'][0]}"/>
+
+That is, you have to make sure you don't try to evaluate
+group.gidnumber if it might be null. It tolerates null for
+simple variables just fine.
+
+One other note about Thymeleaf. It expects proper XML 
+structure. So all <div>s must be matched by </div>.
+Even <p> must match </p>. For tags like <input> that
+don't have a close, use / before the >, e.g.
+<input name="foo" />. Similarly with <br/>.
+
+If you put Javascript inline, Thymeleaf will try to
+parse it, and probably fail. The following weird
+construct will work:
+
+<script type="text/javascript">
+/*<![CDATA[*/
+function checknewmember() {
+...
+    $(".deleteOwnerButton").click(deleteOwner);
+    $(".deleteOwnerButton").keypress(deleteOwnerKeyPress);
+    });
+
+/*]]>*/
+</script>
+
+It causses Thymeleaf to see all the Javascript as
+inside a comment. The same thing may be needed for
+CSS.
