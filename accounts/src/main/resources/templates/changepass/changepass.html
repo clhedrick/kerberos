@@ -1,0 +1,100 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+</head>
+<div id="masthead"></div>
+<div id="main">
+<div class="messages" th:if="${messages != null}">
+<p th:each="msg : ${messages}" th:text="${msg}" />
+</div>
+
+<div th:if="${!allowchange}">
+<p>You have previously requested that we disable this function for your account.</p>
+<p>If you know your current password, you can use "kpasswd" on any of our systems.</p>
+<p>If you've forgotten your password, please come in person to our help desk or systems staff.</p>
+</div>
+
+<div th:if="${allowchange}">
+<div th:if="${cluster != null}">
+<h2> Set password </h2>
+
+<p> You have successfully created an account on cluster <span th:text="${cluster}"/>. In order
+to login, you also need to create a password. This password will be good on 
+systems in Computer Science labs and office. (In contrast, most of our
+web applications use your University password.)</p>
+
+<p> It is preferable to use a password that's different from your University
+password, but we're not going to force you to do that.</p>
+</div>
+
+<div th:if="${cluster == null}">
+<h2> Set or reset password for Computer Science Dept systems </h2>
+
+<p> The Computer Science Department has passwords that are separate
+from University passwords. This allows us to provide improved security
+for your data.</p>
+
+<p>The CS Dept password is used for login to computers in labs and in offices. In contrast to these login passwords, most of our web applications use your University password. </p>
+
+<p>This form allows you to set or reset your CS Dept password.</p>
+
+<p> We don't ask for your old password, because you have already logged in with
+your University password.</p>
+
+<p> It is preferable to use a password that's different from your University
+password, but we're not going to force you to do that.</p>
+
+<h2> How to set or reset your password </h2>
+
+<p> This web application lets you reset your CS password as long as you
+remember your University password. It's convenient if you forget your CS
+password, or haven't set one up yet.</p>
+
+<p> If you remember your password, you can also change it on any CS system
+that uses this passwords by using the command "kpasswd".</p>
+</div>
+
+<h2> Password rules </h2>
+
+<p>Our password rules follow the latest recommendations from the 
+National Institute of Standards and Technology (NIST). These rules have changed
+over time. E.g. NIST used to recommend forcing users to change their
+passwords regularly, but they no longer do. Evidence suggests that
+this isn't useful.</p>
+
+<ul>
+<li> Passwords must be at least 10 characters. {The maximum is 255.)</li>
+<li> We do not require you to use multiple character classes, although we recommend it.</li>
+<li> Passwords must not match any entry in a list of commonly used passwords.</li>
+<li> Passwords do not expire, although we encourage you to change them
+occasionally.</li>
+</ul>
+
+<p>Good passwords:</p>
+<p>We recommend using a fairly long nonsense phrase. Experience with password cracking says that passphrases aren't necessarily
+better than passwords if you pick actual phrases. Most people choose them from pop songs, movie titles, sports teams, Shakespeare, etc. They turn out to be easy to crack. Simply changing a few characters doesn't help that much. I recommend nonsense phrases not taken from any book, etc. Maybe even in a mix of languages.</p>
+
+<p>Other rules
+<ul>
+<li> If there are more than 6 bad passwords in a minute, the account will be locked for 10 minutes. This rule may change.</li>
+<li> If you change your password, we don't check whether you're changing it back to its current value (since we
+don't force you to change it in the first place).</li>
+</ul>
+</p>
+
+<div th:if="${suggestion != null}">
+<p> In case you want a suggestion, here's a random, pronouncable 10-character password: <span th:text="${suggestion}"/></p>
+</div>
+
+<h2> Set password here</h2>
+
+<p></p>
+<form th:action="@{/changepass/changepass}" method="post">
+<label>New password: <input type="password" name="pass1"/></label><br/>
+<label>Type it again to verify: <input type="password" name="pass2"/></label>
+<p></p>
+<input type="submit"/>
+</form>
+
+</div>
+</div>
+

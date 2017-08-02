@@ -68,7 +68,8 @@ public class dict {
 
      } catch (Exception e) {
 	 try {
-	     out.println("<p>Warning: we were unable to check your password to see if it matches any known weak passwords. We're allowing the change to happen, but you should make sure that your password is a good one.<p>");
+	     if (out != null)
+		 out.println("<p>Warning: we were unable to check your password to see if it matches any known weak passwords. We're allowing the change to happen, but you should make sure that your password is a good one.<p>");
 	 } catch (Exception x) {};
 	 return true;
      } finally {

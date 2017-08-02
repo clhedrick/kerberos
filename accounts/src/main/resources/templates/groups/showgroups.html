@@ -46,7 +46,7 @@ $(document).ready(function(){
 <div id="masthead"></div>
 <div id="main">
 
-<div class="messages">
+<div class="messages" th:if="${messages != null}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 

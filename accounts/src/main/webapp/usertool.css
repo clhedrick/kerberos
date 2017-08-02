@@ -77,5 +77,10 @@ h4 {
   overflow:hidden;
 }
 .messages {
-  color:red;
+  -moz-border-radius: 0.5em;
+  -webkit-border-radius: 0.5em;
+  border-radius: 0.5em;
+  padding:0em 1.5em 0em 1.5em;
+  border: solid #b00 1px;
+  background-color: #fdd;
 }
