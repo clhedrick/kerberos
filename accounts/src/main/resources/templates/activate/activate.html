@@ -22,10 +22,10 @@ $(document).ready(function(){
 </head>
 <div id="masthead"></div>
 <div id="main">
-<div class="messages" th:if="${activatefailed}">
+<p class="messages" th:if="${activatefailed}">
 Unable to activate your account. Please contact 
 <a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>.
-</div>
+</p>
 
 <a href="..">Account Management</a>
 

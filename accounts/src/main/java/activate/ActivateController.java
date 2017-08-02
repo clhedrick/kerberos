@@ -3,6 +3,7 @@ package application;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Date;
+import java.net.URLEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -62,20 +63,17 @@ public class ActivateController {
 	    username = "dsmith";
 	
 	boolean ok = User.doUser(username, null, null, null, cluster, false, false, true);
-	//	if (ok && utils.needsPassword(username))
-	//	    response.sendRedirect("../changepass/changepass.jsp?cluster=" + URLEncoder.encode(cluster));
+	if (ok && utils.needsPassword(username)) {
+	    try {
+		response.sendRedirect("../changepass/changepass?cluster=" + URLEncoder.encode(cluster));
+	    } catch (Exception e) {}
+	}
 
 	if (!ok)
 	    model.addAttribute("activatefailed", true);
 
 	return activateGet(request, response, model);
 
-    }
-
-    @ExceptionHandler(org.springframework.core.convert.ConversionFailedException.class)
-    public String greetingException(org.springframework.core.convert.ConversionFailedException e) {
-	System.out.println("error");
-	return "greeting";
     }
 
 }
