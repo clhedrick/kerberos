@@ -17,12 +17,12 @@ handles quoting. But if it becomes unavailable it wouldn't be hard to
 move to a different template system. After all, the templates are just
 annotated HTML, and the HTML wouldn't change.
 
-The core of the application is contained in several java files in
-src/main/java/groups, etc. Look for files that look like
+The core of the application is contained in subdirectories of
+src/main/java/application. Look for files that look like
 fooController.java. Each web page has a controller file. Thats the
-java code for the page. I believe the controllers must be in
-the same package as the main Spring configuration file. In this
-case the package is "application."
+java code for the page. I believe the controllers must be in the same
+package as the main Spring configuration file, or possibly a
+subpackage. In this case the package is "application."
 
 src/main/java/application/GreetingController.java is a sample
 controller, useful primarily because it shows the minimal set of
@@ -30,8 +30,9 @@ imports needed for a controller. However if you use additional
 annotations (which most of my controllers do), each one requires
 its own import.
 
-Each Java file is paired with a template, which is HTML plus annotations.
-They are in src/main/resources/templates/groups, etc.
+Each Java file is paired with a template, which is HTML plus
+annotations.  They are in src/main/resources/templates/groups,
+activate, and changepass.
 
 If you look at the controllers, you'll see that each one has two main
 methods, one for GET requests, which display the page, the other for
@@ -284,7 +285,7 @@ with spring-boot-starter in them. Spring used to be hard to srt up,
 with lots of modules and lots of configuration. Spring Boot puts all
 that stuff into the starter modules, so all you have to do is include
 them. Only one configuration class is necesary, in
-src/main/java/application/.
+src/main/java/application/. 
 
 This application actually uses two configuration classes, plus
 ./src/main/resources/application.properties
