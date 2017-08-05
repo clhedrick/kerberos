@@ -76,6 +76,9 @@ automatically renew tickets.
    The assignment narrows it to the actual size.
 */
 
+#define GSSPROXY_PREFIX "/var/lib/gssproxy/clients/krb5cc_"
+#define KEYRING_PREFIX "KEYRING:persistent:"
+
 int debug = 0;
 int test = 0;
 
@@ -102,7 +105,6 @@ void mylog (int level, const char *format, ...) {
     now = time(0);
     timestr = ctime(&now);
     timestr[19] = '\0';
-    printf("%8s ", timestr+11);
     vprintf(format, args);
     printf("\n");
   } else
@@ -256,6 +258,7 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft, int getcred, uid_t u
     char *oldname = NULL;
     char *newname = NULL;
     char *principal = NULL;
+    char *tempname = NULL;
 
     memset(&creds, 0, sizeof(creds));
 
@@ -310,8 +313,6 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft, int getcred, uid_t u
 	  exit(1);
 	}
 
-	setreuid(uid, uid);
-
 	asprintf(&env, "KRB5CCNAME=%s", ccname);
 	putenv(env);
 
@@ -348,13 +349,12 @@ renew(krb5_context ctx, krb5_ccache ccache, time_t minleft, int getcred, uid_t u
       goto done;
     }
     
-    mylog(LOG_DEBUG, "renewing cache %s", krb5_cc_get_name(ctx, ccache));
+    mylog(LOG_INFO, "renewing cache %s", krb5_cc_get_name(ctx, ccache));
 
     // for files, put new creds in temp file and rename it
     if (strcmp(cctype, "FILE") == 0) {
       const char* oname;
       const char* nname;
-      char *tempname;
       int i;
 
       oname = krb5_cc_get_name(ctx, ccache);
@@ -423,6 +423,8 @@ done:
     if (ccache != NULL)
       krb5_cc_close(ctx, ccache);
     */
+    if (tempname)
+      free(tempname);
     if (principal)
       krb5_free_unparsed_name(ctx, principal);
     if (ccache)
@@ -439,11 +441,51 @@ done:
     return code;
 }
 
+// NULL or malloced string. caller must free it
+char *read_whole_file(char *fname, long *argfsize) {
+  int fd = open(fname, O_RDONLY);
+  char *line;
+  char *readptr;
+  int fsize = 0;
+  
+  if (fd < 0) {
+    *argfsize = 0;
+    return NULL;
+  }
+
+  line = malloc(1000);
+  readptr = line;
+  while (1) {
+    int ptrpos;
+    int count = read(fd, readptr, 1000);
+    if (count < 0) {
+      close(fd);
+      free(line);
+      *argfsize = 0;
+      return NULL;
+    }
+    if (count == 0)
+      break;
+    readptr += count;
+    fsize += count;
+    ptrpos = readptr - line;
+    line = realloc(line, fsize + 1000);
+    // block may have moved. need to adjust readptr to new block
+    readptr = line + ptrpos;
+  }
+
+  close(fd);
+  *argfsize = fsize;
+
+  return line;
+}
+
 // create hash table and put entries for all credential caches current in use
 
 void getccs() {
-  char buffer[1024];
-  FILE *keyfile;
+  struct dirent **namelist;
+  int numdirs;
+  int i;
 
   // max number of uids simulteaneously logged in 
   hcreate(10000);
@@ -452,112 +494,171 @@ void getccs() {
   // there's no system call to read keys from other sessions,
   // so we have to read /proc/keys.
 
-  keyfile = fopen("/proc/keys", "r");
-  if (!keyfile) {
-    mylog(LOG_ERR, "unable to open /proc/keys %m");
-    exit(1);
+  numdirs = scandir("/proc", &namelist, NULL, alphasort);
+  if (numdirs < 0) {
+    mylog(LOG_ERR, "Couldn't scan /proc");
+    return;
   }
-  // entries look like 
-  //0074836e I--Q---     1 perm 3f010000     0     0 user      krbrenewd:ccname: 43
-  // note that our test will also match krbrenewd:ccname:2, etc., so you
-  // can register more than one file
-  while (fgets(buffer, sizeof(buffer)-1, keyfile)) {
-    char *id, *dummy, *description;
-    int i;
-    long len;
-    key_serial_t serial;
-    char *normalized;
-    uid_t uid;
-    ENTRY entry;
-    int isgetcred;
 
-    // remove trailing new line
-    i = strlen(buffer);
-    if (buffer[i-1] == '\n')
-      buffer[i-1] = '\0';
+  for (i = 0; i < numdirs; i++) {
+    int first = namelist[i]->d_name[0];
+    // only look at entries for procs
+    if (first >= '0' && first <= '9') {
+      char *fname;
+      char *line;
+      char *ptr;
+      long fsize;
+      size_t len = 0;
+      uid_t uid;
+      FILE *f;
+      ENTRY entry;
+      char *cp;
+      char *uidend;
+      char *path;
 
-    id = strtok(buffer, " ");
-
-    if (!id)
-      continue;
-    for (i = 2; i < 9; i++) {
-      dummy = strtok(NULL, " ");
-      if (!dummy)
-	continue;
-    }
-    description = strtok(NULL, " ");
-    if (!description)
-      continue;
-
-    if (strncmp(description, "krbrenewd:ccname:", strlen("krbrenewd:ccname:")) != 0 &&
-	strncmp(description, "kgetcred:ccname:", strlen("kgetcred:ccname:")) != 0)
-      continue;
-
-    isgetcred = strncmp(description, "kgetcred:ccname:", strlen("kgetcred:ccname:")) == 0;
-
-    // found one, get the cc name
-    serial = strtoul(id, NULL, 16);
-    len = keyctl_read(serial, buffer, sizeof(buffer) - 1);
-    if (len < 0) {
-      mylog(LOG_ERR, "unable to read key value %m");
-      continue;
-    }
-    buffer[len] = '\0';
-
-    mylog(LOG_DEBUG, "cache %sregistered with session: %s", (isgetcred?"for kgetcred ":""), buffer);
-
-    // buffer should now be a cache name. normalize it
-    if (strncmp(buffer, "FILE:", 5) == 0)
-      normalized = buffer + 5;
-    else 
-      normalized = buffer;
-
-    if (normalized[0] == '/') {
-      struct stat statbuf;
-      // file. use owner as uid
-      if (stat(normalized, &statbuf)) {
-	mylog(LOG_ERR, "can't stat %s %m", normalized);
+      // get uid
+      asprintf(&fname, "/proc/%s/status", namelist[i]->d_name);
+      f = fopen(fname, "r");
+      if (!f) {
+	free(fname);
+	free(namelist[i]);
 	continue;
       }
-      uid = statbuf.st_uid;
-    } else if (strncmp(buffer, "KEYRING:persistent:", strlen("KEYRING:persistent:")) == 0) {
-      // if anything persistent is defined, assume it's the primary
-      char *uidstr = buffer + strlen("KEYRING:persistent:");
-      char *uidend = strchr(uidstr, ':');
-      if (uidend)
-	*uidend = '\0';
-      uid = atoi(uidstr);
-      if (uidend)
-	*uidend = ':'; // put it back so we store the right thing
-      normalized = buffer;
-    } else {
-      mylog(LOG_ERR, "unsupported CC name %s", normalized);
-      continue;
-    }
+      free(fname);
 
-    // now have name in normalized and uid in uid
-    entry.key = normalized;
-    if (hsearch(entry, FIND) == NULL) {
-      // didn't find it, add
-      struct cc_entry *nentry = malloc(sizeof(struct cc_entry));
-      nentry->next = cclist;
-      nentry->name = malloc(strlen(normalized) + 1);
-      strcpy(nentry->name, normalized);
-      nentry->uid = uid;
+      line = NULL;
+      while (getline(&line, &len, f) >= 0) {
+	if (strncmp(line, "Uid:", strlen("Uid:")) == 0)
+	  break;
+      }
+      fclose(f);
 
-      entry.key = nentry->name;
-      // set 1 if it credential gottne with kgetcred
-      nentry->getcred = (strncmp(description, "kgetcred:ccname:", strlen("kgetcred:ccname:")) == 0);
+      // must have a uid or we ignore process
+      if (line == NULL || strncmp(line, "Uid:", strlen("Uid:")) != 0) {
+	if (line)
+	  free(line);
+	free(namelist[i]);
+	continue;
+      }
 
-      entry.data = (void *)nentry;
+      ptr = line + strlen("Uid:") + 1;
 
-      cclist = nentry;
-      nentry->entry = hsearch(entry, ENTER);
+      // now have uid in ptr. put it in uid for later
+      // there are actually 4 numbers, but we want the first, real uid
+      uid = strtol(ptr, &uidend, 10);
+      *uidend = '\0';
 
-    }
+      // now have a UID. Add entry to hash
+      // now have name in normalized and uid in uid
+      entry.key = ptr;
+      if (hsearch(entry, FIND) == NULL) {
+	// didn't find it, add
+	struct cc_entry *nentry = malloc(sizeof(struct cc_entry));
+	nentry->next = cclist;
+	nentry->name = malloc(strlen(ptr) + 1);
+	strcpy(nentry->name, ptr);
+	nentry->uid = uid;
+	entry.key = nentry->name;
+	entry.data = (void *)nentry;
+	cclist = nentry;
+	nentry->entry = hsearch(entry, ENTER);
+      }
 
+      if (line)
+	free(line);
+
+      // done with UID, now make an entry for ccname if we can find it
+      asprintf(&fname, "/proc/%s/environ", namelist[i]->d_name);
+      line = read_whole_file(fname, &fsize);
+      if (!line) {
+	free(fname);
+	free(namelist[i]);
+	continue;
+      }
+      free(fname);
+
+      // structure is multiple null terminated strings
+      // see if we have our env variable
+      ptr = line;
+      while (ptr < (line + fsize)) {
+  	if (strncmp("KRB5CCNAME=", ptr, strlen("KRB5CCNAME=")) == 0)
+	  break;
+	ptr = ptr + strlen(ptr) +1;
+      }
+
+      // didn't find anything
+      if (ptr >= (line + fsize)) {
+	free(line);
+	free(namelist[i]);
+	continue;
+      }
+
+      // need value;
+      ptr += strlen("KRB5CCNAME=");
+
+      // now have env variable in ptr
+      // if it's KEYRING:persistrnt:nnnn:xxx, drop xxx
+
+      if (strncmp(ptr, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
+	char *cp2;
+	cp = ptr + strlen(KEYRING_PREFIX);
+	// look for KEYRING:persistent:nnn:xcc
+	cp2 = strchr(cp, ':');
+	// kill the last :
+	if (cp2)
+	  *cp2 = '\0';
+      }
+      // path will be normalized CC name
+      // one more thing: we need to know who the owner is
+      // if it isn't the process owner, ignore it, to avoid a user
+      // getting us to hang onto another user's cc
+
+      if (strncmp(ptr, "FILE:", strlen("FILE:")) == 0 ||
+	  *ptr == '/') {
+	// it's a file, use the owner
+	struct stat statbuf;
+	path = ptr;
+	if (*path != '/')
+	  path += strlen("FILE:");
+	if (stat(path, &statbuf) == 0) {
+	  // wrong user, ignore this
+	  if (statbuf.st_uid != uid) {
+	    free(line);
+	    free(namelist[i]);
+	    continue;
+	  }
+	}
+      } else if (strncmp(ptr, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
+	uid_t kuid = atol(ptr + strlen(KEYRING_PREFIX));
+	if (kuid != uid) {
+	  free(line);
+	  free(namelist[i]);
+	  continue;
+	}
+	path = ptr;
+      }
+	
+      // looks valid, save it
+
+      entry.key = path;
+      if (hsearch(entry, FIND) == NULL) {
+	// didn't find it, add
+	struct cc_entry *nentry = malloc(sizeof(struct cc_entry));
+	nentry->next = cclist;
+	nentry->name = malloc(strlen(path) + 1);
+	strcpy(nentry->name, path);
+	nentry->uid = uid;
+	entry.key = nentry->name;
+	entry.data = (void *)nentry;
+	cclist = nentry;
+	nentry->entry = hsearch(entry, ENTER);
+      }
+      free(namelist[i]);
+      free(line);      
+    } else
+      free(namelist[i]);    
   }
-  fclose(keyfile);
+  free(namelist);
 }
 
 // free malloced uids from hash
@@ -572,39 +673,43 @@ void freeccs() {
 }
 
 // go through all uids that are active and renew the primary cache for that uid if necessary
-void renewall(krb5_context ctx, time_t minleft) {
-  struct cc_entry *entry = cclist;
-
-  while (entry) {
-    krb5_ccache cache;
+void maybe_renew(krb5_context ctx, char *ccname, time_t minleft, struct cc_entry *ccentry) {
+    krb5_ccache cache = NULL;
     int code;
+    int changeduid = 0;
 
-    // we want to run as the owner of the cache.
-    seteuid(entry->uid);
+    // cache in /var/lib is owned by root, so stay root for it
+    if (strncmp(ccname, GSSPROXY_PREFIX, strlen(GSSPROXY_PREFIX)) != 0) {
+      // we want to run as the owner of the cache.
+      setresuid(ccentry->uid, ccentry->uid, -1L);
+      changeduid = 1;
+    }
     
-    code = krb5_cc_resolve(ctx, entry->name, &cache);
+    code = krb5_cc_resolve(ctx, ccname, &cache);
     if (code) {
-      mylog(LOG_ERR, "can't resolve %s %s", entry->name, error_message(code));      
+      mylog(LOG_ERR, "can't resolve %s %s", ccname, error_message(code));      
       if (cache)
 	krb5_cc_close(ctx, cache);
       cache = NULL;
-      seteuid(0L);
-      continue;
+      if (changeduid) {
+	setresuid(0L, 0L, -1L);
+      }
+      return;
     }
 			   
-    if (needs_renew(ctx, cache, minleft, entry->getcred) && !test) {
-      renew(ctx, cache, minleft, entry->getcred, entry->uid, entry->name);
+    if (needs_renew(ctx, cache, minleft, 0)) {
+      renew(ctx, cache, minleft, 0, ccentry->uid, ccname);
       // renew closes
     } else {
       krb5_cc_close(ctx, cache);
     }
     cache = NULL;
 
-    seteuid(0L);
-    entry = entry->next;
-  }
-
+    if (changeduid) {
+      setresuid(0L, 0L, -1L);
+    }
 }
+
 
 /* 
    Delete if file is not OK. It's OK if it is one of
@@ -613,24 +718,80 @@ void renewall(krb5_context ctx, time_t minleft) {
    * less than 5 min old [in case it's in the middle of being created]
    name is just the file name assume it's got /tmp in front of it
 */
-void
-maybe_delete(krb5_context kcontext, char *name, int only_valid) {
+int
+maybe_delete(krb5_context kcontext, char *name, char *filename, int only_valid, struct cc_entry *ccentry) {
     krb5_error_code code;
     krb5_ccache cache = NULL;
-    char *filename;
-    ENTRY entry;
-    char *cp, *cp2;
-    
     char *newname;
+    
+    // 1. is it in the hash, i.e. still in use?
+    // we'll keep it around even if it is expired
+    // that should only happen if renew failed
+    if (ccentry) {
+      return 0;
+    }
+      
+    // not in use. kill it
 
-    if (strcmp(name, ".") == 0 ||
-	strcmp(name, "..") == 0)
-      return;
+    code = krb5_cc_resolve(kcontext, name, &cache);
 
-    // 0. normalize the name
-    newname = malloc(strlen(name) + 1);
-    cp = name;
-    cp2 = newname;
+    if (!code) {
+      code = krb5_cc_destroy(kcontext, cache);
+      if (code)
+	mylog(LOG_ERR, "Delete old cache failed %s %s\n", name, error_message(code));
+      else 
+	mylog(LOG_INFO, "Deleted old cache %s", name);
+    } else {
+      mylog(LOG_DEBUG, "Old cache to be deleted not found: %s %s\n", name, error_message(code));
+      if (cache)
+	krb5_cc_close(kcontext, cache); // not likely we have a cache if resolv failed
+    }
+
+    // remove entry from /run/renewdccs
+
+    asprintf(&newname, "/run/renewdccs/%s", filename);
+    unlink(newname);
+    free(newname);
+
+    return 1;
+
+}
+
+void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_del) {
+  struct dirent **namelist;
+  int numdirs;
+  int i;
+
+  numdirs = scandir("/run/renewdccs", &namelist, NULL, alphasort);
+  if (numdirs < 0) {
+    mylog(LOG_ERR, "Couldn't scan /run");
+    return;
+  }
+
+  // this is safer than opendir because the semantics of
+  // that aren't well defined if you delete files
+  for (i = 0; i < numdirs; i++) {
+    char *filename = namelist[i]->d_name;
+    char *ccname;
+    char *ccmem; // original malloc
+    char *key;
+    int deleted = 0;
+    ENTRY entry;
+    ENTRY *fentry;
+    struct cc_entry *ccentry = NULL;
+    char *cp, *cp2;
+
+    if (strcmp(filename, ".") == 0 ||
+	strcmp(filename, "..") == 0) {
+      free(namelist[i]);
+      continue;
+    }
+
+    // translate from filename to ccname
+    ccmem = malloc(strlen(filename) + 1);
+    ccname = ccmem;
+    cp = filename;
+    cp2 = ccname;
     while (*cp) {
       char ch = *cp;
       if (ch == '\\')
@@ -641,67 +802,67 @@ maybe_delete(krb5_context kcontext, char *name, int only_valid) {
       cp2++;
     }
     *cp2 = '\0';
-    if (strncmp(newname, "FILE:", 5) == 0)
-      filename = newname + 5;
-    else 
-      filename = newname;
 
-    // 1. is it in the hash, i.e. still in use?
-    // we'll keep it around even if it is expired
-    // that should only happen if renew failed
-
-    // now have name in normalized and uid in uid
-    entry.key = filename;
-    if (hsearch(entry, FIND)) {
-      if (debug > 1)
-	mylog(LOG_DEBUG, "In hash: %s", filename);	
-      free(newname);
-      return; // yes, it's still in use, return without doing anything
+    // normaize it, remove FILE: and remove trailing stuff from keyring
+    cp = NULL;
+    if (strncmp(ccname, "FILE:", 5) == 0) {
+      ccname += 5;
     }
-      
-    // not in use. kill it
+    // key to lookup in hash is normally the ccname
+    key = ccname;
+    if (*ccname == '/') {
+      // if it's a GSSproxy ticket, we only ask that the user stil
+      // has a process, so look up the uid, not the ccname
+      if (strncmp(ccname, GSSPROXY_PREFIX,
+		  strlen(GSSPROXY_PREFIX)) == 0)
+        key += strlen(GSSPROXY_PREFIX);
+    } else if (strncmp(ccname, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
+      cp2 = ccname + strlen(KEYRING_PREFIX);
+      cp = strchr(cp2, ':');
+      if (cp)
+	*cp = '\0';
+    }      
+    mylog(LOG_DEBUG, "checking cache %s", ccname);
 
-    code = krb5_cc_resolve(kcontext, filename, &cache);
-
-    if (!code) {
-      code = krb5_cc_destroy(kcontext, cache);
-      if (code)
-	mylog(LOG_DEBUG, "Delete old cache failed %s %s", filename, error_message(code));
-      else 
-	mylog(LOG_INFO, "Deleted old cache %s", filename);
-    } else {
-      mylog(LOG_DEBUG, "Old cache to be deleted not found: %s %s", filename, error_message(code));
-      if (cache)
-	krb5_cc_close(kcontext, cache); // not likely we have a cache if resolv failed
+    // ccname is now full ccache name, except that *cp may need to be
+    // restored
+    // look it up
+    entry.key = key;
+    if ((fentry = hsearch(entry, FIND))) {
+      ccentry = (struct cc_entry *)fentry->data;
     }
+    // restore ccname to full ccname
+    if (cp)
+      *cp = ':';
+    // special problem: there's a brief time in sssd when the cache
+    // has been created but the user process hasn't been started. If
+    // we look during that time we don't want to delete. So if there's
+    // no ccentry check whether the file was created very recently.
+    // if so, skip the delete
+    if (do_del) {
+      int skipdel = 0;
+      if (!ccentry) {
+	char *statfile;
+	struct stat statbuf;
+	time_t now = time(0);
 
-    free(newname);
+	asprintf(&statfile, "/run/renewdccs/%s", filename);
+	if (stat(statfile, &statbuf) == 0) {
+	  // 2 min should be enough even for X2go
+	  if ((now - statbuf.st_mtime) < 120) {
+	    skipdel = 1;
+	  }
+	}
+	free(statfile);
+      }
+      if (!skipdel)
+	deleted = maybe_delete(kcontext, ccname, filename, only_valid, ccentry);
+    }
+    // can't renew if it's not registered, becsuse we need the uid
+    if (minleft && !deleted && ccentry)
+      maybe_renew(kcontext, ccname, minleft, ccentry);
 
-    // remove entry from /run/renewdccs
-
-    asprintf(&newname, "/run/renewdccs/%s", name);
-    unlink(newname);
-    free(newname);
-
-}
-
-void delete_old(krb5_context kcontext, int only_valid) {
-  struct dirent **namelist;
-  int numdirs;
-  int i;
-
-  numdirs = scandir("/run/renewdccs", &namelist, NULL, alphasort);
-  if (numdirs < 0) {
-    mylog(LOG_ERR, "Couldn't scan /tmp");
-    return;
-  }
-
-  // this is safer than opendir because the semantics of
-  // that aren't well defined if you delete files
-  for (i = 0; i < numdirs; i++) {
-    if (debug > 2)
-      mylog(LOG_DEBUG, "checking %s", namelist[i]->d_name);
-    maybe_delete(kcontext, namelist[i]->d_name, only_valid);
+    free(ccmem);
     free(namelist[i]);
   }
 
@@ -727,13 +888,13 @@ int main(int argc, char *argv[])
   char *wait_str = NULL;
   char *min_str = NULL;
   char *rwait_str = NULL;
-  char *default_str;
+  char *default_str = NULL;
+  char *delete_mode = NULL;
   time_t nextrenew = 0;
   krb5_context context;
   char *default_realm = NULL;
   int err = 0;
   krb5_data realm_data;
-  char *delete_mode;
 
   progname = *argv;
 
@@ -836,6 +997,8 @@ int main(int argc, char *argv[])
     renewwait = atoi(default_str);
 
   while (1) {
+    struct cc_entry *entry;
+    time_t renew_left;
 
     // pass 1. renew primary caches only
 
@@ -844,21 +1007,32 @@ int main(int argc, char *argv[])
 
     // checkanonymous(context, 60 * (wait + 10));
 
-    mylog(LOG_DEBUG, "main loop");
+    if (!test)
+      mylog(LOG_DEBUG, "main loop");
 
     getccs(); // put uids of all procs into the hash
 
-    if (now >= nextrenew) {
-      mylog(LOG_DEBUG, "doing renewal");
-      renewall(context, 60 * minleft);
-      nextrenew = now + 60 * renewwait;
+    entry = cclist;
+    while (entry) {
+      entry = entry->next;
     }
 
-    if (test)
-      exit(1);
+    if (now >= nextrenew && !test) {
+      mylog(LOG_DEBUG, "doing renewal");
+      renew_left = 60 * minleft;
+      nextrenew = now + 60 * renewwait;
+    } else
+      renew_left = 0;
 
-    if (strcmp(delete_mode, "none") != 0)
-      delete_old(context, strcmp(delete_mode, "valid") == 0);
+    if (test)
+      handle_all(context, strcmp(delete_mode, "valid") == 0,
+		 0, 0);
+    else
+      handle_all(context, strcmp(delete_mode, "valid") == 0,
+		 renew_left, (strcmp(delete_mode, "none") != 0));
+
+    if (test)
+      exit(0);
 
     freeccs();
 
@@ -875,4 +1049,5 @@ int main(int argc, char *argv[])
   }
   exit(0);
 }
+
 
