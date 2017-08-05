@@ -1065,6 +1065,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *default_realm = NULL;
   krb5_data realm_data;
   char *mainret = NULL;
+  int didmkstemp = 0;
   uid_t olduid;
   gid_t oldgid;
   int i;
@@ -1176,6 +1177,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
           fchmod(fd, 0700);
           fchown(fd, pwd->pw_uid, pwd->pw_gid);
           close(fd);
+          didmkstemp = 1;
       }
   }
 
@@ -1188,6 +1190,10 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   if ((mainret = pam_kgetcred(ccname, pwd, context, pamh)) == NULL) {
       setresuid(olduid, olduid, -1);
       setresgid(oldgid, oldgid, -1);
+      // mkstemp created the file. if we fail, don't leave 0 length file
+      if (didmkstemp)
+          unlink(ccname);
+      unlink(ccname);
       return PAM_CRED_UNAVAIL; // go ahead and do the login anyway      
   }
   setresuid(olduid, olduid, -1);
