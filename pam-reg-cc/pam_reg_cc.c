@@ -349,7 +349,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       // only renewable creds are worth looking at. and must be TGT
       if ((creds.ticket_flags & TKT_FLG_RENEWABLE) && is_local_tgt(creds.server, &userprinc->realm)) {
 	// enough time left, it's current
-	if ((creds.times.endtime - now) > minlife) {
+	if ((time_t)(uint32_t)(creds.times.endtime - now) > minlife) {
 	  found_current_tgt = TRUE;
 	  krb5_free_cred_contents(context, &creds);
 	  break;

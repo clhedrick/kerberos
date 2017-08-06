@@ -231,7 +231,7 @@ int isrecent(krb5_ticket *ticket) {
     now = time(0);
     times = ticket->enc_part2->times;
 
-    if ((now - times.authtime) > 30) {
+    if ((now - (time_t)(uint32_t)times.authtime) > 30) {
         mylog(LOG_ERR, "ticket is too old");
         return 0;
     }

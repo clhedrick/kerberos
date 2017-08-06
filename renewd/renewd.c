@@ -184,7 +184,7 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft, int getcre
       if ((creds.ticket_flags & TKT_FLG_RENEWABLE) && is_local_tgt(creds.server, &princ->realm)) {
 	
 	// enough time left, it's current
-	if ((creds.times.endtime - now) > minleft) {
+	if (((time_t)(uint32_t)creds.times.endtime - now) > minleft) {
 	  found_current_tgt = TRUE;
 	  krb5_free_cred_contents(kcontext, &creds);
 	  break;
@@ -197,7 +197,7 @@ needs_renew(krb5_context kcontext, krb5_ccache cache, time_t minleft, int getcre
 	  allowedexpire = (60 * 60 * 24 * 7);
 	else
 	  allowedexpire = 0;
-	if (((creds.times.endtime + allowedexpire) >= now) && ((creds.times.renew_till - now) > (10*60))) {
+	if ((((time_t)(uint32_t)creds.times.endtime + allowedexpire) >= now) && ((creds.times.renew_till - now) > (10*60))) {
 	  // yup. but keep searching in case there's more than one
 	  // and another one is still current
 	  found_tgt = TRUE;
