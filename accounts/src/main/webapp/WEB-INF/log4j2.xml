@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration>
   <Appenders>
-    <Syslog name="syslog" host="localhost" port="514" protocol="TCP" facility="authpriv" newLine="true"/>
+    <Socket name="syslog" host="localhost" port="514" protocol="TCP">
+      <PatternLayout pattern="&lt;86&gt;accounts[%T]: %m%n" />
+    </Socket>
   </Appenders>
   <Loggers>
     <Root level="info">

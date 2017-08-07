@@ -642,6 +642,9 @@ public class User {
 
 		    // print the clusters they can login on.
 		    for (Config.Cluster cluster: config.clusters) {
+			// if config says not to cleanup this cluster, don't
+			if (cleanup && !cluster.docleanup)
+			    continue;
 			logger.debug("For cluster " + cluster.name);
 			// for each group user is in from univ data (usermainainedgroups)
 			//   if course

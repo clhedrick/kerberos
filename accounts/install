@@ -1,3 +1,4 @@
 #!/bin/sh
 
+cp src/main/var-lib-activator/*xml /var/lib/activator
 cp target/accounts-1.0.war /var/www/tomcat/webapps/accounts.war 

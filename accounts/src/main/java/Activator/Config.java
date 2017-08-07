@@ -60,6 +60,7 @@ public class Config {
 	public String name;
 	List<Rule> rules;
 	Set<String> groups;
+	boolean docleanup;
 	public String getName(){return name;}
     }
     
@@ -187,6 +188,7 @@ public class Config {
 			cluster.rules = new ArrayList<Rule>();
 			cluster.groups = new HashSet<String>();
 			cluster.name = atoms[0].substring(1, atoms[0].length()-1);
+			cluster.docleanup = true;
 			if ("managed".equals(cluster.name))
 			    managed = cluster;
 			else if ("departments".equals(cluster.name))
@@ -199,6 +201,8 @@ public class Config {
 		    if ("managed".equals(cluster.name) && atoms.length < 2)
 			throw new java.lang.IllegalArgumentException("unrecognized line " + line);
 		    
+		    if (atoms[0].equals("-nocleanup"))
+			cluster.docleanup = false;
 		    Rule rule = new Rule();
 		    rule.groupName = atoms[0];
 		    cluster.groups.add(atoms[0]);
