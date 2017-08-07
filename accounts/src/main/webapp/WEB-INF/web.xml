@@ -38,7 +38,7 @@
 
     <init-param>
       <param-name>service</param-name>
-      <param-value>https://${serverName}/accounts/changepass/changepass.jsp</param-value>
+      <param-value>https://${serverName}/accounts/changepass/changepass</param-value>
     </init-param>
   </filter>
 
@@ -53,7 +53,7 @@
 
     <init-param>
       <param-name>service</param-name>
-      <param-value>https://${serverName}/accounts/changepass/changepass.jsp</param-value>
+      <param-value>https://${serverName}/accounts/changepass/changepass</param-value>
     </init-param>
   </filter>
 
@@ -88,7 +88,7 @@
 
     <init-param>
       <param-name>service</param-name>
-      <param-value>https://${serverName}/accounts/activate/activate.jsp</param-value>
+      <param-value>https://${serverName}/accounts/activate/activate</param-value>
     </init-param>
   </filter>
 
@@ -103,7 +103,7 @@
 
     <init-param>
       <param-name>service</param-name>
-      <param-value>https://${serverName}/accounts/activate/activate.jsp</param-value>
+      <param-value>https://${serverName}/accounts/activate/activate</param-value>
     </init-param>
   </filter>
 

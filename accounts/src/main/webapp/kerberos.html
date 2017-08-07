@@ -59,14 +59,20 @@ new technologies, and failures are possible.
 <p> In order to maintain access to your files, you need an active Kerberos ticket.
 This will be issued automatically
 by sssd when you login. If you ssh between systems, the ticket will be passed
-automatically to the new system. Our tickets last for an hour (by default -- you can
-get a ticket with a lifetime as long as a day if you call "kinit" directly). There's a background
-process (renewd) that automatically renews the ticket as long as you're logged in.
+automatically to the new system. Our tickets last a day (by default). There's a background
+process (renewd) that automatically renews the ticket as long as you're logged in. It
+will also remove your ticket when you logout. (We do not recommend using kdestroy in
+.logout or .bash_logout, because that will cause trouble if you're still logged in with
+a second session.)
 
 <p> The major risk is that we will have overlooked something, and your ticket
 will expire. You can check for this using the "klist" command. It will list your
 current Kerberos ticket. Please report any cases where you don't get a ticket
-on login, or it expires while you're still logged in.
+on login, or it expires while you're still logged in. You can create a ticket
+manually using the "kinit" command. (If you're using two-factor authentication,
+you'll need to use "skinit" instead.) Note that tickets created by kinit are
+not renewed or destroyed automatically.
+
 
 <p> Note that we've had to "wrap" ssh with our own code. For that reasons,
 paths are set so that you get /usr/local/bin/ssh, not /usr/bin/ssh. If you
@@ -88,6 +94,9 @@ systems by ssh.
 to issue a ticket on your behalf would obviously subvert the intention of using
 two-factor authentication. In this case you have two choices:
 <ul>
+<li> Use Google authenticator. It is checked atlogin, but not by cron jobs.
+This is slightly less secure than the builtin Kerberos support for two-factor
+authentication.
 <li> Write your cron job to use only files stored on the computer itself. Our
 systems generally have substantial local file systems which you can use for this.
 <li> Ask us for a second user ID that won't use two-factor authentication.

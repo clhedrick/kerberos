@@ -4,7 +4,9 @@
    <Console name="STDOUT" target="SYSTEM_OUT">
      <PatternLayout pattern="%m%n"/>
    </Console>
-   <Syslog name="syslog" host="localhost" port="514" protocol="TCP" facility="authpriv" newLine="true"/>
+   <Socket name="syslog" host="localhost" port="514" protocol="TCP">
+     <PatternLayout pattern="&lt;86&gt;accounts[%T]: %m%n" />
+   </Socket>
  </Appenders>
  <Loggers>
    <Logger name="org.apache.log4j.xml" level="info"/>

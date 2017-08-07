@@ -1,0 +1,386 @@
+This file is intended for someone who needs to make changes to this
+web application, but doesn't know much about it or the technologies
+on which it is based. So it contains a review of the structure of
+the application, and a quick introduction to the infrastructure on
+which it's based.
+
+The application is written in Java, with Spring Boot. This is the
+simplet web framework I could find. It's also part of Spring, which is
+a huge project with lots of features. Spring Boot sets up reasonable
+defaults.  I've changed almost nothing from the defaults. But you've
+got all of Spring available if you need it.
+
+While Spring is a tier 1 platform, I'm using a templating system,
+Thymeleaf, that's newer. Most Spring Boot tutorials seem to recommend
+it. It has some features that make me like it, particularly in how it
+handles quoting. But if it becomes unavailable it wouldn't be hard to
+move to a different template system. After all, the templates are just
+annotated HTML, and the HTML wouldn't change.
+
+The core of the application is contained in subdirectories of
+src/main/java/application. Look for files that look like
+fooController.java. Each web page has a controller file. Thats the
+java code for the page. I believe the controllers must be in the same
+package as the main Spring configuration file, or possibly a
+subpackage. In this case the package is "application."
+
+src/main/java/application/GreetingController.java is a sample
+controller, useful primarily because it shows the minimal set of
+imports needed for a controller. However if you use additional
+annotations (which most of my controllers do), each one requires
+its own import.
+
+Each Java file is paired with a template, which is HTML plus
+annotations.  They are in src/main/resources/templates/groups,
+activate, and changepass.
+
+If you look at the controllers, you'll see that each one has two main
+methods, one for GET requests, which display the page, the other for
+POST requests, which handle submits and other changes the user
+requests on the page.
+
+The GET methods look like this:
+
+    @GetMapping("/groups/showgroups")
+    public String groupsGet(HttpServletRequest request, HttpServletResponse response, Model model) {
+
+That handles GET for the URL groups/showgroups. The whole application
+is /accounts, so the actual URL is /accounts/groups/showgroups.
+Model is basically just a map. You fill it in with variable names
+paired with values. Those variables are available to the template, and
+provide the main content for the page. 
+
+Note that the variables can have complex values, such as lists of
+maps. I'm normally presenting data from LDAP, so one of my variables
+has either the LDAP data for one group or for a list of groups. I
+represent LDAP data as a map, much as PHP does. So LDAP data for a
+user might be 'sn' -> ['Hedrick'], 'givenname' -> ['Charles']. Note
+that the values are lists, since each LDAP attribute can have multiple
+values.  E.g a group can have multiple members. (The members are
+stored as LDAP DN's, not simple usernames, so dn2user has to be used
+to get the username.)
+
+When the user clicks submit, the other method is called, e.g.
+
+    @PostMapping("/groups/showgroups")
+    public String groupsSubmit(@RequestParam(value="name", required=false) String name,
+                               @RequestParam(value="sharing", required=false) String sharingSt,
+                               @RequestParam(value="guests", required=false) String guestSt,
+                               @RequestParam(value="del", required=false) List<String>del,
+                               HttpServletRequest request, HttpServletResponse response,
+                               Model model) {
+
+Each name used in an HTML INPUT tag turns into a variable if you
+supply a @RequestParam declaration for it.  Things like checklists
+with multiple values for a given input name can be retrieved as lists,
+as shown here.
+
+The methods return the name of the template to use, e.g.
+
+    return "groups/showgroups";
+
+For some errors, I go to a different page by calling its GET method,
+e.g.
+
+    return loginController.loginGet(request, response, model);
+
+To get a reference to another controller, you need to ask Spring to
+"autowire" the reference for you, e.g.
+
+    @Autowired
+    LoginController loginController;
+
+That causes Spring to look for an instance of the class
+LoginController and stick it in the variable. The controllers are all
+"singletons," meaning they are classes with only one instance, set up
+by Spring when the application starts.
+
+You'll see that all of my templates start by displaying a list of
+messages, if there are any. So you can add error messages to the model
+and they will show up at the beginning of the page. In cases where
+I call the GET method in a different controller, I typically add a
+message to the model and pass that to the other controller. That
+will cause the other web page to start with the message.
+
+The templates use Thymeleaf. You'll find good online documentation.
+
+The controllers are only part of the application. There is also a
+library of separate classes that the controllers call. They are
+utilities such as getting data from a database or LDAP. Any code
+that is used by more than one page were pulled out into this library
+of classes. So were complex things that didn't make sense to put in
+the web layer, e.g. the actual decision-making for the activator.
+
+Those library classes are in src/main/java/common and
+src/main/java/Activator. (You won't see much pattern to which classes
+are in which directory. If I were doing it again I'd put them all into
+common.)
+
+There are some reasonable tutorials online for Spring Boot. There's
+also an online reference manual.
+
+In general I get data from LDAP queries but change it using IPA
+commands. Both of these use Kerberos authentication.  The APIs aren't
+simple, so a fair amount of code is just setting up to do
+authenticated operations. The code is well commented, so you should be
+able to follow what it's doing.
+
+The group management logic is mostly in the controllers.  The
+activator is mostly in src/main/java/Activator/User.java, which is
+called by the controller for the activator web pages (and also the
+activate command-line tool).
+
+If you want to change how the activator works, you probably will
+change src/main/java/Activator/User.java. If you want to change how
+web pages look and act, you'll mostly be changing the controllers and
+templates.
+
+Before changing the activator, look carefully at
+/etc/activator.config. Most things you want to do should be possible
+using the config file, without changing any Java code.
+
+-----
+
+BUILDING AND DEPLOYING
+
+In this directory, you'll see 2 scripts:
+
+./build will compile the java. If that works it will put the java
+classes and other files into a WAR file.  That's just a ZIP file.
+
+./install will copy the WAR file to
+/var/www/tomcat/webapps/accounts.war. Tomcat watches that file. If
+it's updated, Tomcat will remove the old copy of the application and
+install the new one. Note that all current users will have to login
+again.
+
+This technology can all be used from Eclipse, if you prefer using an
+IDE. The scripts are intended for people who work with a text editor.
+
+------------
+
+SECURITY
+
+Spring does two things for you that help security:
+
+* The template system makes sure that data you display is properly
+encoded or quoted. So if there's an HTML tag in the data, it will be
+displayed as text, not executed.
+
+* Spring will expect all POSTs to have a CSRF token.  You can look in
+Wikipedia for what CSRF is and why this is needed. As long as all your
+forms are generated by Thymeleaf, the necessary token will always be
+there.  At least if you use th:action to define the action attribute
+of the FORM tag.
+
+------------
+
+THYMELEAF ISSUES
+
+Data on groups comes from LDAP as a map. E.g. if "group" has the
+map, group.cn  is the common name field. Since fields can have
+multiple values, to get the first (and presumably only) value,
+use group.cn[0]. Groups always have one cn. But not all groups
+have gid's. In theory group.gidnumber[0] should work, and give
+a blank if there's no GID. 
+
+However you'll get an exception. The correct syntax is
+group['gidnumber']?.get(0). The official syntax for finding an entry
+in a map uses []. group.gidnumber only works if the entry is
+there. [0] for a list works, but there's no way to make it safe if the
+list is null. ?. is the special safe navigation operator. It works for
+function calls but not array references. So you have to write get(0)
+rather than [0]. This weirdness is the only advantage I know of JSTL
+over Thymeleaf. JSTL does a much better job of protecting against
+nulls in expressions.
+
+One other note about Thymeleaf. It expects proper XML structure.  All
+<div>s must be matched by </div>.  Even <p> must have matching
+</p>. For tags like <input> that don't have a close, use / before the
+>, e.g.  <input name="foo" />. Similarly with <br/>. I've used a DTD
+at the top declaring these files to be XHTML. This is HTML 4 with 
+proper structure. You can also use Thymeleaf for HTML 5. If you do 
+that, please change the DTD to a proper HTML 5 DTD.
+
+This restriction is being removed in the next major release of
+Thymeleaf, which you'll get with Spring Boot 2. It will support normal
+HTML syntax. You'll probably need to change the DOCTYPE declaration
+at the beginning of each template to one specifying HTML rather than XHTML.
+
+If you put Javascript inline, Thymeleaf will try to parse it, and
+probably fail. The following weird construct will work:
+
+<script type="text/javascript">
+/*<![CDATA[*/
+function checknewmember() {
+...
+    $(".deleteOwnerButton").click(deleteOwner);
+    $(".deleteOwnerButton").keypress(deleteOwnerKeyPress);
+    });
+
+/*]]>*/
+</script>
+
+It causses Thymeleaf to see all the Javascript as inside a
+comment. The same thing may be needed for CSS.
+
+---------------
+
+AUTHENTICATION
+
+Changepass and activate use CAS authentication. By the nature of the
+applicatinos, we can't authenticate thoee parts using our own system,
+since people activating or setting a password may not have passwords
+in our system yet.
+
+CAS is set up in src/main/webapp/WEB-INF/web.xml. The setup in web.xml
+specifies the specific set of URLs that are covered by CAS.
+
+The Group management code is authenticated by our Kerberos. Operations
+are done with the user's Kerberos credentials. Thus what the user can
+do is controlled by LDAP ACL's based on his identity. Of course the
+web app will try not to offer to do things they shouldn't be able
+to. But bugs in the web app won't let them do anything bad, because
+LDAP and IPA will catch it and fail.
+
+Groups login creates a kerberos ticket in /tmp. It also creates a java
+structure called a Subject. That's Java's equivalent to a Kerberos
+ticket. The Subject is stored in the user's session. So is the user's
+name. In general LDAP queries use the Subject for authentication,
+while IPA commands use the ticket in /tmp.
+
+----------------
+
+SPRING SETUP
+
+This application is running in Tomcat, which currently is behind
+Apache. Apache forwards requests to it using an internal protocol
+called AJP. Apache handles all SSL for it.
+
+There's a myth that Tomcat isn't good at static files or SSL, so you
+have to put Apache in front of it to get good performance.  Sakai at
+Rutgers uses Tomcat directly, and performs just fine.  The reason this
+application is currently behind Apache is that it's deployed on
+servers that do other applications in Apache.  So putting this behind
+Apache lets it coexist with those other applications.  If that
+changes, the only difference would be in Tomcat's server.xml, which
+would need to use ports 80 and 443 rather than AJP. It would also need
+to point to the SSL certificate.
+
+Tomcat is designed to host multiple applications. Each is a separate
+directory in .../tomcat/webapps. This one is .../tomcat/webapps/accounts.
+Applications are deployed as ZIP files, with an extension of .war.
+When .../tomcat/webapps/accounts.war is updated, Tomcat notices,
+rebuilts the accounts directory, and restarts the application.
+
+Spring is infrastructure that is part of the application, so it
+consistents of .jar files in the .war file, plus a small amount of
+configuration. This is my choice. Spring can also take over the whole
+Tomcat instance. Many tutorals have you intall it that way.  But I
+wanted to be able to host multiple applications on the server, not all
+of which would necessarily use Spring.
+
+Spring is installed using dependencies in pom.xml. They all have names
+with spring-boot-starter in them. Spring used to be hard to srt up,
+with lots of modules and lots of configuration. Spring Boot puts all
+that stuff into the starter modules, so all you have to do is include
+them. Only one configuration class is necesary, in
+src/main/java/application/. 
+
+This application actually uses two configuration classes, plus
+./src/main/resources/application.properties
+
+* Application.java is the basic Spring configuration.  It's a standard
+file, which you can find in all the tutorials. There are two versions
+of the file. One gives you a single Spring application that uses the
+whole Tomcat.  I want to be able to have other applicatinons on the
+same server, so I used a version that causes the Spring Boot
+application to deploy just like any other Tomcat application.  So it
+can coexist with others.
+
+* SpringSecurityConfig.java. Spring security is optional.  It's
+included by putting spring-boot-starter-security in pom.xml. I used it
+because it does protection against CSRF, as explained above. However
+it also expects to control who can access what. Since I'm doing my own
+authentication, I need to disable that function of Spring Security.
+SpringSecurityConfig does that, by setting it to allow all users on
+all pages.
+
+These two classes are in the package "application." The controllers
+must be in the same package, or possibly a subpackage.
+
+src/main/resources/application.properties is Spring's main configuration
+file. If we were using a database, it would let you specify the database
+information. It can also have configuration for other things, such as
+Thymeleaf. Currently the only thing in it is a line disabling Thymeleaf's
+caching. This is for ease in development It lets you edit the Thymeleaf
+templates and have the changes take effect immediately.  By default you
+have to redeploy every time you change a template.
+
+---------------------
+
+UPGRADING
+
+You'll need to upgrade two things: versions of Spring Boot and other
+Java packages, and Tomcat.
+
+I would update both Java and Tomcat at least once a year, and maybe
+once a semester. It would be best to do everything, but security
+issues are most likely in Java and Tomcat.
+
+You upgrade Tomcat by installing a new copy and then installing the
+.war file in it. After installing a new Tomcat, you'll need to change
+a few things:
+
+* copy the db directory from the old version. This contains the known
+bad passwords, and is used by the changepass function.
+
+* copy bin/setup.sh from the old copy. This sets memory and other Java
+configuration. If Java changes a lot, you may want to change some of
+the settings here.
+
+* update bin/catalina.sh. Look for the line in the old one containing
+rotatelogs and make the corresponding change in the new one. Tomcat
+generates a fairly large log file, catalina.out. This sets it up so
+there a new version every day. That lets you delete the old ones,
+which I do from a cron job.
+
+* look at conf/server.xml. The only thing you should need to do
+is set the <Connector> declarations. Comment out all of them 
+except     <!-- Define an AJP 1.3 Connector on port 8009 -->
+and make sure that one is uncommented.
+
+* I may ahve changed conf/jaas.config, for
+com.sun.security.auth.module.Krb5LoginModule required client=TRUE;
+Compare the copy in the old tomcat with the new one. Try it first
+without changing this file.
+
+If you're updating to a new minor version, it should be safe just
+to copy the old versions of these files to the new copy.
+
+
+Java modules:
+
+pom.xml declares all the packages that this code uses.  Each
+declaration includes a version number. Periodically you'll want to
+update to the newest version. Each package comes from a
+open-sourceproject. They all have web sites. Generally you'll find
+release notes that give upgrade instructions.  I've picked packagss
+that shouldn't change a lot. Spring Boot is probably the most likely
+to require changes. But in the past they haven't been very serious,
+and they're well documented.
+
+Of course you'll also want to update Java itself. You can probably
+do that with yum update. Normally updating Java doesn't break anything.
+But I'd check the release notes for the version of Tomcat and 
+Spring Boot you're using to see what versiosn of Java are supported.
+You can typically upgrade to newer Javas, but I'd be careful.
+
+If you go for a few years without upgrading Spring Boot and the other
+modules, you'll still want to keep Java up to date.  That may involve
+using newer versions of Java than are supported.  It will probably
+work OK, but sometimes compatibility options have to be set up in
+bin/setenv.sh to make the new Java work like the old one.  Google
+should help you here. If things don't work, look in logs/catalina.out
+Normally if you can find an error message, you can Google it.
+

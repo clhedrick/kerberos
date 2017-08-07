@@ -1,0 +1,94 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
+<script type="text/javascript">
+/*<![CDATA[*/
+
+var clicked = false;
+$(document).ready(function(){
+  $('.link').click(function(event){
+     if (!clicked) {
+       clicked = true;
+     } else {
+       event.preventDefault();
+       alert('Please wait. This can take up to a minute.')
+     }
+  });
+
+});
+
+/*]]>*/
+</script>
+</head>
+<div id="masthead"></div>
+<div id="main">
+<p class="messages" th:if="${activatefailed}">
+Unable to activate your account. Please contact 
+<a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>.
+</p>
+
+<a href="..">Account Management</a>
+
+<h2> Activate Account on Computer Science Dept systems </h2>
+
+<p> This page will let you activate accounts on computer systems
+within the Computer Science Department. You are eligible for an
+account if you are computer science faculty, major, or grad student,
+or if you are enrolled in computer science courses other than 110, 170, and 494. Some additional
+types of users may be authorized on a special-case basis.</p>
+<div th:if="${ok}">
+
+<div th:if="${(clusters.size() + currentClusters.size() + ineligibleClusters.size() == 0)}">
+<p> However according to our records, you are not authorized to create accounts
+on any of our systems. If you think this is an error, please contact
+<a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>. Make sure to
+include your Netid, and the reason you should be eligible for an account.</p>
+</div>
+
+<div th:if="${(clusters.size() + currentClusters.size() + ineligibleClusters.size() > 0)}">
+<p> According to our records:</p>
+
+<div th:if="${currentClusters.size() > 0}">
+<p> You currently have acounts on the following clusters of systems. You do not need to
+do anything to continue using them.</p>
+<p> If you have forgotten your password, or you haven't created a password for the new systems,
+use the <a href="../changepass/changepass"> Change Password </a> screen.</p>
+<ul>
+<li th:each="cluster: ${currentClusters}" th:text="${cluster}"/>
+</ul>
+</div>
+
+<div th:if="${clusters.size() > 0}">
+<p> You can activate accounts 
+on the following clusters of systems. Select the link to create
+an account there:</p>
+<ul>
+<li th:each="cluster: ${clusters}">
+<a class="link" href="#" th:onclick="'document.getElementById(\'form-' + ${cluster} + '\').submit();'" th:text="${cluster}"/>
+<form style="display:none" th:id="'form-' + ${cluster}" th:action="@{/activate/activate}" method="post">
+<input type="hidden" name="cluster" th:value="${cluster}"/>
+<input type="submit" value="submit"/></form>
+</li>
+</ul>
+</div>
+
+<div th:if="${ineligibleClusters.size() > 0}">
+<p> You have accounts on the following cluster for which you are no longer eligible. You
+should get email warning you that these accounts will be closed.  If you need to continue
+using the accounts, please contact
+<a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>.</p>
+<ul>
+<li th:each="cluster: ${ineligibleClusters}" th:text="${cluster}"/>
+</ul>
+</div>
+</div>
+</div>  <!-- end of if ok -->
+
+<div th:if="${!ok}">
+<p> Unfortunately we are unable to determine where you are eligible for
+accounts. Please contact
+<a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>.
+Make sure to mention your netid in your email and any computer science courses you are taking.</p>
+</div>
+</div>
+
