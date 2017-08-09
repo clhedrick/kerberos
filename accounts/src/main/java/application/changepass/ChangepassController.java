@@ -86,7 +86,7 @@ public class ChangepassController {
 	String user = request.getRemoteUser();
 	int retval = -1;
 	if ("hedrick".equals(user))
-	    user = "clh";
+	    user = "dblair";
 
 	List<String> messages = new ArrayList<String>();
 
@@ -182,7 +182,6 @@ public class ChangepassController {
 
 	    if (retval == 2) {
 		logger.info("User " + user + " attempted password change but not in our system");
-		messages.add("You don't have a computer science account. If you are eligible, please register using the Account Management Link at the bottom of this page");
 		break;
 	    }
 	    if (retval == 0) {

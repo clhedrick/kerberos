@@ -6,6 +6,10 @@
 <div class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
+<div class="messages" th:if="${retval == 2}">
+<p>You don't have a computer science account. If you are eligible, please <a href="../activate/activate">Activate Your Account</a> first and then return here.</p>
+</div>
+<a href="../"> Account Management</a> 
 
 <div th:if="${!allowchange}">
 <p>You have previously requested that we disable this function for your account.</p>

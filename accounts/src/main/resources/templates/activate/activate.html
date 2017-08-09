@@ -40,9 +40,12 @@ types of users may be authorized on a special-case basis.</p>
 
 <div th:if="${(clusters.size() + currentClusters.size() + ineligibleClusters.size() == 0)}">
 <p> However according to our records, you are not authorized to create accounts
-on any of our systems. If you think this is an error, please contact
-<a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>. Make sure to
-include your Netid, and the reason you should be eligible for an account.</p>
+on any of our systems.</p>
+<p> If you're not faculty, staff or student in computer science, but have
+access to our systems, please contact 
+<a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>. We'll be happy
+to set you up in the new system. Make sure to include your Netid in the email.
+</p>
 </div>
 
 <div th:if="${(clusters.size() + currentClusters.size() + ineligibleClusters.size() > 0)}">

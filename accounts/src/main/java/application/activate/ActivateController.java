@@ -37,7 +37,7 @@ public class ActivateController {
 	List<String> ineligibleClusters = new ArrayList<String>();	    
 	String username = request.getRemoteUser();
 	if (username.equals("hedrick"))
-	    username = "dsmith";
+	    username = "dblair";
 
 	// set up model for JSTL
 	// User.doUser calls the actual activator code to find out which clusters the user
