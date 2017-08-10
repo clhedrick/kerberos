@@ -1,5 +1,4 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
-
 <%@ page import="javax.naming.*" %>
 <%@ page import="javax.naming.directory.*" %>
 <%@ page import="javax.naming.ldap.*" %>
@@ -86,7 +85,11 @@ function choose(netid) {
 
 <% 
 
-       String netidadded = request.getParameter("netidadded");
+  org.springframework.security.web.csrf.DefaultCsrfToken token = 
+     (org.springframework.security.web.csrf.DefaultCsrfToken)
+     request.getAttribute("_csrf");
+
+  String netidadded = request.getParameter("netidadded");
 
   if (netidadded != null) { %>
 
@@ -106,7 +109,10 @@ if (request.getParameter("last") == null) { %>
 <div class="portletBody">
 <h2>Rutgers User Lookup</h2>
 
+
+
 <form action="addpart-lookup.jsp" method="post">
+<input type="hidden" name="<%= token.getParameterName() %>" value="<%= token.getToken() %>" />
 
 <p>
 Last name: <input type=text name="last" size=40><br> 
@@ -168,6 +174,7 @@ There you can finish the process of adding the users you have identified.
 </p>
 
 <form action="addpart-lookup.jsp" method="post">
+<input type="hidden" name="<%= token.getParameterName() %>" value="<%= token.getToken() %>" />
 <input type=hidden name="last" value="<%=lastname%>">
 <input type=hidden name="first" value="<%=firstname%>">
 <input type=hidden name="anywhere" value="<%=anywhere%>">
@@ -219,7 +226,7 @@ There you can finish the process of adding the users you have identified.
 
         List<Map<String,List<String>>> universityDataList = ldap.lookup(filter, xconfig);
 
-        out.println("<form action='addpart-lookup.jsp' method='post'>");
+        out.println("<form action='addpart-lookup.jsp' method='post'><input type=\"hidden\" name=\"" + token.getParameterName() + "\" value=\"" + token.getToken() + "\"/>");
 
         ArrayList<String[]> users = new ArrayList<String[]>();
 
@@ -309,7 +316,7 @@ There you can finish the process of adding the users you have identified.
 
 <p>&nbsp;
 <form action="addpart-lookup.jsp" method="post">
-
+<input type="hidden" name="<%= token.getParameterName() %>" value="<%= token.getToken() %>" />
 <p>
 <input type=submit value="Look up another user">
 <input type=button value='Done looking up' onclick='window.close()'>
