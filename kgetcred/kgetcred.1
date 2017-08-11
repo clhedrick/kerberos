@@ -77,7 +77,10 @@ Note that there is a pam version of this, pam_kgetcred. We expect that this will
 for cron. In that case most users won't need to call kgetcred from their jobs. They'll just
 need the -r and -u options to register keytables on the server.
 .PP
-The hostname of at least one server running credserv must be registered in /etc/krb5.conf, e.g.
+Kgetcred needs the IP address of one or more servers running credserv. By default, it
+will use the same addresses as your Kerberos servers, looking them up in
+DNS based on SRV records. If this doesn't give the right result, you can
+specify the hostname of at least one server running credserv in  /etc/krb5.conf, e.g.
 .PP
 .nf
 [appdefaults]

@@ -98,6 +98,9 @@ extern char** environ;
 #endif
 #endif
 
+char **getsrv( const char * domain,
+               const char * service, const char * protocol );
+
 static int
 net_read(int fd, char *buf, int len)
 {
@@ -234,8 +237,9 @@ int main(int argc, char *argv[])
     long written;
     char *serverhost = NULL;
     char *serverhostlist = NULL;
+    char **serverhostarray = NULL;
+    int serverhostindex = 0;
     char lasthost[1024];
-    int lasthostdone = 0;
     int lasthostused = 0;
      char *default_realm = NULL;
      unsigned debug = 0;
@@ -413,8 +417,11 @@ int main(int argc, char *argv[])
 
     // address of credserv server
     if (strlen(serverhostlist) == 0) {
-        mylog(LOG_ERR, "Please define server in the [appdefaults] section, e.g. \nkgetcred = {\n     server=hostname\n}");
-        goto done;
+        serverhostarray = getsrv(default_realm, "kerberos", "tcp");
+        if (serverhostarray == NULL) {
+            mylog(LOG_ERR, "Please define server in the [appdefaults] section, e.g. \nkgetcred = {\n     server=hostname\n}");
+            goto done;
+        }
     }
 
     // our hostname
@@ -579,28 +586,31 @@ int main(int argc, char *argv[])
     // first see if there's a saved host. This is one that worked
     // last time. This is to prevent having to time out every time
     // if the first host is down
-    if (!lasthostdone && read_lasthost(lasthost, sizeof(lasthost)) == 0) {
+    if (!lasthostused && read_lasthost(lasthost, sizeof(lasthost)) == 0) {
         serverhost = lasthost;
         lasthostused = 1;
-    }
-    // done with saved host, get next host from list
-    else if (!(serverhost = strsep(&serverhostlist, ",")))
-        break;
+    } else if (serverhostlist && *serverhostlist) {
+        if (!(serverhost = strsep(&serverhostlist, ",")))
+            break;
 
-    // skip blanks
-    while(*serverhost == ' ')
-        serverhost++;
-    // if nothing left, e.g. trailing comma, done
-    if (!*serverhost) {
-        break;
-    }
+        // skip blanks
+        while(*serverhost == ' ')
+            serverhost++;
+        // if nothing left, e.g. trailing comma, done
+        if (!*serverhost) {
+            break;
+        }
 
-    // we don't want to try last host a second time
-    // if we used lasthost, and this isn't the first try with it,
-    // skip it
-    if (lasthostdone && lasthostused && strcmp(lasthost, serverhost) == 0)
-        continue;
-    lasthostdone = 1;
+        // we don't want to try last host a second time
+        if (lasthostused && strcmp(lasthost, serverhost) == 0)
+            continue;
+    } else if (serverhostarray) {
+        serverhost = serverhostarray[serverhostindex++];
+        if (!serverhost)
+            break;
+        if (lasthostused && strcmp(lasthost, serverhost) == 0)
+            continue;
+    }
 
     memset(&aihints, 0, sizeof(aihints));
     aihints.ai_socktype = SOCK_STREAM;
@@ -994,6 +1004,14 @@ int main(int argc, char *argv[])
     // if we got here from an error, might not have cancelled 
     // an alarm.
     alarm(0);
+    if (serverhostarray) {
+        int i;
+        for (i = 0; serverhostarray[i]; i++) {
+            free(serverhostarray[i]);
+        }
+        free(serverhostarray);
+    }
+
     if (sock >= 0)
         close(sock);
     if (creds)

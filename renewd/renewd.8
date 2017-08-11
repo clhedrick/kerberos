@@ -8,9 +8,17 @@ renewd \- renew Kerberos credentials for all users automatically
 .I  renewd
 renews credentials. It only watches credentials that have been
 specifically registered. pam_reg_cc can be used to register 
-credentials. Registration is done using a session key (with keyctl).
-Thus when the session is finished, the credentials are automatically
-removed from being watched.
+credentials. Registration is done by creating a zero-length
+file in /run/renewdccs/, with the same name as the location of
+the credential cache. Some changes are made, e.g. changing / to \\.
+.PP
+When the session is finished, the credentials are automatically
+removed. To detemine when credentials are still in use, credserv
+look at the value of the KRB5CCNAME environment variable for all
+processes. Credentials in /var/lib/gssproxy/clients/ are assumed
+to be in use if there is any process owned by the same user.
+Other credentials are assumed to be in use if any process points
+to them with KRB5CCNAME.
 .PP
 This is part of a specific strategy to keep users from losing credentials
 or NFS access. The design of sshd, login, libkrb5 and rpc.gssd do
@@ -18,7 +26,7 @@ not allow for completely transparent use of Kerberos without agreeing on
 some rules.
 .PP 
 Because multiple login sessions (particularly via sshd) can share the 
-same credemtials, you don't do kdestroy on logout, nor can you allow sshd
+same credemtials, you shouldn't do kdestroy on logout, nor can you allow sshd
 to do it via GSSAPICleanupCredentials. Instead, renewd will delete
 credentials that no longer correspond to any active session.
 .PP 
@@ -37,7 +45,7 @@ pam_reg_cc touches files in /run/renewdccs to show what credentials
 it has registered. The
 name of the file is based on the credential cache name. Renewd
 will remove any of those credential caches if they aren't currently
-registered with an active session.
+associated with an active process.
 .SH OPTIONS
 .PP
 waittime is the amount of time between successive runs. It defaults
