@@ -48,6 +48,7 @@ public class Config {
     public String usersuffix = null;
     public String usermgmturl = null;
     public String badpassfile = null;
+    public String defaultgid = null;
 
     final static String CONFIGFILE = "/etc/activator.config";
 
@@ -165,6 +166,8 @@ public class Config {
 			usermgmturl = atoms[1];
 		    if (atoms[0].equals("badpassfile"))
 			badpassfile = atoms[1];
+		    if (atoms[0].equals("defaultgid"))
+			defaultgid = atoms[1];
 
 		}
 

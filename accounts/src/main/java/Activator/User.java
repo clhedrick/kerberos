@@ -373,9 +373,9 @@ public class User {
 	else
 	    gecos = gecosl.get(0);
 	
-	logger.info("ipa user-add " + username + " --uid=" + uid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
+	logger.info("ipa user-add " + username + " --uid=" + uid + " --gidnumber=" + config.defaultgid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
 	if (!test) {
-	    if (docommand.docommand (new String[]{"/bin/ipa", "user-add", username, "--uid=" + uid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"}, env) != 0)
+	    if (docommand.docommand (new String[]{"/bin/ipa", "user-add", username, "--uid=" + uid, "--gidnumber=" + config.defaultgid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"}, env) != 0)
 		return false;
 	}
 	return true;
