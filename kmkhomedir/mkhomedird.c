@@ -306,21 +306,6 @@ main(int argc, char *argv[])
     }
     homedirs[i] = NULL;
 
-    if (keytab == NULL) {
-        if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
-            com_err(progname, retval, "while resolving keytab file /etc/krb5.keytab");
-            exit(2);
-        }
-    }
-
-    retval = krb5_sname_to_principal(context, NULL, service,
-                                     KRB5_NT_SRV_HST, &server);
-    if (retval) {
-        mylog(LOG_ERR, "while generating service name (%s): %s",
-               service, error_message(retval));
-        exit(1);
-    }
-
     /*
      * If user specified a port, then listen on that port; otherwise,
      * assume we've been started out of inetd.
@@ -380,6 +365,21 @@ main(int argc, char *argv[])
     }
 
     mylog(LOG_DEBUG, "connection from %s", ntoa(peername));
+
+    if (keytab == NULL) {
+        if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
+            com_err(progname, retval, "while resolving keytab file /etc/krb5.keytab");
+            exit(2);
+        }
+    }
+
+    retval = krb5_sname_to_principal(context, NULL, service,
+                                     KRB5_NT_SRV_HST, &server);
+    if (retval) {
+        mylog(LOG_ERR, "while generating service name (%s): %s",
+              service, error_message(retval));
+        exit(1);
+    }
 
     retval = krb5_recvauth(context, &auth_context, (krb5_pointer)&sock,
                            SAMPLE_VERSION, server,
