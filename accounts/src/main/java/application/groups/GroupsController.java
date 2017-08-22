@@ -1,6 +1,7 @@
 package application;
 
 import java.util.List;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -85,6 +86,7 @@ public class GroupsController {
 
 	// look at the results of the LDAP query
 	ArrayList<HashMap<String, ArrayList<String>>> groups = action.val;
+	Collections.sort(groups, (g1, g2) -> g1.get("cn").get(0).compareTo(g2.get("cn").get(0)));
 
 	// set up model for JSTL to output
 	model.addAttribute("groups", groups);

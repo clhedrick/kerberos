@@ -95,7 +95,7 @@ $(document).ready(function(){
 <div class="inset" style="margin-top:0.5em">
 <div th:if="${group['member'] != null}">
 <div th:each="m: ${group['member']}">
-<span th:text="${lu.dn2user(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
+<span th:text="${membernames.get(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
 </div>
 </div>
 
@@ -110,11 +110,11 @@ $(document).ready(function(){
 <h3 style="margin-top:1.5em">Owners</h3>
 <div class="inset" style="margin-top:0.5em">
 <div th:if="${group['creatorsname'] != null or group['owner'] != null}">
-<span th:if="${group['creatorsname'] != null}" th:text="${lu.dn2user(group.creatorsname[0])}"/><br/>
+<span th:if="${group['creatorsname'] != null}" th:text="${membernames.get(group.creatorsname[0])}"/><br/>
 <div th:if="${group['owner'] != null}">
 <div th:each="o: ${group.owner}">
 <c:set var="o" value="${lu.dn2user(odn)}"/>
-<span th:text="${lu.dn2user(o)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete owner ' + lu.dn2user(o)}" class="deleteOwnerButton"/><input type="hidden" name="deleteOwnerName" th:value="${lu.dn2user(o)}"/><br/>
+<span th:text="${membernames.get(o)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete owner ' + lu.dn2user(o)}" class="deleteOwnerButton"/><input type="hidden" name="deleteOwnerName" th:value="${lu.dn2user(o)}"/><br/>
 </div>
 </div>
 </div>
