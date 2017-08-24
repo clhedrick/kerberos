@@ -4,7 +4,7 @@
 <script type="text/javascript">
 /*<![CDATA[*/
 function checknewmember() {
-	 $(".newmember").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as member</span>: <input class=\"newmember\" type=\"text\" name=\"newmember\"></label>");
+	 $(".newmember").last().parent().after("<br/><label>NetId<span class=\"hidden\"> to add as member</span>: <input class=\"newmember\" type=\"text\" name=\"newmember\"></label>");
 	 $(".newmember").off('input', checknewmember);
 	 $(".newmember").last().on('input', checknewmember);
  };
@@ -14,7 +14,7 @@ $(document).ready(function(){
     });
 
 function checknewowner() {
-	 $(".addowner").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label>");
+	 $(".addowner").last().parent().after("<br/><label>NetId<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label>");
 	 $(".addowner").off('input', checknewowner);
 	 $(".addowner").last().on('input', checknewowner);
  };
@@ -101,7 +101,7 @@ $(document).ready(function(){
 
 <h4>Add member</h4>
 <div class="inset">
-<label>User name <span class="hidden"> to add as member</span>: <input class="newmember" type="text" name="newmember"/></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br/>
+<label>NetId <span class="hidden"> to add as member</span>: <input class="newmember" type="text" name="newmember"/></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br/>
 
 <input type="submit" style="margin-top:0.5em"/>
 </div>
@@ -121,7 +121,7 @@ $(document).ready(function(){
 
 <h4>Add Owner</h4>
 <div class="inset">
-<label>User name<span class="hidden"> to add as owner</span>: <input class="addowner" type="text" name="newowner"/></label><br/>
+<label>NetId<span class="hidden"> to add as owner</span>: <input class="addowner" type="text" name="newowner"/></label><br/>
 <input type="submit" style="margin-top:0.5em"/>
 </div>
 </div>
