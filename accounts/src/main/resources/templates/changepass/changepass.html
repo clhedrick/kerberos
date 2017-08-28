@@ -1,5 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html lang="en">
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<title>Change Computer Science Password</title>
 </head>
 <div id="masthead"></div>
 <div id="main">
@@ -19,7 +21,7 @@
 
 <div th:if="${allowchange}">
 <div th:if="${cluster != null}">
-<h2> Set password </h2>
+<h1> Set password </h1>
 
 <p> You have successfully created an account on cluster <span th:text="${cluster}"/>. In order
 to login, you also need to create a password. This password will be good on 
@@ -31,7 +33,7 @@ password, but we're not going to force you to do that.</p>
 </div>
 
 <div th:if="${cluster == null}">
-<h2> Set or reset password for Computer Science Dept systems </h2>
+<h1> Set or reset password for Computer Science Dept systems </h1>
 
 <p> The Computer Science Department has passwords that are separate
 from University passwords. This allows us to provide improved security
@@ -96,9 +98,9 @@ don't force you to change it in the first place).</li>
 <label>New password: <input type="password" name="pass1"/></label><br/>
 <label>Type it again to verify: <input type="password" name="pass2"/></label>
 <p></p>
-<input type="submit"/>
+<input type="submit" value="Set Password"/>
 </form>
 
 </div>
 </div>
-
+</html>
