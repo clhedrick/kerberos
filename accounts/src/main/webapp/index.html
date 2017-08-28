@@ -45,6 +45,10 @@ can afford, please see <a href="two-factor.html"> two factor authentication</a>.
 <li> <a href="groups/login">Group management.</a> This will let authorized users (typically faculty) create user groups for computer science systems. This will let you share files with other people and authorize guest users.
 <p>
 This will show you a Computer Science login screen.
+<li>  Consider giving us contact information, in case we need to reach you for support reasons. 
+<p>You can set additional information using "ipa user-mod", e.g. "ipa user-mod YOURNETID --phone=8484452001". "ipa user-mod --help" will give a list of what can be set. "ipa user-show YOURNETID" will show your current information. This command will work only on systems that have been fully converted. For faculty, please use richelieu.cs.rutgers.edu. For research, use tall3.rutgers.edu. All grad and ilab systems have been converted. You only need to do this once. The same information applies to all of our systems. Note that changing first name, lastname, and GECOS won't do anything useful, since we reset them to the official University names nightly.
+<li> By default, everyone uses the bash shell. To change to tcsh use "ipa user-mod YOURNETID --shell=/bin/tcsh" on one of the systems that is fully converted. (See previous item.)
+<p>
 <li>  <a href="two-factor.html"> Two-factor authentication</a>. In case you need more security than a simple password can provide.
 </ul>
 <div class="textblock" style="margin-top:3em">
