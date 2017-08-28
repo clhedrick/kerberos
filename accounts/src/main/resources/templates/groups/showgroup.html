@@ -1,5 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html lang="en">
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<title>Show and Edit Group</title>
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
 /*<![CDATA[*/
@@ -73,75 +75,72 @@ $(document).ready(function(){
 
 <a href="../"> Account Management</a> | <a href="showgroups">Group list</a>
 
-<h2> Show and Edit Group </h2>
+<h1> Show and Edit Group </h1>
 
 
 <form th:action="@{/groups/showgroup}" method="post" id="deleteForm" style="display:none">
-<input type="text" name="del" id="deleteInput"/>
+<label>Member <input type="text" name="del" id="deleteInput"/></label>
 <input type="hidden" name="groupname" th:value="${gname}"/>
-<input type="submit" id="deleteSubmit"/>
+<input type="submit" id="deleteSubmit" value="Delete Member"/>
 </form>
 <form th:action="@{/groups/showgroup}" method="post" id="deleteOwnerForm" style="display:none">
-<input type="text" name="delowner" id="deleteOwnerInput"/>
+<label>Owner <input type="text" name="delowner" id="deleteOwnerInput"/></label>
 <input type="hidden" name="groupname" th:value="${gname}"/>
-<input type="submit" id="deleteOwnerSubmit"/>
+<input type="submit" id="deleteOwnerSubmit" value="Delete Owner"/>
 </form>
 
 <form th:action="@{/groups/showgroup}" method="post">
 <input type="hidden" name="groupname" th:value="${gname}"/>
 <p> Group: <span th:text="${gname}"/><span th:if="${group['gidnumber'] != null}" th:text="${', ' + group.gidnumber[0]}"/></p>
 
-<h3>Members</h3>
+<h2>Members</h2>
 <div class="inset" style="margin-top:0.5em">
 <div th:if="${group['member'] != null}">
 <div th:each="m: ${group['member']}">
-<span th:text="${membernames.get(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
+<span th:text="${membernames.get(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
 </div>
 </div>
 
-<h4>Add member</h4>
+<h3>Add member</h3>
 <div class="inset">
 <label>NetId <span class="hidden"> to add as member</span>: <input class="newmember" type="text" name="newmember"/></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br/>
 
-<input type="submit" style="margin-top:0.5em"/>
+<input type="submit" style="margin-top:0.5em" value="Add Member"/>
 </div>
 </div>
 
-<h3 style="margin-top:1.5em">Owners</h3>
+<h2 style="margin-top:1.5em">Owners</h2>
 <div class="inset" style="margin-top:0.5em">
 <div th:if="${group['creatorsname'] != null or group['owner'] != null}">
 <span th:if="${group['creatorsname'] != null}" th:text="${membernames.get(group.creatorsname[0])}"/><br/>
 <div th:if="${group['owner'] != null}">
 <div th:each="o: ${group.owner}">
 <c:set var="o" value="${lu.dn2user(odn)}"/>
-<span th:text="${membernames.get(o)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete owner ' + lu.dn2user(o)}" class="deleteOwnerButton"/><input type="hidden" name="deleteOwnerName" th:value="${lu.dn2user(o)}"/><br/>
+<span th:text="${membernames.get(o)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete owner ' + lu.dn2user(o)}" class="deleteOwnerButton"/><input type="hidden" name="deleteOwnerName" th:value="${lu.dn2user(o)}"/><br/>
 </div>
 </div>
 </div>
 
-<h4>Add Owner</h4>
+<h3>Add Owner</h3>
 <div class="inset">
 <label>NetId<span class="hidden"> to add as owner</span>: <input class="addowner" type="text" name="newowner"/></label><br/>
-<input type="submit" style="margin-top:0.5em"/>
+<input type="submit" style="margin-top:0.5em" value="Add Owner"/>
 </div>
 </div>
 
-<h3>Login Ability</h3>
+<h2>Login Ability</h2>
 
 <div class="inset">
-<p><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></p>
+<fieldset style="border:none; margin: 0px; padding: 0px">
+<p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></legend></p>
 <div th:each="c: ${clusters}">
 <label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label><br/>
 </div>
-
+</fieldset>
 <p>
-<input type="submit"/>
+<input type="submit" value="Update Login Ability"/>
 </p>
 </div>
 </form>
 </div>
-
-
-
-
-
+</html>

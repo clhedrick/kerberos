@@ -31,16 +31,16 @@ a:link, a:visited, a:hover {
 a:hover, a:active {
  color: red;
 }
-h2 {
+h1 {
   font: lighter 24pt "Arial", Helvetica;
   margin-top:0.5em;
   margin-bottom: 0.75em;
 }
-h3 {
+h2 {
   font: 16pt Arial, Helvetica;
   margin-bottom: 0.25em;
 }
-h4 {
+h3 {
   font: 12pt Arial, Helvetica;
   margin-bottom: 0.25em;
 }
