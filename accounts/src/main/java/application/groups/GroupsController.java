@@ -48,6 +48,10 @@ public class GroupsController {
     @Autowired
     private LoginController loginController;
 
+    @Autowired
+    private GroupController groupController;
+
+
     public String filtername(String s) {
 	if (s == null)
 	    return null;
@@ -80,7 +84,7 @@ public class GroupsController {
 	String query = Activator.Config.getConfig().groupsownedfilter.replaceAll("%u", user);
 
 	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
-	common.JndiAction action = new common.JndiAction(new String[]{query, "", "cn","dn", "gidNumber"});
+	common.JndiAction action = new common.JndiAction(new String[]{query, "", "cn","dn", "gidNumber", "businessCategory"});
 
 	Subject.doAs(subject, action);
 
@@ -104,6 +108,7 @@ public class GroupsController {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
+	((List<String>)model.asMap().get("messages")).clear();
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
@@ -127,7 +132,7 @@ public class GroupsController {
 	    return groupsGet(request, response, model);
 	}
 
-	boolean ok = true;
+	boolean added = false;
 
 	String user = (String)request.getSession().getAttribute("krb5user");
 
@@ -170,12 +175,15 @@ public class GroupsController {
 	    command.add("--setattr=dateOfCreate=" + dateString + "Z");
 	    command.add(name);
 	    logger.info(command);
-	    if (docommand.docommand(command.toArray(new String[1]), env) != 0)
-		ok = false;
+	    if (docommand.docommand(command.toArray(new String[1]), env) == 0)
+		added = true;
 
 	}
 
-	return groupsGet(request, response, model);
+	if (added)
+	    return groupController.groupGet(name, request, response, model);	
+	else
+	    return groupsGet(request, response, model);
 
     }
 

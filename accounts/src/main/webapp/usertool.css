@@ -85,3 +85,16 @@ h3 {
   background-color: #fdd;
   margin-bottom: 1em;
 }
+.grid-left {
+  display:flex; align-items:center;
+  margin-bottom:0.5em;
+}
+.grid-left > * {
+  margin-left: 1em
+}
+.label {
+  padding:0em 0.5em 0em 0.5em;
+  border: solid #bb0 1px;
+  background-color: #ffd;
+  margin-left: 0.5em;
+}

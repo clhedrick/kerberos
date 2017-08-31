@@ -75,10 +75,10 @@ class UserComparator implements Comparator {
 <script>
 function choose(netid) {
        var textbox=window.opener.$(".newmember").last();
-       if (!textbox.val()) {
-	   textbox.val(netid);
-	   window.opener.checknewmember();
+       if (textbox.val() && ! textbox.val().endsWith("\n")) {
+          textbox.val(textbox.val() + "\n");      
        }
+       textbox.val(textbox.val() + netid + "\n");      
        return true;
 }
 </script>

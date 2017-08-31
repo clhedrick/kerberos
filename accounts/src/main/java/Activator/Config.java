@@ -62,6 +62,7 @@ public class Config {
 	List<Rule> rules;
 	Set<String> groups;
 	boolean docleanup;
+	public boolean usermanaged;
 	public String getName(){return name;}
     }
     
@@ -192,6 +193,7 @@ public class Config {
 			cluster.groups = new HashSet<String>();
 			cluster.name = atoms[0].substring(1, atoms[0].length()-1);
 			cluster.docleanup = true;
+			cluster.usermanaged = true;
 			if ("managed".equals(cluster.name))
 			    managed = cluster;
 			else if ("departments".equals(cluster.name))
@@ -206,6 +208,8 @@ public class Config {
 		    
 		    if (atoms[0].equals("-nocleanup"))
 			cluster.docleanup = false;
+		    if (atoms[0].equals("-nousermanaged"))
+			cluster.usermanaged = false;
 		    Rule rule = new Rule();
 		    rule.groupName = atoms[0];
 		    cluster.groups.add(atoms[0]);

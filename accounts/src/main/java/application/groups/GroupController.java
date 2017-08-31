@@ -283,7 +283,7 @@ public class GroupController {
     @PostMapping("/groups/showgroup")
     public String groupsSubmit(@RequestParam(value="groupname", required=false) String groupname,
 			       @RequestParam(value="del", required=false) List<String>del,
-			       @RequestParam(value="newmember", required=false) List<String>newmember,
+			       @RequestParam(value="newmember", required=false) String newmember,
 			       @RequestParam(value="delowner", required=false) List<String>delowner,
 			       @RequestParam(value="newowner", required=false) List<String>newowner,
 			       @RequestParam(value="login", required=false) String loginSt,
@@ -293,6 +293,7 @@ public class GroupController {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
+	((List<String>)model.asMap().get("messages")).clear();
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
@@ -359,8 +360,9 @@ public class GroupController {
 	    return groupGet(name, request, response, model);	
 	}
 
-	if (newmember != null && newmember.size() > 0) {
-	    for (String a: newmember) {
+	if (newmember != null) {
+	    for (String a: newmember.split("\\s")) {
+		a = a.trim();
 		if (a != null && !a.equals("")) {
 		    String retval;
 		    if (oldmembers.contains(a)) {

@@ -5,22 +5,6 @@
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
 /*<![CDATA[*/
-function checknewmember() {
-	 $(".newmember").last().parent().after("<br/><label>NetId<span class=\"hidden\"> to add as member</span>: <input class=\"newmember\" type=\"text\" name=\"newmember\"></label>");
-	 $(".newmember").off('input', checknewmember);
-	 $(".newmember").last().on('input', checknewmember);
- };
-
-$(document).ready(function(){
-	 $(".newmember").on('input', checknewmember);
-    });
-
-function checknewowner() {
-	 $(".addowner").last().parent().after("<br/><label>NetId<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label>");
-	 $(".addowner").off('input', checknewowner);
-	 $(".addowner").last().on('input', checknewowner);
- };
-
 function deleteMember(event) {
   var member = $(event.target).next().val();
   if (!confirm("Are you sure you want to delete this member?"))
@@ -57,7 +41,6 @@ function deleteOwnerKeyPress(event) {
 }
 
 $(document).ready(function(){
-    $(".addowner").on('input', checknewowner);
     $(".deleteMemberButton").click(deleteMember);
     $(".deleteMemberButton").keypress(deleteMemberKeyPress);
     $(".deleteOwnerButton").click(deleteOwner);
@@ -92,6 +75,20 @@ $(document).ready(function(){
 <form th:action="@{/groups/showgroup}" method="post">
 <input type="hidden" name="groupname" th:value="${gname}"/>
 <p> Group: <span th:text="${gname}"/><span th:if="${group['gidnumber'] != null}" th:text="${', ' + group.gidnumber[0]}"/></p>
+<ul>
+<li class="inset" th:if="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"> <b> Guest group</b> &middot; Members of this group can login to the clusters specified in the "Clusters" section of this page. E.g. a group of students can be authorized to login to the research cluster, or a group of faculty from other departments can be authorized to login to a specific cluster </li>
+<li class="inset" th:if="${group['gidnumber']?.get(0)}"> <b> File sharing Group</b> &middot; This is a Group for sharing files between users. It is a normal Unix group. You can use "chgrp" to change a directory or file to this group, so that other group members can access it.
+</li>
+</ul>
+
+<div class="messages" th:if="${group['host'] == null and group['businesscategory'] != null and group['businesscategory'].contains('login') or group['member'] == null}">
+<p th:if="${group['host'] == null and group['businesscategory'] != null and group['businesscategory'].contains('login')}">
+Make sure you add at least one cluster that you want these users to be able to login on. Use the checklist in the "Clusters" section of this page.
+</p>
+<p th:if="${group['member'] == null}">
+Make sure you add at least one member to the group.
+</p>
+</div>
 
 <h2>Members</h2>
 <div class="inset" style="margin-top:0.5em">
@@ -101,16 +98,21 @@ $(document).ready(function(){
 </div>
 </div>
 
-<h3>Add member</h3>
+<h3>Add members</h3>
 <div class="inset">
-<label>NetId <span class="hidden"> to add as member</span>: <input class="newmember" type="text" name="newmember"/></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br/>
-
-<input type="submit" style="margin-top:0.5em" value="Add Member"/>
+<label>NetIds to add as members, one per line<br/>
+<textarea class="newmember" name="newmember" rows="4" cols="40"></textarea>
+</label><br/>
+<a href="addpart-lookup.jsp" target="addpart"> Lookup up user in University directory</a>
+<p/>
+<input type="submit" style="margin-top:0.5em" value="Add Members"/>
 </div>
 </div>
 
 <h2 style="margin-top:1.5em">Owners</h2>
 <div class="inset" style="margin-top:0.5em">
+<p> An owner is someone who can make changes to the group. This allows you to
+delegate management of the group to someone else.</p>
 <div th:if="${group['creatorsname'] != null or group['owner'] != null}">
 <span th:if="${group['creatorsname'] != null}" th:text="${membernames.get(group.creatorsname[0])}"/><br/>
 <div th:if="${group['owner'] != null}">
@@ -121,20 +123,23 @@ $(document).ready(function(){
 </div>
 </div>
 
-<h3>Add Owner</h3>
+<h3>Add Owners</h3>
 <div class="inset">
-<label>NetId<span class="hidden"> to add as owner</span>: <input class="addowner" type="text" name="newowner"/></label><br/>
-<input type="submit" style="margin-top:0.5em" value="Add Owner"/>
+<label>NetIds to add as owners, one per line<br/>
+<textarea class="newowner" name="newowner" rows="4" cols="40"/></label><br/>
+<input type="submit" style="margin-top:0.5em" value="Add Owners"/>
 </div>
 </div>
 
-<h2>Login Ability</h2>
+<h2>Clusters</h2>
 
 <div class="inset">
 <fieldset style="border:none; margin: 0px; padding: 0px">
 <p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></legend></p>
 <div th:each="c: ${clusters}">
-<label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label><br/>
+<div th:if="${c.usermanaged}">
+<label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label>
+</div>
 </div>
 </fieldset>
 <p>

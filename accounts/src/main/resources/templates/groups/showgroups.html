@@ -73,11 +73,10 @@ $(document).ready(function(){
 <div class="inset" style="padding-top:0.5em">
 
 <div th:each="g : ${groups}">
-
 <a th:href="@{showgroup(name=${g.cn[0]})}"><span th:text="${g.cn[0]}"/></a>
 <span th:text="${g['gidnumber']?.get(0)}"/>
-<img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete group ' + g.cn[0]}" class="deleteButton"/>
-<input type="hidden" name="deleteName" th:value="${g.cn[0]}"/>
+<img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete group ' + g.cn[0]}" class="deleteButton"/> <input type="hidden" name="deleteName" th:value="${g.cn[0]}"/> <span class="label" th:if="${g['businesscategory'] != null and g['businesscategory'].contains('login')}"> Guests </span> <span class="label"  th:if="${g['gidnumber']?.get(0)}"> File sharing </span>
+
 
 </div>
 </div>
@@ -87,21 +86,25 @@ $(document).ready(function(){
 
 <div class="inset" style="margin-top:1em">
 <label>Group Name: <input type="text" name="name" id="name"/></label>
-<br/>
-<label><input type="checkbox" name="sharing" id="sharing"/> Group should be available for file sharing.</label>
-<br/>
-<label><input type="checkbox" name="guests" id="guests"/> Users in group may be guests. Accounts for them will be added if they don't already exist.</label>
-<p>
+<p> Type of group to create: There are two types of group. Normally you should <b>check only one</b> box.</p>
+
+
+<div class="grid-left">
+<input type="checkbox" name="sharing" id="sharing"/> 
+<div>
+<label for="sharing" >Group for <b>sharing files</b> between users.</label> This is a normal Unix group. You can use "chgrp" to change a directory or file to this group, so that other group members can access it.
+</div>
+</div>
+
+<div class="grid-left">
+<input type="checkbox" name="guests" id="guests"/> 
+<div>
+<label for="guests"><b>Guests.</b></label> This is a list of users that you are authorizing to login. The most common use is to let grad students login to the research cluster, but it can also be used to allow members of other departments to login to a cluster.
+</div>
+</div>
 <input type="submit" id="submit" value="Add Group"/>
-</p>
+
 </div>
 </form>
-<div class="explanation" style="margin-top:2em">
-<p> When adding a group, at least one of the boxes should be checked. </p>
-<p> "Users in group may be guests" means that members of this group
-are alloweed as guests, even if they wouldn't normally be able to login.
-If you edit the group, you'll be able to choose which clusters they can
-login to.</p>
-</div>
 </div>
 </html>
