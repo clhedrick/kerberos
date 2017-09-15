@@ -1,0 +1,11 @@
+dn: cn=config
+changetype: modify
+replace: olcTLSCACertificatePath
+olcTLSCACertificatePath: /etc/httpd/alias
+-
+replace: olcTLSCertificateFile
+olcTLSCertificateFile: krb1-cert
+-
+replace: olcTLSCertificateKeyFile
+olcTLSCertificateKeyFile: /etc/httpd/alias/pwdfile.txt
+

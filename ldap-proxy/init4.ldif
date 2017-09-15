@@ -1,0 +1,12 @@
+dn: olcDatabase=ldap,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcLDAPConfig
+olcDatabase: ldap
+olcReadOnly: TRUE
+olcSuffix: dc=cs,dc=rutgers,dc=edu
+olcDbURI: "ldap://localhost:389"
+olcDbStartTLS: none starttls=no
+olcDbRebindAsUser: FALSE
+olcDbIDAssertBind: bindmethod=simple binddn="uid=ldap.admin,cn=users,cn=acco
+ unts,dc=cs,dc=rutgers,dc=edu" credentials="abcde12345!" authzid="uid=ldap.a
+ dmin,cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu"
