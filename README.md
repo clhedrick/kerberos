@@ -4,7 +4,14 @@ To get it use
 
 git clone https://github.com/clhedrick/kerberos.git
 
-# Goals
+# Summary
+
+This is support code for Kerberos and IPA, created as part of a project
+to fully Kerberos the Rutgers CS department. We are specifically interested
+in security NFS. However the software here may be useful outside our
+context.
+
+# Project Goals
 
 1. Secure NFS. Make sure users can't install systems at an IP where
 we've exported a file system and then access all files.
@@ -228,5 +235,22 @@ However we are probably going to use sssd rather than this. By the
 time we roll this out for users, the systems should be updated to at
 least Centos 7.
 
+## radius-wrap
+
+The Kerberos code in Freeradius doesn't support two-factor authentication.
+This wrapper adds the necessary code. So you can put Freeradius as in
+front of IPA, and it will understand any password IPA will understand.
+
+## ldap-proxy
+
+The LDAP server in IPA doesn't understand all the passwords that IPA
+Kerberos understands. In particular, it doesn't understand two-factor
+authentication done through external Radius servers.
+
+This directory has instructions for setting up Openldap as a proxy,
+in front of the IPA LDAP server. It includes an Openldap overlay that
+does Kerberos authentication with two factor support. Thus you can
+point nslcd and other systems at this proxy to do LDAP-based user
+authentication.
 
 
