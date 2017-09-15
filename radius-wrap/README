@@ -1,0 +1,22 @@
+This is a wrapper for Freeradius Kerberos authentication. 
+
+The Kerberos module in Freeradius supports only traditional Kerberos
+authentication. It doesn't support 2 factor authentication.  That's a
+fairly new feature, that makes additions to the Kerberos API.
+
+This generates a shared library. It's used by setting LD_PRELOAD
+before running Freeradius. The library traps calls to one Kerberos
+library routine, and makes the changes needed to support onetime
+passwords.
+
+We recommend using k5start to run Radius, and setting 
+LD_PRELOAD=radius-wrap.so
+
+k5start is needed to generate and maintain a Kerberos credential
+cache, /tmp/krb_cc_radius. Typically you'd tell k5start to build it
+from a keytable. /tmp/krb_cc_radius must be readable by whatever user
+radius runs as.
+
+At some point I will modify this code to read the key table itself.
+That way you won't need k5start.
+
