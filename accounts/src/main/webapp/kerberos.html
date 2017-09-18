@@ -92,6 +92,13 @@ anyone who can compromie the security of the system can get a ticket on your
 behalf. To limit exposure, the tickets created for cron can't be forwarded to other
 systems by ssh.
 
+<p> You may wonder why we require you to register with kgetcred. 
+One goal of the new system is to make sure that root can't access your files
+unless you've authorized it. Root can create a cron job for anyone. If cron jobs
+could access files without authorization, then root could get to your files just
+be creating a cron job to do it. So we need you to verify that root is allowed
+to start cron jobs for you on that system.
+
 <p> If you are using a one-time password, kgetcred doesn't work. Allowing root
 to issue a ticket on your behalf would obviously subvert the intention of using
 two-factor authentication. In this case you have two choices:
