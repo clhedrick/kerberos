@@ -7,9 +7,17 @@ git clone https://github.com/clhedrick/kerberos.git
 # Summary
 
 This is support code for Kerberos and IPA, created as part of a project
-to fully Kerberos the Rutgers CS department. We are specifically interested
-in security NFS. However the software here may be useful outside our
-context.
+to fully Kerberize the Rutgers CS department. We are specifically interested
+in secure NFS. However the software here may be useful outside our
+context. This code includes appropriate changes to support two factor Kerberos
+authenticaton for freeradius and openldap.
+
+Contents:
+* project goals
+* challenges
+* suggested configurations
+* design issues
+* programs
 
 # Project Goals
 
@@ -21,13 +29,13 @@ someone becomes root on a machine, they can't compromise user files. A
 user should only be exposed on a system where they are actually logged
 in, or on which they run cron jobs. There's not much better I can do.
 
-This should make it safe to allow faculty to mount our file systems on
+This should make it safe to allow faculty or students to mount our file systems on
 machines they run.
 
 2. Secure ssh. We allow ssh without passwords based on IP
 address. This has obvious problems if users fake an IP address or
 become root. A user must now have an actual ticket. We can still
-restrict which groups of systems can access others, probably used
+restrict which groups of systems can access others, probably using
 netgroup-based configuration in sshd_config.
 
 # Challenges
@@ -37,7 +45,7 @@ ways into a machine through pam, and by having a daemon that will keep
 their credentials renewed as long as they have processes.
 
 2. Support for multiple machine types. This is hard. Without
-two-factor, Linux, Mac, and probably Windows (though I haven't tried)
+two-factor, Linux, Mac, and Windows
 can support it. Two factor uses recent features. Currently the key
 part, kgetcred, works on Centos 5 - 7, and OS X (using the Macports
 version of Kerberos). Windows turns out not to need this code, though
@@ -63,8 +71,10 @@ problems with NFS.
 
 # Suggested configuration
 
-sssd for authentication for Centos 7, the vendor's pam_krb5 on other
-systems. This will handle most users.
+sssd for authentication for Centos 7. Curremtly we're using nslcd on
+older systems (including Solaris 8). However that doesn't give them
+a Kerberos ticket. You can also use pam_krb5, which does. But it won't 
+supprt two-factor authentication.
 
 For users with 2FA, they can log into a Centos 7 system, then ssh to
 an older machine. Credentials obtained with 2FA can still be forwarded
@@ -100,7 +110,9 @@ currently doesn't support kinit -n).
 
 # Design issues
 
-Policies need to be chosen carefully to support our goals. In particular, Kerberos policies need to be adjusted. I'm using a nearly infinite renew time, to support very long sessions. 
+Policies need to be chosen carefully to support our goals. In
+particular, Kerberos policies need to be adjusted. I'm using a nearly
+infinite renew time, to support very long sessions.
 
 Currently we're using the default 1 day ticket lifetime. However there's a
 danger with that. The kernel normally keeps NFS contexts alive until the
@@ -122,7 +134,11 @@ Many users stay logged in more or less forever. However our default
 ticket lifetime is a day. Without default parameters, renewd will
 renew tickets every 12 hours, as long as the user is still logged in.
 
-Renewd also removes tickets after the user logs out, without a couple
+There's still one exposure:
+A prolonged network outage (longer than 12 hours) could cause tickets
+to expire for long-running jobs. 
+
+Renewd also removes tickets after the user logs out, within a couple
 of minutes.
 
 Renewd depends upon pam_reg_cc to tell it what tickets it should look
@@ -133,7 +149,7 @@ at.
 What do we do about users who need to run cron jobs or daemons? Our
 students often have assignments that require this. The usual answer is
 a keytable. But if someone becomes root, they can take anyone's
-keytable. And having a user's key table permanetly exposes them on all
+keytable. And having a user's key table permanently exposes them on all
 systems.
 
 So instead kgetcred works with a server (credserv) to issue tickets
