@@ -1,3 +1,22 @@
+/*
+ * Copyright 2017 by Rutgers, the State University of New Jersey
+ * All Rights Reserved.
+ *
+ * Permission to use, copy, modify, and
+ * distribute this software and its documentation for any purpose and
+ * without fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright notice and
+ * this permission notice appear in supporting documentation, and that
+ * the name of Rutgers not be used in advertising or publicity pertaining
+ * to distribution of the software without specific, written prior
+ * permission.  Furthermore if you modify this software you must label
+ * your software as modified software and not distribute it in such a
+ * fashion that it might be confused with the original Rutgers software.
+ * Rutgers makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is" without express
+ * or implied warranty.
+ */
+
 package common;
 import javax.security.auth.*;
 import javax.security.auth.callback.*;
@@ -14,6 +33,9 @@ import Activator.Config;
 	 
 public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 	private String[] args;
+	public boolean noclose = false;
+	public DirContext ctx = null;
+
 	public ArrayList<HashMap<String,ArrayList<String>>> val = new ArrayList<HashMap<String,ArrayList<String>>>();
 
 	public JndiAction(String[] origArgs) {
@@ -25,25 +47,34 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 	    return null;
 	}
 
+	public static void closeCtx(DirContext ctx) {
+	    try {
+		ctx.close();	    
+	    } catch (Exception ignore) {};
+	}
+
 	private void performJndiOperation(String[] args){
 
 	    String filter = args[0];
 	    String base = args[1];
 	    // rest are the attrs to return
 
-	    // Set up environment for creating initial context
-	    Hashtable<String,String> env = new Hashtable<String,String>(11);
+	    Hashtable<String,String> env = null;
 
-	    env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
-	    env.put(Context.PROVIDER_URL, Config.getConfig().kerbldapurl);
-
-	    env.put(Context.SECURITY_AUTHENTICATION, "GSSAPI");
-	    env.put("com.sun.jndi.ldap.connect.pool", "true");
-
-	    DirContext ctx = null;
+	    if (ctx == null) {
+		// Set up environment for creating initial context
+		env = new Hashtable<String,String>(11);
+		
+		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
+		env.put(Context.PROVIDER_URL, Config.getConfig().kerbldapurl);
+		
+		env.put(Context.SECURITY_AUTHENTICATION, "GSSAPI");
+		env.put("com.sun.jndi.ldap.connect.pool", "true");
+	    }
 
 	    try {
-		ctx = new InitialDirContext(env);
+		if (ctx == null)
+		    ctx = new InitialDirContext(env);
 
 		String[] attrIDs = new String[args.length - 2];
 		for (int i = 0; i < (args.length - 2); i++) {
@@ -80,7 +111,8 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		e.printStackTrace();
 	    } finally {
 		try {
-		    ctx.close();	    
+		    if (!noclose)
+			ctx.close();	    
 		} catch (Exception ignore) {};
 	    }
 	}

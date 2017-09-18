@@ -1,24 +1,10 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html lang="en">
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<title>Show and Edit Group</title>
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
 /*<![CDATA[*/
-function checknewmember() {
-	 $(".newmember").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as member</span>: <input class=\"newmember\" type=\"text\" name=\"newmember\"></label>");
-	 $(".newmember").off('input', checknewmember);
-	 $(".newmember").last().on('input', checknewmember);
- };
-
-$(document).ready(function(){
-	 $(".newmember").on('input', checknewmember);
-    });
-
-function checknewowner() {
-	 $(".addowner").last().parent().after("<br/><label>User name<span class=\"hidden\"> to add as owner</span>: <input class=\"addowner\" type=\"text\" name=\"newowner\"></label>");
-	 $(".addowner").off('input', checknewowner);
-	 $(".addowner").last().on('input', checknewowner);
- };
-
 function deleteMember(event) {
   var member = $(event.target).next().val();
   if (!confirm("Are you sure you want to delete this member?"))
@@ -55,7 +41,6 @@ function deleteOwnerKeyPress(event) {
 }
 
 $(document).ready(function(){
-    $(".addowner").on('input', checknewowner);
     $(".deleteMemberButton").click(deleteMember);
     $(".deleteMemberButton").keypress(deleteMemberKeyPress);
     $(".deleteOwnerButton").click(deleteOwner);
@@ -73,75 +58,94 @@ $(document).ready(function(){
 
 <a href="../"> Account Management</a> | <a href="showgroups">Group list</a>
 
-<h2> Show and Edit Group </h2>
+<h1> Show and Edit Group </h1>
 
 
 <form th:action="@{/groups/showgroup}" method="post" id="deleteForm" style="display:none">
-<input type="text" name="del" id="deleteInput"/>
+<label>Member <input type="text" name="del" id="deleteInput"/></label>
 <input type="hidden" name="groupname" th:value="${gname}"/>
-<input type="submit" id="deleteSubmit"/>
+<input type="submit" id="deleteSubmit" value="Delete Member"/>
 </form>
 <form th:action="@{/groups/showgroup}" method="post" id="deleteOwnerForm" style="display:none">
-<input type="text" name="delowner" id="deleteOwnerInput"/>
+<label>Owner <input type="text" name="delowner" id="deleteOwnerInput"/></label>
 <input type="hidden" name="groupname" th:value="${gname}"/>
-<input type="submit" id="deleteOwnerSubmit"/>
+<input type="submit" id="deleteOwnerSubmit" value="Delete Owner"/>
 </form>
 
 <form th:action="@{/groups/showgroup}" method="post">
 <input type="hidden" name="groupname" th:value="${gname}"/>
 <p> Group: <span th:text="${gname}"/><span th:if="${group['gidnumber'] != null}" th:text="${', ' + group.gidnumber[0]}"/></p>
+<ul>
+<li class="inset" th:if="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"> <b> Guest group</b> &middot; Members of this group can login to the clusters specified in the "Clusters" section of this page. E.g. a group of students can be authorized to login to the research cluster, or a group of faculty from other departments can be authorized to login to a specific cluster </li>
+<li class="inset" th:if="${group['gidnumber']?.get(0)}"> <b> File sharing Group</b> &middot; This is a Group for sharing files between users. It is a normal Unix group. You can use "chgrp" to change a directory or file to this group, so that other group members can access it.
+</li>
+</ul>
 
-<h3>Members</h3>
+<div class="messages" th:if="${group['host'] == null and group['businesscategory'] != null and group['businesscategory'].contains('login') or group['member'] == null}">
+<p th:if="${group['host'] == null and group['businesscategory'] != null and group['businesscategory'].contains('login')}">
+Make sure you add at least one cluster that you want these users to be able to login on. Use the checklist in the "Clusters" section of this page.
+</p>
+<p th:if="${group['member'] == null}">
+Make sure you add at least one member to the group.
+</p>
+</div>
+
+<h2>Members</h2>
 <div class="inset" style="margin-top:0.5em">
 <div th:if="${group['member'] != null}">
 <div th:each="m: ${group['member']}">
-<span th:text="${lu.dn2user(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
+<span th:text="${membernames.get(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
 </div>
 </div>
 
-<h4>Add member</h4>
+<h3>Add members</h3>
 <div class="inset">
-<label>User name <span class="hidden"> to add as member</span>: <input class="newmember" type="text" name="newmember"/></label> <a href="addpart-lookup.jsp" target="addpart"> Lookup up usser</a><br/>
-
-<input type="submit" style="margin-top:0.5em"/>
+<label>NetIds to add as members, one per line<br/>
+<textarea class="newmember" name="newmember" rows="4" cols="40"></textarea>
+</label><br/>
+<a href="addpart-lookup.jsp" target="addpart"> Lookup up user in University directory</a>
+<p/>
+<input type="submit" style="margin-top:0.5em" value="Add Members"/>
 </div>
 </div>
 
-<h3 style="margin-top:1.5em">Owners</h3>
+<h2 style="margin-top:1.5em">Owners</h2>
 <div class="inset" style="margin-top:0.5em">
+<p> An owner is someone who can make changes to the group. This allows you to
+delegate management of the group to someone else.</p>
 <div th:if="${group['creatorsname'] != null or group['owner'] != null}">
-<span th:if="${group['creatorsname'] != null}" th:text="${lu.dn2user(group.creatorsname[0])}"/><br/>
+<span th:if="${group['creatorsname'] != null}" th:text="${membernames.get(group.creatorsname[0])}"/><br/>
 <div th:if="${group['owner'] != null}">
 <div th:each="o: ${group.owner}">
 <c:set var="o" value="${lu.dn2user(odn)}"/>
-<span th:text="${lu.dn2user(o)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete owner ' + lu.dn2user(o)}" class="deleteOwnerButton"/><input type="hidden" name="deleteOwnerName" th:value="${lu.dn2user(o)}"/><br/>
+<span th:text="${membernames.get(o)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete owner ' + lu.dn2user(o)}" class="deleteOwnerButton"/><input type="hidden" name="deleteOwnerName" th:value="${lu.dn2user(o)}"/><br/>
 </div>
 </div>
 </div>
 
-<h4>Add Owner</h4>
+<h3>Add Owners</h3>
 <div class="inset">
-<label>User name<span class="hidden"> to add as owner</span>: <input class="addowner" type="text" name="newowner"/></label><br/>
-<input type="submit" style="margin-top:0.5em"/>
+<label>NetIds to add as owners, one per line<br/>
+<textarea class="newowner" name="newowner" rows="4" cols="40"/></label><br/>
+<input type="submit" style="margin-top:0.5em" value="Add Owners"/>
 </div>
 </div>
 
-<h3>Login Ability</h3>
+<h2>Clusters</h2>
 
 <div class="inset">
-<p><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></p>
+<fieldset style="border:none; margin: 0px; padding: 0px">
+<p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></legend></p>
 <div th:each="c: ${clusters}">
-<label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label><br/>
+<div th:if="${c.usermanaged}">
+<label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label>
 </div>
-
+</div>
+</fieldset>
 <p>
-<input type="submit"/>
+<input type="submit" value="Update Login Ability"/>
 </p>
 </div>
 </form>
 </div>
-
-
-
-
-
+</html>

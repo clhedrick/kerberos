@@ -1,7 +1,29 @@
+/*
+ * Copyright 2017 by Rutgers, the State University of New Jersey
+ * All Rights Reserved.
+ *
+ * Permission to use, copy, modify, and
+ * distribute this software and its documentation for any purpose and
+ * without fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright notice and
+ * this permission notice appear in supporting documentation, and that
+ * the name of Rutgers not be used in advertising or publicity pertaining
+ * to distribution of the software without specific, written prior
+ * permission.  Furthermore if you modify this software you must label
+ * your software as modified software and not distribute it in such a
+ * fashion that it might be confused with the original Rutgers software.
+ * Rutgers makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is" without express
+ * or implied warranty.
+ */
+
 package application;
 
 import java.util.List;
 import java.util.Date;
+import java.util.Set;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.text.SimpleDateFormat;
@@ -110,6 +132,38 @@ public class GroupController {
 	
     }
 
+    public String getUserDisplay(String userDn, Subject subject, DirContext ctx, Config config) {
+	Logger logger = null;
+	logger = LogManager.getLogger();
+	int i;
+	String searchDn = userDn;
+
+	i = userDn.indexOf(config.accountbase);
+	// search will tack accountbase on the end, so we have to remove it and the comma before it
+	if (i > 0)
+	    searchDn = userDn.substring(0, i-1);
+
+	common.JndiAction action = new common.JndiAction(new String[]{"(objectclass=*)", searchDn, "gecos"});
+	// we're holding the context open, so use it
+	action.noclose = true;
+	action.ctx = ctx;
+	Subject.doAs(subject, action);
+	if (action.val.size() != 1) {
+	    logger.error("failed to find " + userDn + " count " + action.val.size());
+	    return lu.dn2user(userDn); // no gecos info, just return uid
+	}
+	HashMap<String, ArrayList<String>> attrs = action.val.get(0);
+	if (attrs.get("gecos") != null) {
+	    String gecos = attrs.get("gecos").get(0);
+	    // gecos is name, other stuff, so drop anything after ,
+	    i = gecos.indexOf(",");
+	    if (i > 0)
+		gecos = gecos.substring(0, i);
+	    return lu.dn2user(userDn) + " (" + gecos + ")";
+	}
+	return lu.dn2user(userDn);
+    }
+
     // class to export dn2user into thymeleaf
     public class Util {
 	public String dn2user(String dn) {
@@ -146,23 +200,6 @@ public class GroupController {
 	    return loginController.loginGet(request, response, model); 
 	}
 
-	// This acton isn't done until it's called by doAs
-	common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + gname + "))", "", "cn", "member", "host", "businessCategory", "dn", "gidNumber", "owner", "creatorsName"});
-
-	// this is part of the Kerberos support. Subject is the internal data structure representing a Kerberos ticket.
-	// doas does an action authenticated as that subject. The action has to be a JndiAction. I supply a JndiAction does does
-	// an LDAP query, but you could do anything that uses GSSAPI authentication.
-	Subject.doAs(subject, action);
-
-	if (action.val.size() != 1) {
-	    List<String> messages = new ArrayList<String>();
-	    messages.add("Group not found");
-	    model.addAttribute("messages", messages);
-	    return groupsController.groupsGet(request, response, model); 
-	}
-
-	HashMap<String, ArrayList<String>> attrs = action.val.get(0);
-
 	Config aconfig = new Config();
 	try {
 	    aconfig.loadConfig();
@@ -175,6 +212,78 @@ public class GroupController {
 	    return groupsController.groupsGet(request, response, model); 
 	}
 
+	HashMap<String, ArrayList<String>> attrs = null;
+	Map<String,String> memberNames = new HashMap<String,String>();
+
+	// want to use the same context for a number of operations
+	// try - finally to make sure it's always closed
+	// the point is that we're going to make a bunch of ldap queries. 
+	// we'd rather not make a separate authenticated connection to
+	// the ldap server for each one. Instead use a single connection
+	// for all the queries. The DirContext represents a connection.
+	DirContext ctx = null;
+	try {
+
+	    // This acton isn't done until it's called by doAs
+	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + gname + "))", "", "cn", "member", "host", "businessCategory", "dn", "gidNumber", "owner", "creatorsName"});
+	    action.noclose = true; // hold context for reuse
+
+	    // this is part of the Kerberos support. Subject is the internal data structure representing a Kerberos ticket.
+	    // doas does an action authenticated as that subject. The action has to be a JndiAction. I supply a JndiAction does does
+	    // an LDAP query, but you could do anything that uses GSSAPI authentication.
+	    Subject.doAs(subject, action);
+	    ctx = action.ctx; // get the context so we can use it for other operations
+	    
+	    if (action.val.size() != 1) {
+		List<String> messages = new ArrayList<String>();
+		messages.add("Group not found");
+		model.addAttribute("messages", messages);
+		return groupsController.groupsGet(request, response, model); 
+	    }
+
+	    attrs = action.val.get(0);
+
+	    // we want to show the name of each user, so we have to look them up
+	    // pass the front end a map from member dn to display
+	    // actually just get all the people thta are going to be 
+	    // displayed and build a single map for them all. No need
+	    // for separate ones.
+	    Set<String> people = new HashSet<String>();
+	    List<String> members = attrs.get("member");
+	    if (members != null) {
+		// sort has nothing to do with building the map
+		// but we'd like the output to be sorted
+		// we're actually sorting dns, but since they
+		// all start with uid= the sort should work OK
+		Collections.sort(members);
+		people.addAll(members);
+	    }
+
+	    List<String> owners = attrs.get("owner");
+	    if (owners != null) {
+	        Collections.sort(owners);
+		people.addAll(owners);
+	    }
+
+	    List<String> creators = attrs.get("creatorsname");
+	    if (creators != null)
+		people.addAll(creators);
+
+	    // now have all the people displayed on the page
+	    // build a map from DN to what we want to display
+	    for (String member: people) {
+		String display = getUserDisplay(member, subject, ctx, aconfig);
+		// put it in the map
+		memberNames.put(member, display);
+	    }
+
+	} finally {
+	    // we used noclose for all JndiActions, so we wouldn't get new connections for each user lookup
+	    // so we have to close it explicitly
+	    if (ctx != null)
+		JndiAction.closeCtx(ctx);
+	}
+
 	// if we got an error from POST, we might already have messages.
 	if (!model.containsAttribute("messages"))
 	    model.addAttribute("messages", new ArrayList<String>());	    
@@ -184,6 +293,7 @@ public class GroupController {
 	model.addAttribute("gname", gname);
 	model.addAttribute("clusters", aconfig.clusters);
 	model.addAttribute("group", attrs);
+	model.addAttribute("membernames", memberNames);
 	model.addAttribute("lu", new Util());
 
         return "groups/showgroup";
@@ -192,7 +302,7 @@ public class GroupController {
     @PostMapping("/groups/showgroup")
     public String groupsSubmit(@RequestParam(value="groupname", required=false) String groupname,
 			       @RequestParam(value="del", required=false) List<String>del,
-			       @RequestParam(value="newmember", required=false) List<String>newmember,
+			       @RequestParam(value="newmember", required=false) String newmember,
 			       @RequestParam(value="delowner", required=false) List<String>delowner,
 			       @RequestParam(value="newowner", required=false) List<String>newowner,
 			       @RequestParam(value="login", required=false) String loginSt,
@@ -202,6 +312,7 @@ public class GroupController {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
+	((List<String>)model.asMap().get("messages")).clear();
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
@@ -268,8 +379,9 @@ public class GroupController {
 	    return groupGet(name, request, response, model);	
 	}
 
-	if (newmember != null && newmember.size() > 0) {
-	    for (String a: newmember) {
+	if (newmember != null) {
+	    for (String a: newmember.split("\\s")) {
+		a = a.trim();
 		if (a != null && !a.equals("")) {
 		    String retval;
 		    if (oldmembers.contains(a)) {

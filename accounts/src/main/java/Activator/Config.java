@@ -1,3 +1,22 @@
+/*
+ * Copyright 2017 by Rutgers, the State University of New Jersey
+ * All Rights Reserved.
+ *
+ * Permission to use, copy, modify, and
+ * distribute this software and its documentation for any purpose and
+ * without fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright notice and
+ * this permission notice appear in supporting documentation, and that
+ * the name of Rutgers not be used in advertising or publicity pertaining
+ * to distribution of the software without specific, written prior
+ * permission.  Furthermore if you modify this software you must label
+ * your software as modified software and not distribute it in such a
+ * fashion that it might be confused with the original Rutgers software.
+ * Rutgers makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is" without express
+ * or implied warranty.
+ */
+
 package Activator;
 import java.io.*;
 import java.util.HashMap;
@@ -48,6 +67,7 @@ public class Config {
     public String usersuffix = null;
     public String usermgmturl = null;
     public String badpassfile = null;
+    public String defaultgid = null;
 
     final static String CONFIGFILE = "/etc/activator.config";
 
@@ -61,6 +81,7 @@ public class Config {
 	List<Rule> rules;
 	Set<String> groups;
 	boolean docleanup;
+	public boolean usermanaged;
 	public String getName(){return name;}
     }
     
@@ -165,6 +186,8 @@ public class Config {
 			usermgmturl = atoms[1];
 		    if (atoms[0].equals("badpassfile"))
 			badpassfile = atoms[1];
+		    if (atoms[0].equals("defaultgid"))
+			defaultgid = atoms[1];
 
 		}
 
@@ -189,6 +212,7 @@ public class Config {
 			cluster.groups = new HashSet<String>();
 			cluster.name = atoms[0].substring(1, atoms[0].length()-1);
 			cluster.docleanup = true;
+			cluster.usermanaged = true;
 			if ("managed".equals(cluster.name))
 			    managed = cluster;
 			else if ("departments".equals(cluster.name))
@@ -203,6 +227,8 @@ public class Config {
 		    
 		    if (atoms[0].equals("-nocleanup"))
 			cluster.docleanup = false;
+		    if (atoms[0].equals("-nousermanaged"))
+			cluster.usermanaged = false;
 		    Rule rule = new Rule();
 		    rule.groupName = atoms[0];
 		    cluster.groups.add(atoms[0]);

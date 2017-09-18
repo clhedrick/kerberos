@@ -1,41 +1,27 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /* appl/sample/sserver/sserver.c */
-/*
- * Copyright 1990,1991 by the Massachusetts Institute of Technology.
- * All Rights Reserved.
- *
- * Export of this software from the United States of America may
- *   require a specific license from the United States Government.
- *   It is the responsibility of any person or organization contemplating
- *   export to obtain such a license before exporting.
- *
- * WITHIN THAT CONSTRAINT, permission to use, copy, modify, and
- * distribute this software and its documentation for any purpose and
- * without fee is hereby granted, provided that the above copyright
- * notice appear in all copies and that both that copyright notice and
- * this permission notice appear in supporting documentation, and that
- * the name of M.I.T. not be used in advertising or publicity pertaining
- * to distribution of the software without specific, written prior
- * permission.  Furthermore if you modify this software you must label
- * your software as modified software and not distribute it in such a
- * fashion that it might be confused with the original M.I.T. software.
- * M.I.T. makes no representations about the suitability of
- * this software for any purpose.  It is provided "as is" without express
- * or implied warranty.
- */
-
-/*
- * Sample Kerberos v5 server.
- *
- * sample_server:
- * A sample Kerberos server, which reads an AP_REQ from a TCP socket,
- * decodes it, and writes back the results (in ASCII) to the client.
- *
- * Usage:
- * sample_server servername
- *
- * file descriptor 0 (zero) should be a socket connected to the requesting
- * client (this will be correct if this server is started by inetd).
+/*                                                                                                                                  
+ * Copyright 2017 by Rutgers, the State University of New Jersey                                                                    
+ * All Rights Reserved.                                                                                                             
+ *                                                                                                                                  
+ * Export of this software from the United States of America may                                                                    
+ *   require a specific license from the United States Government.                                                                  
+ *   It is the responsibility of any person or organization contemplating                                                           
+ *   export to obtain such a license before exporting.                                                                              
+ *                                                                                                                                  
+ * WITHIN THAT CONSTRAINT, permission to use, copy, modify, and                                                                     
+ * distribute this software and its documentation for any purpose and                                                               
+ * without fee is hereby granted, provided that the above copyright                                                                 
+ * notice appear in all copies and that both that copyright notice and                                                              
+ * this permission notice appear in supporting documentation, and that                                                              
+ * the name of Rutgers not be used in advertising or publicity pertaining                                                           
+ * to distribution of the software without specific, written prior                                                                  
+ * permission.  Furthermore if you modify this software you must label                                                              
+ * your software as modified software and not distribute it in such a                                                               
+ * fashion that it might be confused with the original Rutgers software.                                                            
+ * Rutgers makes no representations about the suitability of                                                                        
+ * this software for any purpose.  It is provided "as is" without express                                                           
+ * or implied warranty.                                                                                                             
  */
 
 #include "port-sockets.h"
@@ -306,21 +292,6 @@ main(int argc, char *argv[])
     }
     homedirs[i] = NULL;
 
-    if (keytab == NULL) {
-        if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
-            com_err(progname, retval, "while resolving keytab file /etc/krb5.keytab");
-            exit(2);
-        }
-    }
-
-    retval = krb5_sname_to_principal(context, NULL, service,
-                                     KRB5_NT_SRV_HST, &server);
-    if (retval) {
-        mylog(LOG_ERR, "while generating service name (%s): %s",
-               service, error_message(retval));
-        exit(1);
-    }
-
     /*
      * If user specified a port, then listen on that port; otherwise,
      * assume we've been started out of inetd.
@@ -380,6 +351,21 @@ main(int argc, char *argv[])
     }
 
     mylog(LOG_DEBUG, "connection from %s", ntoa(peername));
+
+    if (keytab == NULL) {
+        if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
+            com_err(progname, retval, "while resolving keytab file /etc/krb5.keytab");
+            exit(2);
+        }
+    }
+
+    retval = krb5_sname_to_principal(context, NULL, service,
+                                     KRB5_NT_SRV_HST, &server);
+    if (retval) {
+        mylog(LOG_ERR, "while generating service name (%s): %s",
+              service, error_message(retval));
+        exit(1);
+    }
 
     retval = krb5_recvauth(context, &auth_context, (krb5_pointer)&sock,
                            SAMPLE_VERSION, server,

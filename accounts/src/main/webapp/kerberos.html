@@ -1,4 +1,5 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html lang="en">
 <style type="text/css">^
  hr {border:none; border-top: dotted black 2px; margin-left:1em; margin-right: \
 1em}
@@ -15,11 +16,12 @@ background-color: #eeeeee;
 }
 </style>
 <head><link href="usertool.css" rel="stylesheet" type="text/css">
+<title>Computer Science Department user administration tools</title>
 </head>
 <div id="masthead"></div>
 <div id="main">
 
-<h2>Computer Science Department user administration tools</h2>
+<h1>Computer Science Department user administration tools</h1>
 
 Computer Science is currently using a set of administrative tools based on <a href="https://www.freeipa.org/page/Main_Page">IPA</a>.
 IPA is an open-source package maintained by Redhat and others. It has the following major characteristics:
@@ -32,7 +34,7 @@ that need authentication require the user to have a Kerberos ticket. The IPA Ker
 <li> Access to home directories uses <a href="https://en.wikipedia.org/wiki/Network_File_System">NFS</a> in a mode where access is
 authenticated by Kerberos. Unlike most Unix systems, the privileged user (root) does not have any special rights to access home directories. Root can still access all files located on the local system. (We also have one system that does not use Kerberized NFS. That allows
 staff to be able to get to user files in order to help the user. That system is also used to create home directories for users.)
-<li> Two-factor authentication is supported by a free phone app (<a href="https://en.wikipedia.org/wiki/FreeOTP">FreeOTP</a>) and Yubikey. Because FreeOTP is standards-based, it be used for other purposes such as two-factor authentication for Google services.
+<li> Two-factor authentication is supported by a free phone app (<a href="https://en.wikipedia.org/wiki/FreeOTP">FreeOTP</a>) and Yubikey. Because FreeOTP is standards-based, it can be used for other purposes such as two-factor authentication for Google services.
 <li> Login and other PAM functions use <a href="https://fedoraproject.org/wiki/Features/SSSD">sssd</a>.
 </ul>
 This software is available for Redhat/Centos, Ubuntu, and other major distributions.
@@ -79,7 +81,7 @@ paths are set so that you get /usr/local/bin/ssh, not /usr/bin/ssh. If you
 use the wrong ssh, you will probably get a warning message tell you that
 your ticket is likely to expire. See below for details.
 
-<h3> Cron </h3>
+<h2> Cron </h2>
 
 <p> Cron jobs are a special problem. Since you're not logging in, sssd won't
 be called to generate a Kerberos ticket. To deal with this, we've created a
@@ -90,11 +92,18 @@ anyone who can compromie the security of the system can get a ticket on your
 behalf. To limit exposure, the tickets created for cron can't be forwarded to other
 systems by ssh.
 
+<p> You may wonder why we require you to register with kgetcred. 
+One goal of the new system is to make sure that root can't access your files
+unless you've authorized it. Root can create a cron job for anyone. If cron jobs
+could access files without authorization, then root could get to your files just
+be creating a cron job to do it. So we need you to verify that root is allowed
+to start cron jobs for you on that system.
+
 <p> If you are using a one-time password, kgetcred doesn't work. Allowing root
 to issue a ticket on your behalf would obviously subvert the intention of using
 two-factor authentication. In this case you have two choices:
 <ul>
-<li> Use Google authenticator. It is checked atlogin, but not by cron jobs.
+<li> Use Google authenticator. It is checked at login, but not by cron jobs.
 This is slightly less secure than the builtin Kerberos support for two-factor
 authentication.
 <li> Write your cron job to use only files stored on the computer itself. Our
@@ -102,25 +111,23 @@ systems generally have substantial local file systems which you can use for this
 <li> Ask us for a second user ID that won't use two-factor authentication.
 </ul>
 
-<h3> Ssh </h3>
+<h2> Ssh </h2>
 
 <p> Ssh has a problem resulting from how the Kerberos libraries work. Ssh forwards
 your Kerberos ticket to the new system. However the lifetime of the new ticket
 can be short.
 
-<p> Suppose you login at 10am. You'll get a ticket that's valid until 11am. Now
-at 10:30 you ssh to another system. The way ticket forwarding works, the new ticket
+<p> Suppose you login at 10am. You'll get a ticket that's valid until 10am the next day. Now
+at 9:30 the next day you ssh to another system. The way ticket forwarding works, the new ticket
 has the same end time as the original one, but it starts now. That means that the
-ticket on the new system will start at 10:30 and end at 11am, i.e. it will have
-a lifetime of only 30 min. Of course if you ssh at 10:50 you could get a  ticket
+ticket on the new system will start at 9:30 and end at 10am, i.e. it will have
+a lifetime of only 30 min. Of course if you ssh at 9:50 you could get a  ticket
 with 10 min lifetime.
-
-<p> Our automatic ticket renewal runs every 50 min. A lifetime of 30 min is too
-short. The ticket will expire before it can be renewed.
 
 <p> To fix this, we insert a special library into ssh using LD_PRELOAD. It will
 cause the ticket to be renewed on the source end before running ssh. So if you
-ssh at 10:30 you'll start with a newly renewed ticket going from 10:30 to 11:30.
+ssh at 9:30 you'll start with a newly renewed ticket going from 9:30 to 9:30
+the next day.
 
 <p> Other solutions have been proposed for this problem. But the others we know
 of all fail in some situations, particularly cases where you leave a job running

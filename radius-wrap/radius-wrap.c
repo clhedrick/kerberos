@@ -62,64 +62,50 @@ it in front of the normal libraries.
 #include <stdlib.h>
 #include <unistd.h>
 
+#define OTPPROMPT  "Enter OTP Token Value"
+
+radwrapprompt (krb5_context context, void *data, const char *name,
+	       const char *banner, int num_prompts, krb5_prompt *prompts) {
+
+  char *pass = (char *)data;
+  if (pass && num_prompts == 1 && strncmp(prompts[0].prompt, OTPPROMPT, strlen(OTPPROMPT)) == 0 & strlen(pass) < prompts[0].reply->length) {
+    strcpy(prompts[0].reply->data, pass);
+    prompts[0].reply->length = strlen(pass);
+    printf("return prompt\n");
+    return 0;
+  }
+  printf("prompt we can't handle\n");
+  return -1;
+}
+
 /* Function pointers to hold the value of the glibc functions */
-static krb5_error_code (*real_krb5_init_context)(krb5_context *context) = NULL;
+static krb5_error_code (*real_krb5_get_init_creds_password)(krb5_context context, krb5_creds * creds, krb5_principal client, const char * password, krb5_prompter_fct prompter, void * data, krb5_deltat start_time, const char * in_tkt_service, krb5_get_init_creds_opt * opt) = NULL;
 
 // static int (*real_puts)(const char* str) = NULL;
 
 static krb5_wrap_done = 0;
 
 /* wrapping write function call */
-krb5_error_code krb5_init_context(krb5_context *context)
+krb5_error_code krb5_get_init_creds_password(krb5_context context, krb5_creds * creds, krb5_principal client, const char * password, krb5_prompter_fct prompter, void * data, krb5_deltat start_time, const char * in_tkt_service, krb5_get_init_creds_opt * opt)
 {
   krb5_error_code retval;
-  krb5_error_code code = 0;
-  krb5_context ctx;
-  krb5_principal user = NULL;
-  krb5_creds creds;
-  int creds_valid = 0;
-  const char *cctype = NULL;
-  krb5_ccache ccache = NULL;
-  krb5_ccache newcache = NULL;
 
-  real_krb5_init_context = dlsym(RTLD_NEXT, "krb5_init_context");
-  retval = real_krb5_init_context(context);
-  // only need to do this once, as it changes the default
-  if (krb5_wrap_done || retval) {
-    code = retval;
-    goto done;
-  }
+  printf("*********8 wrap called\n");
 
-  krb5_wrap_done = 1;
+  retval = krb5_get_init_creds_opt_set_fast_ccache_name(context, opt, "/tmp/krb_cc_radius");
 
-  ctx = *context;
+  if (retval)
+    return retval;
 
-  memset(&creds, 0, sizeof(creds));
+  if (!real_krb5_get_init_creds_password)
+    real_krb5_get_init_creds_password = dlsym(RTLD_NEXT, "krb5_get_init_creds_password");
 
-  code = krb5_cc_default(ctx, &ccache);  if (code) goto done;
+  printf("prompter %x data %x\n", prompter, data);
 
-  cctype = krb5_cc_get_type(ctx, ccache);
-  code = krb5_cc_get_principal(ctx, ccache, &user);   if (code) goto done;
-  code = krb5_get_renewed_creds(ctx, &creds, user, ccache, NULL); if (code) goto done;
-  creds_valid = 1;  
-  code = krb5_cc_resolve(ctx, "MEMORY:renewtmp", &newcache); if (code) goto done;
-  code = krb5_cc_initialize(ctx, newcache, user); if (code) goto done;
-  code = krb5_cc_store_cred(ctx, newcache, &creds); if (code) goto done;
+  retval = real_krb5_get_init_creds_password(context, creds, client, password, radwrapprompt, (void *)password, start_time, in_tkt_service, opt);
 
-  putenv("KRB5CCNAME=MEMORY:renewtmp");
-  code = krb5_cc_set_default_name(ctx, "MEMORY:renewtmp");
-
- done:
-  if (code)
-    printf("failed %s\n", error_message(code));
-  if (ccache)
-    krb5_cc_close(ctx, ccache);
-  if (newcache)
-    krb5_cc_close(ctx, newcache);
-  if (user != NULL)
-    krb5_free_principal(ctx, user);
-  if (creds_valid)
-    krb5_free_cred_contents(ctx, &creds);
+  printf("kerb reeturn %d\n", retval);
 
   return retval;
+
 }

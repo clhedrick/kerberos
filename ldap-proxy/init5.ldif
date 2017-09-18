@@ -1,0 +1,7 @@
+dn: olcOverlay=kerbsimple,olcDatabase={3}ldap,cn=config
+objectClass: olcOverlayConfig
+objectClass: olcKerbsimpleConfig
+olcOverlay: kerbsimple
+olcKerbsimpleAdminDN: uid=ldap.admin,cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu
+olcKerbsimpleArmorKeytab: /etc/krb5.openldap.keytab
+olcKerbsimpleArmorPrincipal: radius/krb1.cs.rutgers.edu@CS.RUTGERS.EDU

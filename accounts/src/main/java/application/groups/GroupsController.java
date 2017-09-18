@@ -1,6 +1,26 @@
+/*
+ * Copyright 2017 by Rutgers, the State University of New Jersey
+ * All Rights Reserved.
+ *
+ * Permission to use, copy, modify, and
+ * distribute this software and its documentation for any purpose and
+ * without fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright notice and
+ * this permission notice appear in supporting documentation, and that
+ * the name of Rutgers not be used in advertising or publicity pertaining
+ * to distribution of the software without specific, written prior
+ * permission.  Furthermore if you modify this software you must label
+ * your software as modified software and not distribute it in such a
+ * fashion that it might be confused with the original Rutgers software.
+ * Rutgers makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is" without express
+ * or implied warranty.
+ */
+
 package application;
 
 import java.util.List;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -47,6 +67,10 @@ public class GroupsController {
     @Autowired
     private LoginController loginController;
 
+    @Autowired
+    private GroupController groupController;
+
+
     public String filtername(String s) {
 	if (s == null)
 	    return null;
@@ -79,12 +103,13 @@ public class GroupsController {
 	String query = Activator.Config.getConfig().groupsownedfilter.replaceAll("%u", user);
 
 	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
-	common.JndiAction action = new common.JndiAction(new String[]{query, "", "cn","dn", "gidNumber"});
+	common.JndiAction action = new common.JndiAction(new String[]{query, "", "cn","dn", "gidNumber", "businessCategory"});
 
 	Subject.doAs(subject, action);
 
 	// look at the results of the LDAP query
 	ArrayList<HashMap<String, ArrayList<String>>> groups = action.val;
+	Collections.sort(groups, (g1, g2) -> g1.get("cn").get(0).compareTo(g2.get("cn").get(0)));
 
 	// set up model for JSTL to output
 	model.addAttribute("groups", groups);
@@ -102,6 +127,7 @@ public class GroupsController {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
+	((List<String>)model.asMap().get("messages")).clear();
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
@@ -125,7 +151,7 @@ public class GroupsController {
 	    return groupsGet(request, response, model);
 	}
 
-	boolean ok = true;
+	boolean added = false;
 
 	String user = (String)request.getSession().getAttribute("krb5user");
 
@@ -168,12 +194,15 @@ public class GroupsController {
 	    command.add("--setattr=dateOfCreate=" + dateString + "Z");
 	    command.add(name);
 	    logger.info(command);
-	    if (docommand.docommand(command.toArray(new String[1]), env) != 0)
-		ok = false;
+	    if (docommand.docommand(command.toArray(new String[1]), env) == 0)
+		added = true;
 
 	}
 
-	return groupsGet(request, response, model);
+	if (added)
+	    return groupController.groupGet(name, request, response, model);	
+	else
+	    return groupsGet(request, response, model);
 
     }
 

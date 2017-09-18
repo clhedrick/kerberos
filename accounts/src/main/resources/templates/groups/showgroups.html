@@ -1,6 +1,8 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 
+<html lang="en">
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<title>Group Management</title>
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
 <script type="text/javascript">
 /*<![CDATA[*/
@@ -53,52 +55,56 @@ $(document).ready(function(){
 
 <a href="../"> Account Management</a>
 
-<h2> Group Management </h2>
+<h1> Group Management </h1>
 
 <p> These pages can be used to create and manage groups for sharing files, and also to authorize guest users.</p>
 
 <form th:action="@{/groups/showgroups}" method="post" id="deleteForm" style="display:none">
-<input type="text" name="del" id="deleteInput"/>
-<input type="submit" id="deleteSubmit"/>
+<label>item <input type="text" name="del" id="deleteInput"/></label>
+<input type="submit" id="deleteSubmit" value="Delete Item"/>
 </form>
 
 <form th:action="@{/groups/showgroups}" method="post">
 
 <div th:if="${groups != null and groups.size() > 0}">
 
-<h3>Current groups owned by you</h3>
+<h2>Current groups owned by you</h2>
 
 <div class="inset" style="padding-top:0.5em">
 
 <div th:each="g : ${groups}">
-
 <a th:href="@{showgroup(name=${g.cn[0]})}"><span th:text="${g.cn[0]}"/></a>
 <span th:text="${g['gidnumber']?.get(0)}"/>
-<img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:title="${'Delete group ' + g.cn[0]}" class="deleteButton"/>
-<input type="hidden" name="deleteName" th:value="${g.cn[0]}"/>
+<img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete group ' + g.cn[0]}" class="deleteButton"/> <input type="hidden" name="deleteName" th:value="${g.cn[0]}"/> <span class="label" th:if="${g['businesscategory'] != null and g['businesscategory'].contains('login')}"> Guests </span> <span class="label"  th:if="${g['gidnumber']?.get(0)}"> File sharing </span>
+
 
 </div>
 </div>
 </div>
 
-<h3 style="margin-top:2em"> Add Group </h3>
+<h2 style="margin-top:2em"> Add Group </h2>
 
 <div class="inset" style="margin-top:1em">
 <label>Group Name: <input type="text" name="name" id="name"/></label>
-<br/>
-<label><input type="checkbox" name="sharing" id="sharing"/> Group should be available for file sharing.</label>
-<br/>
-<label><input type="checkbox" name="guests" id="guests"/> Users in group may be guests. Accounts for them will be added if they don't already exist.</label>
-<p>
-<input type="submit" id="submit"/>
-</p>
+<p> Type of group to create: There are two types of group. Normally you should <b>check only one</b> box.</p>
+
+
+<div class="grid-left">
+<input type="checkbox" name="sharing" id="sharing"/> 
+<div>
+<label for="sharing" >Group for <b>sharing files</b> between users.</label> This is a normal Unix group. You can use "chgrp" to change a directory or file to this group, so that other group members can access it.
+</div>
+</div>
+
+<div class="grid-left">
+<input type="checkbox" name="guests" id="guests"/> 
+<div>
+<label for="guests"><b>Guests.</b></label> This is a list of users that you are authorizing to login. The most common use is to let grad students login to the research cluster, but it can also be used to allow members of other departments to login to a cluster.
+</div>
+</div>
+<input type="submit" id="submit" value="Add Group"/>
+
 </div>
 </form>
-<div class="explanation" style="margin-top:2em">
-<p> When adding a group, at least one of the boxes should be checked. </p>
-<p> "Users in group may be guests" means that members of this group
-are alloweed as guests, even if they wouldn't normally be able to login.
-If you edit the group, you'll be able to choose which clusters they can
-login to.</p>
 </div>
-</div>
+</html>

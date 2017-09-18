@@ -1,4 +1,5 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html lang="en">
 <style type="text/css">^
  hr {border:none; border-top: dotted black 2px; margin-left:1em; margin-right: \
 1em}
@@ -21,12 +22,13 @@ margin-top: 1.75em;
 letter-spacing: 1px;}
 </style>
 <head><link href="usertool.css" rel="stylesheet" type="text/css">
+<title> Two-factor Authentication</title>
 </head>
 <div id="masthead"></div>
 <div id="main">
 <a href="index.html">Account Management</a>
 
-<h2>Two-factor Authentication</h2>
+<h1>Two-factor Authentication</h1>
 
 <p> Our Kerberos implementation supports three forms of two-factor 
 authentication: TOTP, HOTP, and Yubikey. In addition, Google authenticator
@@ -48,7 +50,7 @@ See the section at the end.
 <p> For more detailed documentation, see the <a href="https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Linux_Domain_Identity_Authentication_and_Policy_Guide/otp.html"> Redhat one-time password documentation</a>.
 
 
-<h3> Enabling Two-factor Authentication</h3>
+<h2> Enabling Two-factor Authentication</h2>
 
 <p> Two-factor authentication uses "tokens." For TOTP and HOTP, a token is simply
 an item that shows in your mobile app. The same mobile app can have tokens for many different
@@ -77,7 +79,7 @@ ipa otptoken-add-yubikey
 of OTP, since Yubikey won't let you ssh from a non-CS system
 such as your home computer.
 
-<h3>Mobile Device Clients</h3>
+<h2>Mobile Device Clients</h2>
 
 <p> Clients for TOTP and HOTP are available for many devices. For IOS and Android, look for
 "FreeOTP" in the appropriate app store. The ipa otptoken-add command will display a QR
@@ -88,7 +90,7 @@ also use a Google authenticator implementation on your device. For devices other
 Android, we recommend looking for a Google authenticator implementation.
 
 
-<h4>USING THE CLIENT</h4>
+<h3>USING THE CLIENT</h3>
 
 <p> FreeOTP on your mobile device will display a 6-digit code. To login, type your normal password,
 adding the 6 digits to the end.
@@ -101,7 +103,7 @@ authentication. (Use "ipa otptoken-find" to list your tokens, and "ipa otptoken-
 remove one.)
 
 
-<h3> Possible problems </h3>
+<h2> Possible problems </h2>
 
 <p> Two-factor authentication is inconsistent with Kerberos key tables and with
 cron jobs. By definition, two-factor authentication requires you to use a
@@ -134,4 +136,3 @@ For many systems that's /freespace. Note however that freespace is
 not backed up, and is likely to get wiped between semesters. For that
 reason we recommend keeping a copy of the files in your home directory.
 </ul>
-

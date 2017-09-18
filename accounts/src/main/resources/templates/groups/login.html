@@ -1,17 +1,18 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 
+<html lang="en">
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<title>Login for group management</title>
 </head>
 <div id="masthead"></div>
 <div id="main">
-
 <div class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
 <a href="../"> Account Management</a> 
 
-<h2> Group management for Computer Science systems </h2>
+<h1> Group management for Computer Science systems </h1>
 
 <p> This application will allow you to create and manage
 user groups. These can be used to share files among a group of
@@ -33,11 +34,10 @@ to help@cs.rutgers.edu.
 
 <p></p>
 <form th:action="@{/groups/login}" method="post">
-Username: <input type="text" name="user"/><br/>
-Password: <input type="password" name="pass"/>
+<label>Username: <input type="text" name="user"/></label><br/>
+<label>Password: <input type="password" name="pass"/></label>
 <p></p>
-<input type="submit"/>
+<input type="submit" value="login"/>
 </form>
 </div>
-
-
+</html>
