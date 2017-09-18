@@ -34,7 +34,7 @@ that need authentication require the user to have a Kerberos ticket. The IPA Ker
 <li> Access to home directories uses <a href="https://en.wikipedia.org/wiki/Network_File_System">NFS</a> in a mode where access is
 authenticated by Kerberos. Unlike most Unix systems, the privileged user (root) does not have any special rights to access home directories. Root can still access all files located on the local system. (We also have one system that does not use Kerberized NFS. That allows
 staff to be able to get to user files in order to help the user. That system is also used to create home directories for users.)
-<li> Two-factor authentication is supported by a free phone app (<a href="https://en.wikipedia.org/wiki/FreeOTP">FreeOTP</a>) and Yubikey. Because FreeOTP is standards-based, it be used for other purposes such as two-factor authentication for Google services.
+<li> Two-factor authentication is supported by a free phone app (<a href="https://en.wikipedia.org/wiki/FreeOTP">FreeOTP</a>) and Yubikey. Because FreeOTP is standards-based, it can be used for other purposes such as two-factor authentication for Google services.
 <li> Login and other PAM functions use <a href="https://fedoraproject.org/wiki/Features/SSSD">sssd</a>.
 </ul>
 This software is available for Redhat/Centos, Ubuntu, and other major distributions.
@@ -103,7 +103,7 @@ to start cron jobs for you on that system.
 to issue a ticket on your behalf would obviously subvert the intention of using
 two-factor authentication. In this case you have two choices:
 <ul>
-<li> Use Google authenticator. It is checked atlogin, but not by cron jobs.
+<li> Use Google authenticator. It is checked at login, but not by cron jobs.
 This is slightly less secure than the builtin Kerberos support for two-factor
 authentication.
 <li> Write your cron job to use only files stored on the computer itself. Our
@@ -117,19 +117,17 @@ systems generally have substantial local file systems which you can use for this
 your Kerberos ticket to the new system. However the lifetime of the new ticket
 can be short.
 
-<p> Suppose you login at 10am. You'll get a ticket that's valid until 11am. Now
-at 10:30 you ssh to another system. The way ticket forwarding works, the new ticket
+<p> Suppose you login at 10am. You'll get a ticket that's valid until 10am the next day. Now
+at 9:30 the next day you ssh to another system. The way ticket forwarding works, the new ticket
 has the same end time as the original one, but it starts now. That means that the
-ticket on the new system will start at 10:30 and end at 11am, i.e. it will have
-a lifetime of only 30 min. Of course if you ssh at 10:50 you could get a  ticket
+ticket on the new system will start at 9:30 and end at 10am, i.e. it will have
+a lifetime of only 30 min. Of course if you ssh at 9:50 you could get a  ticket
 with 10 min lifetime.
-
-<p> Our automatic ticket renewal runs every 50 min. A lifetime of 30 min is too
-short. The ticket will expire before it can be renewed.
 
 <p> To fix this, we insert a special library into ssh using LD_PRELOAD. It will
 cause the ticket to be renewed on the source end before running ssh. So if you
-ssh at 10:30 you'll start with a newly renewed ticket going from 10:30 to 11:30.
+ssh at 9:30 you'll start with a newly renewed ticket going from 9:30 to 9:30
+the next day.
 
 <p> Other solutions have been proposed for this problem. But the others we know
 of all fail in some situations, particularly cases where you leave a job running
