@@ -1,0 +1,5 @@
+dn: olcOverlay={0}kerbsimple,olcDatabase={3}ldap,cn=config
+changetype:modify
+replace:olcKerbsimpleAdminDN
+olcKerbsimpleAdminDN: uid=ldap.admin,cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu
+-

@@ -1,0 +1,4 @@
+#!/bin/sh
+cp /etc/openldap/README .
+cp /etc/openldap/init*ldif .
+cp ~/rpmbuild/BUILD/openldap-2.4.40/openldap-2.4.40/servers/slapd/overlays/kerbsimple.c .

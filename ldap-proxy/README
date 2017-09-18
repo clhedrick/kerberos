@@ -1,0 +1,148 @@
+There's a section near the end of this file explaing what it's
+about. Basically this is about using Openldap as a proxy for a Freeipa
+LDAP server. The proxy does Kerberos authentication.  The Freeipa LDAP
+server can already do that, but not if you're using certain kinds of
+two-factor authentication. We need to use that, and we need LDAP to
+understand all users' passwords. So this proxy handles password
+checks, and passes all data requests through to the FreeIPA server.
+
+The following instructions are for settting up Openldap. They
+assume you're already built our special Kerberos plugin for Openldap.
+Instructions for that are given below.
+
+CONTENTS
+
+Openldap instructions
+Building the Kerberos plugin (kerbsimple)
+Setting up SSL
+More background on kerbsimple
+
+OPENLDAP SETUP
+
+edit /etc/sysconfig/slapd
+SLAPD_URLS="ldapi:/// ldap://0.0.0.0:390/ ldaps://0.0.0.0:637"
+cSLAPD_OPTIONS="-F /etc/openldap/slapd.d"
+
+Before doing these installs, build kerbsimple as below
+init4a.ldif loads it, so it has to exist by that point
+
+/usr/sbin/slappasswd 
+password is mutiacurse
+the encrypted form {SSHA}SiiA3KmXUjVQWIONiEsWE0Z9BiJHodXP goes into init1.ldif
+
+ldapmodify -Y EXTERNAL  -H ldapi:/// -f init1.ldif
+ldapmodify -Y EXTERNAL  -H ldapi:/// -f init2.ldif
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/openldap/schema/cosine.ldif
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/openldap/schema/nis.ldif 
+ldapadd -Y EXTERNAL -H ldapi:/// -f /etc/openldap/schema/inetorgperson.ldif
+
+ldapadd -Y EXTERNAL -H ldapi:/// -f init4a.ldif
+ldapadd -Y EXTERNAL -H ldapi:/// -f init4.ldif
+
+look at init5.ldif. It has the name of the account used by clients
+such as nslcd to fetch information. The problem is that we normally
+process binds ourselves, checking accounts with kerberos and returning
+without doing an actual bind to the IPA ldap. But when we fetch data
+we may need special access, e.g. to see memberof.  The dn I current
+use is uid=ldap.admin,cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu.
+In init5.ldif I specific just "uid=ldap.admin," rather than the whole
+thing, because my comparison doesn't skip whitespace and I'm worried
+someone might write the DN with whitespace. The actual check just
+matches the beginning, so this works. Obviously I need to do a smarter
+check.
+
+ldapadd -Y EXTERNAL -H ldapi:/// -f init5.ldif
+
+BUILDING KERBSIMPLE
+
+of course kerbsimple has to be installed in /usr/lib64/openldap
+
+to make build area, need to fetch source rpm for openldap
+rpmbuild --recompile RPMFILE
+
+in src/servers/slapd/overlays/
+add kerbsimple.c and modify Makefile adding lines below
+  make kerbsimple.la
+    lots of warnings
+  make installk
+
+for Makefile:
+installk:
+	cp .libs/kerbsimple.la /usr/lib64/openldap/
+	cp .libs/kerbsimple-2.4.so.2.10.3 /usr/lib64/openldap/
+	ln -f -s /usr/lib64/openldap/kerbsimple-2.4.so.2.10.3 /usr/lib64/openldap/kerbsimple-2.4.so.2
+kerbsimple.la : kerbsimple.lo
+	$(LTLINK_MOD) -module -o $@ kerbsimple.lo version.lo $(LINK_LIBS) -lkrb5 -lcom_err
+
+FOR SSL
+
+edit /etc/group, add ldap to the apache group, so it can read /etc/httpd/alias
+ldapmodify -Y EXTERNAL -H ldapi:/// -f init6.ldif
+
+depends upon /usr/httpd/alias, which is set up for the IPA web server
+check the file before using it. The cert name will be host-specific, and
+others might be as well.
+
+----------
+
+About kerbsimple
+
+The point of this proxy is to do ldap with simple password processing,
+using Kerberos passwords. The normal IPA LDAP can handle this for 
+passwords stored in IPA, but not for passwords accessed by Radius.
+IPA LDAP can handle GSSAPI for any principal, so it only makes sense
+to use the proxy where you need simple password processing.
+
+Typically this will be used with something like nslcd on systems that
+can't be Kerberized.
+
+For these applications we need two things
+* access to attributes or users and groups, for nsswitch
+* checking user passwords.
+
+My code will handle this, but may not handle other things you'd like.
+Unfortunatley Openldap isn't well documented, so figuring out better
+approaches is really hard. 
+
+My code doesn't affect Openldap's LDAP proxy functionality or
+configuration, except in one case: when you do a bind, and the
+DN starts with uid=, I will pull out the next atom and do a Kerberos
+password check.  If it passes, I return success. The bind it not
+passed through to the main LDAP.
+
+There is one exception. nslcd typically has one DN configured to
+do the nsswitch queries. I pass that bind through to the backend,
+because you may need those permissions to look up the info. Note
+that if you bind to that DN, then bind to the user, the connection
+to the backend will still be bound to the original DN, because
+normal user binds return immediately without being passed through.
+That meanst that the DN used for nsswitch should be able to get
+to basic user and group info, but nothign sensitive.
+
+Configuration is done by attributes in the cn=config entry for
+the kerbsimple overlay. Here's the whole thing:
+
+dn: olcOverlay=kerbsimple,olcDatabase={3}ldap,cn=config
+objectClass: olcOverlayConfig
+objectClass: olcKerbsimpleConfig
+olcOverlay: kerbsimple
+olcKerbsimpleAdminDN: uid=ldap.admin,cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu
+olcKerbsimpleArmorKeytab: /etc/krb5.openldap.keytab
+olcKerbsimpleArmorPrincipal: radius/krb1.cs.rutgers.edu@CS.RUTGERS.EDU
+
+olcKerbsimpleAdminDN is the DN used for nsswitch queries. Binds
+to this DN are passed through to the backend, unlike all other
+binds.
+
+olcKerbsimpleArmorKeytab is a key table that must be readable
+by the ldap user. It doesn't matter what principal is in it, but
+it must be valid. It's used to generate credentials that are used
+to "armon" (encrypt) passwords sent to the KDC. This armor thing
+is specific to getting tickets using one-time passwords. but you
+wouldn't be usign this module if you didn't have users with
+one-time passwords.
+
+olcKerbsimpleArmorPrincipal is the principal that's stored in
+the keytable.
+
+

@@ -1,0 +1,7 @@
+dn: cn=module,cn=config
+objectClass: olcModuleList
+cn: module
+olcModuleload: back_ldap.la
+olcModuleload: kerbsimple.la
+
+

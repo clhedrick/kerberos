@@ -1,0 +1,17 @@
+dn: dc=cs,dc=rutgers,dc=edu
+dc: cs
+objectClass: top
+objectClass: domain
+
+dn: cn=Manager,dc=cs,dc=rutgers,dc=edu
+objectClass: organizationalRole
+cn: Manager
+description: LDAP Manager
+
+dn: ou=People,dc=cs,dc=rutgers,dc=edu
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Group,dc=cs,dc=rutgers,dc=edu
+objectClass: organizationalUnit
+ou: Group
