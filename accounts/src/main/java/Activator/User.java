@@ -643,6 +643,22 @@ public class User {
 		    JndiAction action = new JndiAction(new String[]{"(uid=" + username + ")", "", "memberOf", "givenname", "sn", "gecos"});
 		    Subject.doAs(subj, action);
 
+		    // for -v, print the basic data, to help debugging user issues
+		    if (logger.isDebugEnabled()) {
+			logger.debug("Dept roles:");
+			for (String role:csroles)
+			    logger.debug("   " + role);
+			List<String> univroles = universityData.get("employeetype");
+			logger.debug("University roles:");
+			if (univroles != null) {
+			    for (String role:univroles)
+				logger.debug("   " + role);
+			}
+			logger.debug("Manually maintained login groups:");
+			for (String group: user.makeManualLoginGroups(config, action.val, subj, null))
+			    logger.debug("   " + group);
+		    }
+
 		    if ((action.val == null || action.val.size() == 0) &&
 			(universityData.get("uid") == null || universityData.get("uid").size() == 0)) {
 			logger.debug("user " + username + " doesn't exist in University data or our system. Skipping.");
@@ -652,6 +668,7 @@ public class User {
 			    return false;
 		    }
 	
+
 		    // get automaticallly maintained groups from University data. will have to filters to see if they fit the cluster
 		    Set<String> userMaintainedGroups = user.makeUserMaintainedGroups(config, universityData);
 		    // list of login groups for all clusters - just for logging
