@@ -24,12 +24,10 @@ tar cf ./kerberos-u14.tar /etc/krb5.conf /etc/krb5.ticketwarning /etc/sssd/sssd.
 echo
 echo copy sssd.sample to sssd, checking hostname, access test, and home dir
 echo run pam-auth-update to update pam files, enabling RU Kerberos support
-echo update-rc.d renewd defaults - to activate renewd; service renewd start
+echo update-rc.d renewd defaults - to activate renewd, service renewd start
 echo /etc/ssh/ssh_config change GSSAPIDelegateCredentials yes
-echo /etc/ssh/sshd_config GSSAPIAuthentication yes; GSSAPICleanupCredentials no
+echo /etc/ssh/sshd_config GSSAPIAuthentication yes, GSSAPICleanupCredentials no
 echo you may want to limit sshd to what hosts you will allow
-echo
-echo pam_kmkhomedir not currently included
 echo
 
 
