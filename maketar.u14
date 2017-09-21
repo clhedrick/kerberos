@@ -1,0 +1,38 @@
+#!/bin/sh
+
+echo This builds kerberos.tar, with files for normal client systems. credserv and mkhomedird are not included
+cd pam-reg-cc
+make installu14
+cd ../renewd
+make installu14
+cd ../kgetcred
+make -f Makefile.centos7 installu14
+cd ../krenew-wrap
+make installu14
+cd ../kmkhomedir
+make installu14
+cd ../skinit
+make installu14
+cd ..
+
+cp /etc/sssd/sssd.conf /etc/sssd/sssd.conf.sample
+
+rm -f ./kerberos-u14.tar
+tar cf ./kerberos-u14.tar /etc/krb5.conf /etc/krb5.ticketwarning /etc/sssd/sssd.conf /usr/share/pam-configs/rukerb /lib/x86_64-linux-gnu/security/pam_reg_cc.so /usr/share/man/man8/pam_reg_cc.8 /etc/systemd/system/renewd.service /usr/sbin/renewd /usr/share/man/man8/renewd.8 /usr/bin/kgetcred /lib/x86_64-linux-gnu/security/pam_kgetcred.so /usr/share/man/man1/kgetcred.1 /usr/share/man/man8/pam_kgetcred.8 /usr/libexec/krenew-wrap.so /usr/local/bin/ssh /lib/x86_64-linux-gnu/security/pam_kmkhomedir.so /usr/share/man/man8/pam_kmkhomedir.8
+
+
+echo
+echo copy sssd.sample to sssd, checking hostname, access test, and home dir
+echo run pam-auth-update to update pam files, enabling RU Kerberos support
+echo update-rc.d renewd defaults - to activate renewd; service renewd start
+echo /etc/ssh/ssh_config change GSSAPIDelegateCredentials yes
+echo /etc/ssh/sshd_config GSSAPIAuthentication yes; GSSAPICleanupCredentials no
+echo you may want to limit sshd to what hosts you will allow
+echo
+echo pam_kmkhomedir not currently included
+echo
+
+
+
+
+

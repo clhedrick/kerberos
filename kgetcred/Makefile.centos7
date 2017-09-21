@@ -15,3 +15,10 @@ install: all
 	cp pam_kgetcred.so /lib64/security
 	cp kgetcred.1 /usr/share/man/man1
 	cp pam_kgetcred.8 /usr/share/man/man8
+
+installu14: all
+	cp kgetcred /usr/bin/kgetcred
+	chmod u+s /usr/bin/kgetcred
+	cp pam_kgetcred.so /lib/x86_64-linux-gnu/security/
+	cp kgetcred.1 /usr/share/man/man1
+	cp pam_kgetcred.8 /usr/share/man/man8

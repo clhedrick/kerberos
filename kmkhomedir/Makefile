@@ -18,3 +18,7 @@ clean::
 install:: all
 	cp pam_kmkhomedir.so /lib64/security
 	cp pam_kmkhomedir.8 /usr/share/man/man8
+
+installu14:: all
+	cp pam_kmkhomedir.so /lib/x86_64-linux-gnu/security/
+	cp pam_kmkhomedir.8 /usr/share/man/man8
