@@ -25,6 +25,10 @@ apt-get -y install nfs-common
 edit /etc/idmapd.conf, add Domain=cs.rutgers.edu
 service idmapd restart
 edit /etc/default/nfs-common, set NEED_GSSD=yes
+in /etc/init/gssd.conf, find 'exec rpc.gssd', make it
+   exec rpc.gssd -t 600
+[that causes it to recheck kerberos every 10 min, so when you logout
+ your files are no longer accessible]
 service gssd start
 
 --- rutgers stuff
