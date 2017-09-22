@@ -137,7 +137,7 @@ delegate management of the group to someone else.</p>
 <fieldset style="border:none; margin: 0px; padding: 0px">
 <p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></legend></p>
 <div th:each="c: ${clusters}">
-<div th:if="${c.usermanaged}">
+<div th:if="${c.usermanaged or group['host'] != null and group['host'].contains(c.name) }">
 <label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label>
 </div>
 </div>
