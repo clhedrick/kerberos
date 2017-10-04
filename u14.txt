@@ -1,0 +1,47 @@
+apt install krb5-user sssd ntp
+[in tar file] take krb5.conf from centos, but without the includes
+    need   default_ccache_name = /tmp/krb5cc_%{uid}
+    or OTP won't work
+ipa host-add eagle.cs.rutgers.edu
+ipa-getkeytab -p host/eagle.cs.rutgers.edu -k eagle
+   and install in /etc/krb5.keytab (only root access)
+# once firewall updates, kinit without OTP should work
+[in tar file, but needs revies] take /etc/sssd/sssd.conf from centos. look at homedir and access check
+   in [sssd] section, add "config_file_version = 2"
+   change ipa_hostname to local host
+   change ldap_dns_service_name to ldap
+service sssd start
+getent -s sss hedrick
+   make sure output is right
+make sure /etc/nsswitch.conf lists sss
+
+edit /etc/ssh/ssh_config change GSSAPIDelegateCredentials yes
+edit /etc/ssh/sshd_config GSSAPIAuthentication yes; GSSAPICleanupCredentials no
+
+--- nfs
+
+apt-get -y install nfs-common
+
+edit /etc/idmapd.conf, add Domain=cs.rutgers.edu
+service idmapd restart
+edit /etc/default/nfs-common, set NEED_GSSD=yes
+in /etc/init/gssd.conf, find 'exec rpc.gssd', make it
+   exec rpc.gssd -t 600
+[that causes it to recheck kerberos every 10 min, so when you logout
+ your files are no longer accessible]
+service gssd start
+
+--- rutgers stuff
+
+everything is in tar file, but needs 
+* run pam-auth-update to update pam files, enabling RU Kerberos support
+* update-rc.d renewd defaults - to activate renewd; service renewd start
+[you can skip the rst of this section if you're using the tar file]
+
+apt install libkrb5-dev libkeyutils-dev
+
+make installu14 and the tar file have most of what is needed
+but on systems after installing you need to do
+
+pam-auth-update to set up rukerb
+update-rc.d renewd defaults

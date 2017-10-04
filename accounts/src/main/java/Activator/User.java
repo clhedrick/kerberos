@@ -643,6 +643,22 @@ public class User {
 		    JndiAction action = new JndiAction(new String[]{"(uid=" + username + ")", "", "memberOf", "givenname", "sn", "gecos"});
 		    Subject.doAs(subj, action);
 
+		    // for -v, print the basic data, to help debugging user issues
+		    if (logger.isDebugEnabled()) {
+			logger.debug("Dept roles:");
+			for (String role:csroles)
+			    logger.debug("   " + role);
+			List<String> univroles = universityData.get("employeetype");
+			logger.debug("University roles:");
+			if (univroles != null) {
+			    for (String role:univroles)
+				logger.debug("   " + role);
+			}
+			logger.debug("Manually maintained login groups:");
+			for (String group: user.makeManualLoginGroups(config, action.val, subj, null))
+			    logger.debug("   " + group);
+		    }
+
 		    if ((action.val == null || action.val.size() == 0) &&
 			(universityData.get("uid") == null || universityData.get("uid").size() == 0)) {
 			logger.debug("user " + username + " doesn't exist in University data or our system. Skipping.");
@@ -652,6 +668,7 @@ public class User {
 			    return false;
 		    }
 	
+
 		    // get automaticallly maintained groups from University data. will have to filters to see if they fit the cluster
 		    Set<String> userMaintainedGroups = user.makeUserMaintainedGroups(config, universityData);
 		    // list of login groups for all clusters - just for logging
@@ -838,7 +855,8 @@ public class User {
 
 		    // remove from login groups for cleanup, including notification email
 		    if (cleanup) {
-			for (String cluster: removefromCluster) {
+			for (Config.Cluster clusterObj: config.clusters) {
+			    String cluster = clusterObj.name;
 			    // file named user@cluster is used to remember we gave the warning
 			    // we can remove the user when it's more than 60 days (or whatever) old
 			    // name of file
@@ -846,7 +864,8 @@ public class User {
 			    // nio Path for the file
 			    Path warningPath = Paths.get(warningname);
 			    boolean warned = Files.exists(warningPath);
-			    if (config.warningdays > 0 && ! warned) {
+			    boolean remove = removefromCluster.contains(cluster);
+			    if (remove && config.warningdays > 0 && ! warned) {
 				// if it doesn't exist, he wasn't warned, so we warn him and then create the file
 				// cache the warning template
 				if (user.warningtemplate == null)
@@ -868,7 +887,7 @@ public class User {
  : config.testaddress), parts[0], parts[1]))
 					Files.write(warningPath, new byte[]{});
 				}
-			    } else {
+			    } else if (remove) {
 				// files exists, so they were warned. See if it's time to delete
 				long now = System.currentTimeMillis();
 				FileTime testtime = null;
@@ -888,7 +907,15 @@ public class User {
 				} else {
 				    logger.info("User has been notified for " + cluster + " but it's not time to delete them");
 				}
-			    }				      
+			    } else {
+				// not to remove. if they were warned but are no longer to be removed,
+				// remove warning file. If they lose access again we need to go through
+				// the whole warning cycle. Without this they would be removed immediately.
+				if (warned) {
+				    logger.info("User has been previously notified for " + cluster + " but is now OK. Remove warnnig.");
+				    Files.delete(warningPath);
+				}
+			    }
 			}
 		    }
 

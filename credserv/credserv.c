@@ -782,7 +782,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     char *default_realm = NULL;
     char *realm = NULL;
     struct stat statbuf;
-    char *flags;
+    char *flags = "";
     char *sp;
     krb5_get_init_creds_opt *options;
     krb5_keytab userkeytab;

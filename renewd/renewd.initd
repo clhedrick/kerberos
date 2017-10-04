@@ -1,0 +1,51 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:        renewd
+# Required-Start:  $network $syslog
+# Required-Stop:   $network $syslog
+# Default-Start:   2 3 4 5
+# Default-Stop:    1
+# Short-Description: Start renewd daemon
+### END INIT INFO
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+. /lib/lsb/init-functions
+
+DAEMON=/usr/sbin/renewd
+
+test -x $DAEMON || exit 5
+
+case $1 in
+	start)
+		log_daemon_msg "Starting renewd" "renewd"
+		renewd
+		status=$?
+		log_end_msg $status
+  		;;
+	stop)
+		log_daemon_msg "Stopping renewd" "renewd"
+		pkill -u root renewd
+		log_end_msg $?
+  		;;
+	restart|force-reload)
+		$0 stop && sleep 2 && $0 start
+  		;;
+	try-restart)
+		if $0 status >/dev/null; then
+			$0 restart
+		else
+			exit 0
+		fi
+		;;
+	reload)
+		exit 3
+		;;
+	status)
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|try-restart|force-reload|status}"
+		exit 2
+		;;
+esac

@@ -8,3 +8,10 @@ install:	all
 	cp renewd /usr/sbin/renewd
 	systemctl start renewd
 	cp renewd.8 /usr/share/man/man8
+
+installu14:	all
+	-service renewd stop
+	cp renewd /usr/sbin/renewd
+	-service renewd start
+	cp renewd.8 /usr/share/man/man8
+	cp renewd.initd /etc/init.d/renewd

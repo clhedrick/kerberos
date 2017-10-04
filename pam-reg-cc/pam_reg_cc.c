@@ -140,6 +140,54 @@ void register_for_delete(pam_handle_t *pamh, const char *cache) {
   close(fd);
 }
 
+// for names like /run/user/%U/krbcc_%U 
+// make need to create directory, but only if it's user-specific
+
+void
+assure_dir(char *template, char *filename, struct passwd *pwd) {
+  char *cp;
+  char *lastslash = NULL;
+  char *nexttolastslash = NULL;
+  int ok = 0;
+  int err;
+
+  // first, see if there's a % in the last directory compontent
+  // if so, that's a user-specific directory, and we're willing to
+  // create it. Otherwise, nothing we can do.
+
+  for (cp = template; *cp; cp++) {
+    if (*cp == '/') {
+      nexttolastslash = lastslash;
+      lastslash = cp;
+    }
+  }
+  // is there a % between next to last and last?
+  if (lastslash && nexttolastslash) {
+    cp = strchr(nexttolastslash, '%');
+    if (cp < lastslash)
+      ok = 1;
+  }
+  
+  // if not, nothing to do
+  if (!ok)
+    return;
+
+  // there is. need to check the directory
+  
+  // get directory, by cutting off at least /
+  cp = strrchr(filename, '/');
+  *cp = '\0';
+  if (mkdir(filename, 0700)) {
+    // nothing to do
+    *cp = '/';
+    return;
+  }
+  // created it, set owner
+  chown(filename, pwd->pw_uid, pwd->pw_gid);
+  *cp = '/';
+
+}
+
 char *
 build_cache_name(char *arg, uid_t uid, const char *username)
 {
@@ -447,6 +495,12 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 	tempname = tempname + 5;
 	finalname = finalname + 5;
       }
+
+      // make dir if necessary
+      // no error if it fails, as we have no way to return
+      // a message. following code will eventually catch it
+      assure_dir(credcopy, finalname, pwd);
+
       ret = krb5_cc_resolve(context, tempcred, &cachecopy);
       if (ret) goto err;
       ret = krb5_cc_initialize(context, cachecopy, userprinc);
@@ -457,6 +511,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       cachecopy = NULL;
       krb5_cc_close(context, firstcache);
       firstcache = NULL;
+      chown(tempname, pwd->pw_uid, pwd->pw_gid);
       rename(tempname, finalname);
     } else {
       // not in temp. have to put copy in final location

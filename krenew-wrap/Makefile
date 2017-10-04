@@ -4,6 +4,12 @@ all: krenew-wrap.c
 install: all
 	cp krenew-wrap.so /usr/libexec/
 	cp ssh /usr/local/bin
+	chmod +x /usr/local/bin/ssh
 
+installu14: all
+	mkdir -p /usr/libexec
+	cp krenew-wrap.so /usr/libexec/
+	cp ssh /usr/local/bin
+	chmod +x /usr/local/bin/ssh
 
 

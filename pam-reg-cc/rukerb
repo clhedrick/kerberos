@@ -1,0 +1,12 @@
+Name: Rutgers kerberos PAM modules
+Default: yes
+Priority: 1
+
+Session-Type: Additional
+Session-Interactive-Only: no
+Session:
+	[default=1 success=ignore] pam_succeed_if.so service = cron
+	optional	pam_kgetcred.so 
+	optional	pam_reg_cc.so usecollection
+	optional	pam_kmkhomedir.so
+
