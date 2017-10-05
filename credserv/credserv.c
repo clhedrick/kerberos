@@ -102,6 +102,7 @@ usage(char *name)
             name);
 }
 
+int impersonate(krb5_context context, krb5_principal userprinc, char *realm, krb5_ccache ocache, char *ktname);
 
 static int
 net_read(int fd, char *buf, int len)
@@ -242,9 +243,9 @@ int isrecent(krb5_ticket *ticket) {
 
 /* the actual operations */
 
-char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data);
+char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data, krb5_data *realm_data);
 char *listcreds(krb5_context context, krb5_auth_context  auth_context, char * username, char *principal, char *myhostname, char *hostname, char *service,  krb5_data *data, char *cname);
-char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char * flags);
+char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char * flags, krb5_data *realm_data);
 char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket);
 
 /* 
@@ -697,11 +698,11 @@ main(int argc, char *argv[])
 
     // do the real operations
     if (op == 'G') 
-        errmsg = getcreds(context, auth_context, username, principal, myhostname, realhost, service, &data);
+        errmsg = getcreds(context, auth_context, username, principal, myhostname, realhost, service, &data, &realm_data);
     else if (op == 'L') 
         errmsg = listcreds(context, auth_context, username, principal, myhostname, realhost, service, &data, cname);
     else if (op == 'R') 
-        errmsg = registercreds(context, auth_context, username, principal, myhostname, hostname, realhost, service, &data, cname, ticket, flags);
+        errmsg = registercreds(context, auth_context, username, principal, myhostname, hostname, realhost, service, &data, cname, ticket, flags, &realm_data);
     else if (op == 'U') 
         errmsg = unregistercreds(context, auth_context, username, principal, myhostname, hostname, realhost, service, &data, cname, ticket);
 
@@ -774,7 +775,7 @@ main(int argc, char *argv[])
 
 // returns NULL if OK, else error message
 char *
-getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data) {
+getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data, krb5_data *realm_data) {
     krb5_error_code r;
     krb5_ccache ccache;
     krb5_principal serverp = 0;
@@ -800,6 +801,7 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     int needunlink = 0;
     char *prefix;
     int preflen = strlen(principal) + 1;
+    char *impersonate_kt = NULL;
 
     asprintf(&prefix, "%s=", principal);
 
@@ -812,12 +814,10 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         return GENERIC_ERR;
     }
 
-    // get the keytab registered for this user and host
-    // anonymous is special -- always allowed
+    // see if there is a relevant rule
     if (strcmp(username, "anonymous.user") == 0) {
         snprintf(repbuf, sizeof(repbuf)-1, "/etc/krb5.anonymous.keytab");
-    }
-    else {
+    } else {
         // we'll give out any credentials authorized for this user and host.
         // remember it's only the host that is asserting that this is the user,
         // but that's the best we can do.  
@@ -888,82 +888,9 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         if (!found)
             return NOKEYTAB_ERR;            
 
-        // Found 
+    } // end code for non-anonymous. now all users
 
-        // we've got a rule that matches. Now need keytab in order to
-        // generate the credentials
-
-        // make sure we got one from ldap. if there's a rule there should
-        // be a key table, so this is unusual
-        if (keytab == NULL || keytab[0] == NULL) {
-            mylog(LOG_ERR, "no keytab attribute in ldap for %s", username);
-            return GENERIC_ERR;
-        }
-
-        found = 0;
-
-        for (i = 0; keytab[i] != NULL; i++) {
-            char *thistext;
-            thistext = keytab[i]->bv_val;
-            if (strncmp(thistext, prefix, preflen) == 0) {
-                found = 1;
-                break;
-            }
-        }
-
-        if (!found) {
-            mylog(LOG_ERR, "missing key table for %s %s", principal, username);
-            return GENERIC_ERR;
-        }
-
-        // found keytab for this principal
-        // i is the right index
-       // + preflen to skip principal= and get to the actual keytable
-        keydata = malloc(keytab[i]->bv_len);
-        keysize = keytab[i]->bv_len;
-        if (base64decode (keytab[0]->bv_val + preflen, strlen(keytab[0]->bv_val + preflen), keydata, &keysize)) {
-            mylog(LOG_ERR, "base64 decode failed");
-            return GENERIC_ERR;
-        }
-
-        // keytab is now in keydata
-        // write it into a file, since kerberos expects keytabs to be in files
-
-        snprintf(repbuf, sizeof(repbuf)-1, "/tmp/credserv.keytab.%lu", (unsigned long) getpid());
-
-        ofile = fopen(repbuf, "w");
-        if (!ofile) {
-            mylog(LOG_ERR, "fopen failed: %s", repbuf);
-            return GENERIC_ERR;
-        }
-
-        if (fwrite(keydata, keysize, 1, ofile) != 1) {
-            mylog(LOG_ERR, "keytab write failed");
-            return GENERIC_ERR;
-        }
-
-        fclose(ofile);
-        needunlink = 1;  // this is temp file
-
-    }
-
-    // keytab, either the anonymous one or the user's is now in a file 
-    // file name in repbuf
-
-    // request is authorized
-    // now have filename of keytab in repbuf
-
-    if (stat(repbuf, &statbuf) != 0) {
-        // don't log an error. This is normal if user is confused.
-        return NOKEYTAB_ERR;
-    }
-
-    if ((r = krb5_kt_resolve(context, repbuf, &userkeytab))) {
-        // file is there but we can't read it as a keytab. Something odd
-        mylog(LOG_ERR, "unable to get keytab for user %s %s", username, error_message(r));
-        goto cleanup;
-    }
-
+    // need user princ for both types of auth
     // if principal has @ in it, separate principal and realm, else default realm
     sp = strchr(principal, '@');
     if (sp) {
@@ -971,59 +898,146 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         realm = sp+1;
     } else
         realm = default_realm;
-
+    
     if ((r = krb5_build_principal(context, &userprinc, strlen(realm), realm, principal, NULL))) {
         mylog(LOG_ERR, "unable to make principal from %s %s", principal, error_message(r));
         goto cleanup;
     }
 
-    // now we have a principal in userprinc
-    // we also have a keytab to use to generate credentials
-
-    // create options structure for new credentials
-    if ((r = krb5_get_init_creds_opt_alloc(context, &options))) {
-        mylog(LOG_ERR, "unable to allocate options %s", error_message(r));
-        goto cleanup;
-    }
-
-    // these credentials should use our IP address. The address will be adjusted when forwarding
-
-    if ((r =krb5_os_localaddr(context, &addresses))) {
-        mylog(LOG_ERR, "unable to get our addresses %s", error_message(r));
-        goto cleanup;
-    }
-
-    krb5_get_init_creds_opt_set_address_list(options, addresses);
-
-    // finally, get the credentials from the keytab that was registered
-    if ((r = krb5_get_init_creds_keytab(context, &usercreds, userprinc, userkeytab, 0,  NULL, options))) {
-        mylog(LOG_ERR, "unable to make credentials for user from keytab %s %s %s", username, repbuf, error_message(r));
-        goto cleanup;
-    }
-
+    // also for both types we need a destination for the credentials
     // put it in a temporary cache, since we're just going to forward it
     if ((r = krb5_cc_new_unique(context, "MEMORY", "/tmp/jjjjj", &ccache))) {
         mylog(LOG_ERR, "unable to make credentials file for user %s %s", username, error_message(r));
         goto cleanup;
     }
 
-    if ((r = krb5_cc_initialize(context, ccache, userprinc))) {
-        mylog(LOG_ERR, "unable to initialize credentials file for user %s %s", username, error_message(r));
-        goto cleanup;
-    }
+    // we've got a rule that matches. Now it depends upon whether we're using impersonation
+    // or the keytab.
 
-    if ((r = krb5_cc_store_cred(context, ccache, &usercreds))) {
-        mylog(LOG_ERR, "unable to store user credentials in cache for user %s %s", username, error_message(r));
-        goto cleanup;
+    krb5_appdefault_string(context, "credserv", realm_data, "impersonate", "", &impersonate_kt);
+    if (strcmp(username, "anonymous.user") != 0 &&
+        impersonate_kt && strlen(impersonate_kt) > 0) {
+        // error message done in function
+        if (impersonate(context, userprinc, realm, ccache, impersonate_kt) != 0)
+            goto cleanup;
+    } else {
+        int found = 0;
+
+        // will use key table. For anonymous users it's fixed. Otherwise need to get it from ldap
+        if (strcmp(username, "anonymous.user") != 0) {
+            // make sure we got one from ldap. if there's a rule there should
+            // be a key table, so this is unusual
+            if (keytab == NULL || keytab[0] == NULL) {
+                mylog(LOG_ERR, "no keytab attribute in ldap for %s", username);
+                return GENERIC_ERR;
+            }
+
+            for (i = 0; keytab[i] != NULL; i++) {
+                char *thistext;
+                thistext = keytab[i]->bv_val;
+                if (strncmp(thistext, prefix, preflen) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found) {
+                mylog(LOG_ERR, "missing key table for %s %s", principal, username);
+                return GENERIC_ERR;
+            }
+
+            // found keytab for this principal
+            // i is the right index
+            // + preflen to skip principal= and get to the actual keytable
+            keydata = malloc(keytab[i]->bv_len);
+            keysize = keytab[i]->bv_len;
+            if (base64decode (keytab[0]->bv_val + preflen, strlen(keytab[0]->bv_val + preflen), keydata, &keysize)) {
+                mylog(LOG_ERR, "base64 decode failed");
+                return GENERIC_ERR;
+            }
+
+            // keytab is now in keydata
+            // write it into a file, since kerberos expects keytabs to be in files
+
+            snprintf(repbuf, sizeof(repbuf)-1, "/tmp/credserv.keytab.%lu", (unsigned long) getpid());
+
+            ofile = fopen(repbuf, "w");
+            if (!ofile) {
+                mylog(LOG_ERR, "fopen failed: %s", repbuf);
+                return GENERIC_ERR;
+            }
+            
+            if (fwrite(keydata, keysize, 1, ofile) != 1) {
+                mylog(LOG_ERR, "keytab write failed");
+                return GENERIC_ERR;
+            }
+            
+            fclose(ofile);
+            needunlink = 1;  // this is temp file
+
+        }
+
+        // keytab, either the anonymous one or the user's is now in a file 
+        // file name in repbuf
+        
+        // request is authorized
+        // now have filename of keytab in repbuf
+
+        if (stat(repbuf, &statbuf) != 0) {
+            // don't log an error. This is normal if user is confused.
+            return NOKEYTAB_ERR;
+        }
+        
+        if ((r = krb5_kt_resolve(context, repbuf, &userkeytab))) {
+            // file is there but we can't read it as a keytab. Something odd
+            mylog(LOG_ERR, "unable to get keytab for user %s %s", username, error_message(r));
+            goto cleanup;
+        }
+        
+
+        // now we have a principal in userprinc
+        // we also have a keytab to use to generate credentials
+        
+        // create options structure for new credentials
+        if ((r = krb5_get_init_creds_opt_alloc(context, &options))) {
+            mylog(LOG_ERR, "unable to allocate options %s", error_message(r));
+            goto cleanup;
+        }
+        
+        // these credentials should use our IP address. The address will be adjusted when forwarding
+        
+        if ((r =krb5_os_localaddr(context, &addresses))) {
+            mylog(LOG_ERR, "unable to get our addresses %s", error_message(r));
+            goto cleanup;
+        }
+
+        krb5_get_init_creds_opt_set_address_list(options, addresses);
+        
+        // finally, get the credentials from the keytab that was registered
+        if ((r = krb5_get_init_creds_keytab(context, &usercreds, userprinc, userkeytab, 0,  NULL, options))) {
+            mylog(LOG_ERR, "unable to make credentials for user from keytab %s %s %s", username, repbuf, error_message(r));
+            goto cleanup;
+        }
+        
+        if ((r = krb5_cc_initialize(context, ccache, userprinc))) {
+            mylog(LOG_ERR, "unable to initialize credentials file for user %s %s", username, error_message(r));
+            goto cleanup;
+        }
+
+        if ((r = krb5_cc_store_cred(context, ccache, &usercreds))) {
+            mylog(LOG_ERR, "unable to store user credentials in cache for user %s %s", username, error_message(r));
+            goto cleanup;
+        }
+
     }
 
     if ((r = krb5_sname_to_principal(context, myhostname, NULL,
-				     KRB5_NT_SRV_HST, &serverp))) {
-      mylog(LOG_ERR, "could not make server principal %s",error_message(r));
-      goto cleanup;
+                                     KRB5_NT_SRV_HST, &serverp))) {
+        mylog(LOG_ERR, "could not make server principal %s",error_message(r));
+        goto cleanup;
     }
-
-    // for the forward, we need the local IP addresses in auth_content.
+        
+        // for the forward, we need the local IP addresses in auth_content.
     /* fd is always 0 because the real one gets put onto 0 by dup2 */
     if ((r = krb5_auth_con_genaddrs(context, auth_context, 0,
 			    KRB5_AUTH_CONTEXT_GENERATE_LOCAL_FULL_ADDR))) {
@@ -1240,7 +1254,7 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
 // cname is the principal that they are authenticated as.
 
 char *
-registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char *flags) {
+registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char *flags, krb5_data *realm_data) {
 
     char *default_realm = NULL;
     int r;
@@ -1257,6 +1271,10 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     char *dn;
     int i;
     LDAP *ld;
+    char *impersonate_kt = NULL;
+    int ktok = 1;
+
+    krb5_appdefault_string(context, "credserv", realm_data, "impersonate", "", &impersonate_kt);
 
     if ((r = krb5_get_default_realm(context, &default_realm))) {
         mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
@@ -1400,51 +1418,63 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
 
     if (WEXITSTATUS(status)) {
         mylog(LOG_ERR, "kadmin ktadd failed for %u %s", WEXITSTATUS(status), principal);
-        return "unable to create key table -- kadmin failed";
+        ktok = 0;
+        // ok if we're impersonating
+        if (impersonate_kt == NULL || strlen(impersonate_kt) == 0) {
+            return "unable to create key table -- kadmin failed";
+        }
     }
 
-    // keytab is now in a file, name in princname
-    // read it in and put it into ldap
+    if (ktok) {
+        // keytab is now in a file, name in princname
+        // read it in and put it into ldap
 
-    // read it
-    keytabf = fopen(princname, "r");
-    if (!keytabf) {
-        mylog(LOG_ERR, "unable to create key table for %s", principal);
-        return "unable to create key table";
+        // read it
+        keytabf = fopen(princname, "r");
+        if (!keytabf) {
+            ktok = 0;
+            // no key table. ok if impersonating
+            if (impersonate_kt == NULL || strlen(impersonate_kt) == 0) {
+                mylog(LOG_ERR, "unable to create key table for %s", principal);
+                return "unable to create key table";
+            }
+        }
     }
-    fseek(keytabf, 0, SEEK_END);
-    fsize = ftell(keytabf);
-    fseek(keytabf, 0, SEEK_SET);  //same as rewind(f);
-
-    keydata = malloc(fsize + 1);
-    fread(keydata, fsize, 1, keytabf);
-    fclose(keytabf);
-    unlink(princname);
+    if (ktok) {
+        fseek(keytabf, 0, SEEK_END);
+        fsize = ftell(keytabf);
+        fseek(keytabf, 0, SEEK_SET);  //same as rewind(f);
+        
+        keydata = malloc(fsize + 1);
+        fread(keydata, fsize, 1, keytabf);
+        fclose(keytabf);
+        unlink(princname);
     
-    // keytab is now in keydata.
-    // base64 encode into the newkeytab berval
+        // keytab is now in keydata.
+        // base64 encode into the newkeytab berval
 
-    // set bv_val to principal=keytab
-    newkeytab.bv_val = malloc(strlen(principal) + 3*fsize + 2);
-    strcpy(newkeytab.bv_val, principal);
-    strcat(newkeytab.bv_val, "=");
-    if (base64encode(keydata, fsize, newkeytab.bv_val + strlen(newkeytab.bv_val), 3*fsize+1)) {
-        mylog(LOG_ERR, "base64 encode failed");
-        return "base64 encode failed";
-    }
-    newkeytab.bv_len = strlen(newkeytab.bv_val);
+        // set bv_val to principal=keytab
+        newkeytab.bv_val = malloc(strlen(principal) + 3*fsize + 2);
+        strcpy(newkeytab.bv_val, principal);
+        strcat(newkeytab.bv_val, "=");
+        if (base64encode(keydata, fsize, newkeytab.bv_val + strlen(newkeytab.bv_val), 3*fsize+1)) {
+            mylog(LOG_ERR, "base64 encode failed");
+            return "base64 encode failed";
+        }
+        newkeytab.bv_len = strlen(newkeytab.bv_val);
 
-    // have the keytab in newkeytab. write it into ldap
+        // have the keytab in newkeytab. write it into ldap
 
-    r = replaceKeytab(ld, dn, keytab, &newkeytab);
-    if (r != 0) {
-        mylog(LOG_ERR, "unable to replace keytab in ldap");
-        return "unable to replace keytab in ldap";
+        r = replaceKeytab(ld, dn, keytab, &newkeytab);
+        if (r != 0) {
+            mylog(LOG_ERR, "unable to replace keytab in ldap");
+            return "unable to replace keytab in ldap";
+        }
     }
 
     // yeah! it worked
 
-    mylog(LOG_INFO, "registered %s:%s:%s for user %s", hostname, principal, flags, username);
+    mylog(LOG_INFO, "registered %s:%s:%s for user %s kt %d", hostname, principal, flags, username, ktok);
 
     outdata->data = "ok\n";
     outdata->length = 3;

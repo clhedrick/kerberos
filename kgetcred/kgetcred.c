@@ -210,7 +210,7 @@ int main(int argc, char *argv[])
     krb5_data recv_data;
     krb5_data cksum_data;
     krb5_error_code retval, retval2;
-    //krb5_ccache ccdef;
+    krb5_ccache ccdef = NULL;
     krb5_ccache ccache = NULL;
     krb5_principal client = NULL, server = NULL, defcache_princ = NULL;
     krb5_error *err_ret = NULL;
@@ -533,6 +533,9 @@ int main(int argc, char *argv[])
         krb5_get_init_creds_opt_set_renew_life(opts, 0);
         krb5_get_init_creds_opt_set_forwardable(opts, 0);
         krb5_get_init_creds_opt_set_proxiable(opts, 0);
+
+        if (krb5_cc_default(context, &ccdef) == 0)
+            krb5_get_init_creds_opt_set_fast_ccache(context, opts, ccdef);
 
         if ((retval = krb5_get_init_creds_password(context, &usercreds, client, NULL, krb5_prompter_posix, NULL,
                                                    0, NULL, opts))) {
@@ -1036,6 +1039,8 @@ int main(int argc, char *argv[])
         krb5_get_init_creds_opt_free(context,opts);
     if (ccache)
         krb5_cc_close(context,ccache);
+    if (ccdef)
+        krb5_cc_close(context,ccdef);
     if (havecreds)
         krb5_free_cred_contents(context, &hostcreds);
     if (hostkeytab)
