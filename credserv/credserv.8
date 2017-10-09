@@ -126,6 +126,13 @@ and I'm not convinced I'm competent to do that design.
 7. Add attributes csRutgersEduCredservRule and csRutgersEduCredservRule. See below.
 .br
 8. add permissions for credserv/HOST to read and write the new attributes. This is best done in the IPA web GUI, under IPA server, Role Based Access Control. You'll need to add a permission that can read and write csRutgersEduCredservRule and csRutgersEduCredservRule, a privilege with that permission, a role with that privilege, and then add the service principal credserv/HOST to the role.
+.br
+9. If you want to support one-time passwords, use kadmin or kadmin.local to generate a keytable for
+krbtgt/REALM@REALM. In krb5.conf, in the section for credserv, add impersonate=FILE pointing to that
+file. This is a fairly dangerous option, for two reasons: (1) you MUST use the -norandkey option when
+generating the key table. Otherwise kadmin will increment the version number of krbtgt. That will 
+likely break your whole system. (2) the file must be protected carefully. With it, a user can generate
+a TGT for anyone. I recommend running credserv on the KDC, since the KDC already has this data.
 .PP
 .SH "ADD ATTRIBUTES"
 .PP

@@ -57,8 +57,7 @@ The following functions work only if a user has privileges.
 .TP
 .B \-P
 use privileges. This will cause the operation not to prompt for a password, but will use existing credentials.
-The reason is the privileged users will probably have one-time passwords, and our code
-can't handle them. We trust that privileged users will destroy their credentials when no
+We trust that privileged users will destroy their credentials when no
 longer needed. Note that if a normal user does this, the operation will probably fail.
 .TP
 .B \-U user
@@ -81,6 +80,10 @@ Kgetcred needs the IP address of one or more servers running credserv. By defaul
 will use the same addresses as your Kerberos servers, looking them up in
 DNS based on SRV records. If this doesn't give the right result, you can
 specify the hostname of at least one server running credserv in  /etc/krb5.conf, e.g.
+.PP
+Kgetcred does not work for users with one-time passwords unless credserv is run
+with the impersonate option. Without impersonate, kgetcred keeps a copy of a key table
+for the user. Key tables can't be generated or used for users with one-time passwords.
 .PP
 .nf
 [appdefaults]
