@@ -138,12 +138,7 @@ public class GroupController {
 	int i;
 	String searchDn = userDn;
 
-	i = userDn.indexOf(config.accountbase);
-	// search will tack accountbase on the end, so we have to remove it and the comma before it
-	if (i > 0)
-	    searchDn = userDn.substring(0, i-1);
-
-	common.JndiAction action = new common.JndiAction(new String[]{"(objectclass=*)", searchDn, "gecos"});
+	common.JndiAction action = new common.JndiAction(new String[]{"(objectclass=*)", userDn, "gecos"});
 	// we're holding the context open, so use it
 	action.noclose = true;
 	action.ctx = ctx;
@@ -197,7 +192,7 @@ public class GroupController {
 	    List<String> messages = new ArrayList<String>();
 	    messages.add("Session has expired");
 	    model.addAttribute("messages", messages);
-	    return loginController.loginGet(request, response, model); 
+	    return loginController.loginGet("group", request, response, model); 
 	}
 
 	Config aconfig = new Config();
@@ -333,7 +328,7 @@ public class GroupController {
 	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
 	if (subject == null) {
 	    messages.add("Session has expired");
-	    return loginController.loginGet(request, response, model); 
+	    return loginController.loginGet("group", request, response, model); 
 	}
 
 	Subject.doAs(subject, action);
@@ -391,7 +386,7 @@ public class GroupController {
 		    } else if ((retval = assureUser(messages, request, filtername(a), oldislogin)) != null) {
 			// error message already in model
 			if (retval.equals("login"))
-			    return loginController.loginGet(request, response, model); 
+			    return loginController.loginGet("group", request, response, model); 
 			else {
 			    messages.add("Unable to create user " + filtername(a) + ".");
 			    continue;
@@ -432,7 +427,7 @@ public class GroupController {
 		    } else if ((retval = assureUser(messages, request, filtername(n), false)) != null) {
 			// error message already in model
 			if (retval.equals("login"))
-			    return loginController.loginGet(request, response, model); 
+			    return loginController.loginGet("group", request, response, model); 
 			else {
 			    messages.add("Unable to create user " + filtername(n) + " for owner.");
 			    continue;

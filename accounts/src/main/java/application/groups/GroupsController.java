@@ -92,7 +92,7 @@ public class GroupsController {
 	    List<String> messages = new ArrayList<String>();
 	    messages.add("Session has expired");
 	    model.addAttribute("messages", messages);
-	    return loginController.loginGet(request, response, model); 
+	    return loginController.loginGet("group", request, response, model); 
 	}
 
 	// I use an API I wrote around Sun's API support.
@@ -107,12 +107,20 @@ public class GroupsController {
 
 	Subject.doAs(subject, action);
 
+	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
+	if (action.val.size() == 0 && !(privs.contains("addgroup"))) {
+	    List<String> messages = new ArrayList<String>();
+	    messages.add("There are no groups you can manage");
+	    model.addAttribute("messages", messages);
+	}
+
 	// look at the results of the LDAP query
 	ArrayList<HashMap<String, ArrayList<String>>> groups = action.val;
 	Collections.sort(groups, (g1, g2) -> g1.get("cn").get(0).compareTo(g2.get("cn").get(0)));
 
 	// set up model for JSTL to output
 	model.addAttribute("groups", groups);
+	model.addAttribute("canaddgroup", (privs.contains("addgroup")));
 
         return "groups/showgroups";
     }
@@ -133,6 +141,15 @@ public class GroupsController {
 	logger = LogManager.getLogger();
 
 	Config conf = Config.getConfig();
+
+	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
+	// user has asked to add group but doesn't have permission
+	// actually, the ACIs should prohibit this anyway
+	if (name != null && !"".equals(name) && !(privs.contains("addgroup"))) {
+	    messages.add("You don't have permission to add groups");
+	    model.addAttribute("messages", messages);
+	    return groupsGet(request, response, model);
+	}
 
 	String oname = name;
 	name = filtername(name);

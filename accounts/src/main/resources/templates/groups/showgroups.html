@@ -82,6 +82,8 @@ $(document).ready(function(){
 </div>
 </div>
 
+<div th:if="${canaddgroup}">
+
 <h2 style="margin-top:2em"> Add Group </h2>
 
 <div class="inset" style="margin-top:1em">
@@ -103,7 +105,7 @@ $(document).ready(function(){
 </div>
 </div>
 <input type="submit" id="submit" value="Add Group"/>
-
+</div>
 </div>
 </form>
 </div>
