@@ -111,6 +111,36 @@ systems generally have substantial local file systems which you can use for this
 <li> Ask us for a second user ID that won't use two-factor authentication.
 </ul>
 
+<h2> Using Kerberos at Home </h2>
+
+<p> Currently we don't allow connections to the Kerberos system from
+outside computer science. However you can still use it at home through
+a proxy at services.cs.rutgers.edu.
+
+<p> To use a proxy, on your home machine the realms section of /etc/krb5.conf
+should look like this:
+<pre>
+[realms]
+  CS.RUTGERS.EDU = {
+    kdc = https://services.cs.rutgers.edu/KdcProxy
+    kpasswd_server = https://services.cs.rutgers.edu/KdcProxy
+    pkinit_anchors = FILE:/etc/ipa/ca.crt
+    http_anchors = FILE:/etc/ipa/ca.crt
+  }
+</pre>
+/etc/ipa/ca.crt should be copied from any of the ilab systems. The
+file can be located anywhere, as long as you adjust the name appropriately
+in the configuration. Note that with the proxy, noaddresses must be true
+in the libdefaults section. (Or the noaddresses specification can be
+omitted, since true is the default.)
+<p> The proxy doesn't appear to work on the MacOs implementation of
+Kerberos. Neither does two-factor authentication. We suggest installing 
+the kerberos5 package from Macports.
+<p> This proxy server should be compatible with the
+MS-KKDCP KDC Proxy used by Microsoft. However we haven't tried it.
+If you want to use Kerberos on Windows at home I recommend installing
+MIT Kerberos for Windows.
+
 <h2> Ssh </h2>
 
 <p> Ssh has a problem resulting from how the Kerberos libraries work. Ssh forwards

@@ -10,4 +10,5 @@ int replaceKeytab(LDAP *ld, char *dn, struct berval **keytab, struct berval *new
 int deleteKeytab(LDAP *ld, char *dn, struct berval **keytab, char *principal);
 int base64encode(const void* data_buf, size_t dataLength, char* result, size_t resultSize);
 int base64decode (char *in, size_t inLen, unsigned char *out, size_t *outLen);
+int isPrived(krb5_context context, LDAP *ld, char* realm, char *userprinc, char *admingroup);
 

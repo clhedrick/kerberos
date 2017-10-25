@@ -180,38 +180,6 @@ void catch_alarm (int sig)
     exit(1);
 }
 
-int isprived(char *principal);
-
-// if user is in group defined in admingroup
-int isprived(char *principal) {
-    char *cp;
-    struct group *g;
-    int i;
-
-    if (!admingroup)
-        return 0;
-
-    // need a username, not a principal. stop at @
-    cp = strchr(principal, '@');
-    if (!cp)
-        return 0;
-
-    // get group
-    g = getgrnam(admingroup);
-    if (!g)
-        return 0;
-
-    *cp = '\0';  // stop at @; need to restore @ afterwards
-    for (i = 0; g->gr_mem[i]; i++) {
-        if (strcmp(principal, g->gr_mem[i]) == 0) {
-            *cp = '@';            
-            return 1;
-        }
-    }
-    *cp = '@';            
-    return 0;
-}
-
 // we want to make sure that the user got fresh credentials,
 // so root can't use something lying around. 30 sec allows
 // for some clock skew and processing time. Shorter might be
@@ -1097,7 +1065,7 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
     struct berval **keytab;
     char *dn;
     int i;
-    LDAP *ld;
+    LDAP *ld = NULL;
 
     if ((r = krb5_get_default_realm(context, &default_realm))) {
         mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
@@ -1110,21 +1078,26 @@ listcreds(krb5_context context, krb5_auth_context auth_context, char *username, 
     // Otherwise, user can see only its own data.
 
     snprintf(princbuf, sizeof(princbuf)-1, "%s@%s", username, default_realm);
-    if (isprived(clientp)) {
-        ;  // allow anything
-    } else if (strcmp("root", username) == 0) {
+    if (strcmp("root", username) == 0) {
         // Root is generally not a valid credential
         return "Currently we don't support this function for root";
-    } else if (strcmp(princbuf, clientp) != 0) {
-        // non-root, user they're requested info on must agree with authenticated principal
-        mylog(LOG_ERR, "user %s asked to list user %s", username, clientp);
-        return GENERIC_ERR;
-    } else {
+    } else if (strcmp(princbuf, clientp) == 0) {
         // authenticated as normal user, show then all hosts
         hostname = NULL;
+    } else {
+        ld = krb_ldap_open(context, service, myhostname, default_realm);
+        if (ld && isPrived(context, ld, default_realm, clientp, admingroup))
+            hostname = NULL;
+        else {
+            // non-root, user they're requested info on must agree with authenticated principal
+            mylog(LOG_ERR, "user %s asked to list user %s", username, clientp);
+            return GENERIC_ERR;
+        }
     }
 
-    ld = krb_ldap_open(context, service, myhostname, default_realm);
+        
+    if (!ld)
+        ld = krb_ldap_open(context, service, myhostname, default_realm);
 
     if (!ld) {
         mylog(LOG_ERR, "ldap open failed");
@@ -1270,7 +1243,7 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     char *keydata;
     char *dn;
     int i;
-    LDAP *ld;
+    LDAP *ld = NULL;
     char *impersonate_kt = NULL;
     int ktok = 1;
 
@@ -1294,26 +1267,31 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
     // is that one, but I can check that it was obtained within the last 30 sec.
 
     snprintf(princname, sizeof(princname)-1, "%s@%s", username, default_realm);
-    if (isprived(clientp)) {
-        ;  // allow anything
-    } else if (strcmp("root", username) == 0) {
+    if (strcmp("root", username) == 0) {
         // root generally isn't a valid principal
         return "Currently we don't support this function for root";
-    } else if (strcmp(princname, clientp) != 0 || strcmp(princname, principal) != 0) {
-        // non-root, user must agree with authenticated principal
-        mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
-        return GENERIC_ERR;
-    } else if (!isrecent(ticket)) {
-        mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
-        return "Your credentials are too old. Is your computer not synchronized?";
-    } else {
+    } else if (strcmp(princname, clientp) == 0 && strcmp(princname, principal) == 0) {
         // normal user can't set flags
         flags = "";
         // and they get data from the real host only
         hostname = realhost;
+        if (!isrecent(ticket)) {
+            mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
+            return "Your credentials are too old. Is your computer not synchronized?";
+        }
+    } else {
+        ld = krb_ldap_open(context, service, myhostname, default_realm);
+        if (ld && isPrived(context, ld, default_realm, clientp, admingroup))
+            ;
+        else {
+            // non-root, user they're requested info on must agree with authenticated principal
+            mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
+            return GENERIC_ERR;
+        }
     }
 
-    ld = krb_ldap_open(context, service, myhostname, default_realm);
+    if (!ld)
+        ld = krb_ldap_open(context, service, myhostname, default_realm);
 
     if (!ld) {
         mylog(LOG_ERR, "ldap open failed");
@@ -1497,7 +1475,7 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
     struct berval **keytab;
     char *dn;
     int i;
-    LDAP *ld;
+    LDAP *ld = NULL;
 
     if ((r = krb5_get_default_realm(context, &default_realm))) {
         mylog(LOG_ERR, "unable to get default realm %s", error_message(r));
@@ -1507,25 +1485,28 @@ unregistercreds(krb5_context context, krb5_auth_context auth_context, char *user
     // see register for a discussion of authorization
 
     snprintf(buffer, sizeof(buffer)-1, "%s@%s", username, default_realm);
-    if (isprived(clientp)) {
-        ;  // allow anything for admin user
-    } else if (strcmp("root", username) == 0) {
+    if (strcmp("root", username) == 0) {
         // root generally isn't a valid principal
         return "Currently we don't support this function for root";
-    } else if (strcmp(buffer, clientp) != 0 || strcmp(buffer, principal) != 0) {
-        // non-root, user must agree with authenticated principal
-        mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
-        return GENERIC_ERR;
-    } else if (!isrecent(ticket)) {
-        mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
-        return "Your credentials are too old. Is your computer not synchronized?";
-        // everything matches
-    } else {
-        // normal user can only unregister on host they're coming from
+    } else if (strcmp(buffer, clientp) == 0 && strcmp(buffer, principal) == 0) {
         hostname = realhost;
+        if (!isrecent(ticket)) {
+            mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
+            return "Your credentials are too old. Is your computer not synchronized?";
+        }
+    } else {
+        ld = krb_ldap_open(context, service, myhostname, default_realm);
+        if (ld && isPrived(context, ld, default_realm, clientp, admingroup))
+            ;
+        else {
+            // non-root, user they're requested info on must agree with authenticated principal
+            mylog(LOG_ERR, "user %s asked to register user %s principal %s host %s", clientp, username, principal, hostname);
+            return GENERIC_ERR;
+        }
     }
 
-    ld = krb_ldap_open(context, service, myhostname, default_realm);
+    if (!ld)
+        ld = krb_ldap_open(context, service, myhostname, default_realm);
 
     if (!ld) {
         mylog(LOG_ERR, "ldap open failed");
