@@ -278,7 +278,7 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
 
 // read rules and keytab from ldap
 
-int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct berval ***rules, struct berval***keytab, char **dn) {
+int getLdapData(krb5_context context, LDAP *ld, char* realm, char *user, struct berval ***rules, struct berval***keytab, char **dn) {
     char* filter;
     LDAPMessage* msg;
     BerElement* ber;
@@ -324,6 +324,73 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm,  char *user, struct
     ldap_msgfree(msg);
 
     return 0;
+
+}
+
+int isPrived(krb5_context context, LDAP *ld, char* realm, char *userprinc, char *admingroup) {
+    char* filter;
+    LDAPMessage* msg;
+    BerElement* ber;
+    LDAPMessage *entry;
+    char* attr;
+    char *base;
+    krb5_data realm_data;
+    struct berval **members;
+    int prived = 0;
+    char *cp;
+
+    realm_data.data = realm;
+    realm_data.length = strlen(realm);
+
+    krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
+
+    cp = strchr(userprinc, '@');
+    if (cp) {
+        *cp = '\0';
+        asprintf(&filter, "(uid=%s)", userprinc);
+        *cp = '@';
+    } else
+        asprintf(&filter, "(uid=%s)", userprinc);
+
+
+    if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
+        mylog(LOG_ERR, "ldap_search_s failed");
+        free(filter);
+        return 0;
+    }
+    free(filter);
+
+    entry = ldap_first_entry(ld, msg);
+    if (entry == NULL) {
+        mylog(LOG_ERR, "no ldap entry for %s", userprinc);
+        return 0;
+    }
+
+    for (attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
+        if (strcmp(attr, "memberOf") == 0) {
+            int i;
+            members = ldap_get_values_len(ld, entry, attr);
+            for (i = 0; members[i]; i++) {
+                char *member = members[i]->bv_val;
+                char *sp = strchr(member, ',');
+                unsigned int complen = strlen(member) - 3;
+                // number of chars after cn= before ,
+                if (sp)
+                    complen = sp - member - 3;
+                if (strncmp(member, "cn=", 3) == 0 &&
+                    strlen(admingroup) == complen &&
+                    strncmp(member+3, admingroup, complen) == 0) {
+                    prived = 1;
+                }
+            }                
+        }
+        ldap_memfree(attr);
+    }
+    if (ber)
+        ber_free(ber, 0);
+    ldap_msgfree(msg);
+
+    return prived;
 
 }
 
@@ -523,8 +590,6 @@ int main(int argc, char *argv[]) {
     unsetenv("KRB5CCNAME");
 
     ld = krb_ldap_open(context, gservice, ghostname, grealm);
-
-    printf("env %s\n", getenv("KRB5CCNAME"));
 
 #ifdef undef    
     if (getLdapData(context, ld, grealm, targetuser, &rules, &keytab, &dn) == 0) {
