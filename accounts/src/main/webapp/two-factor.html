@@ -105,34 +105,8 @@ remove one.)
 
 <h2> Possible problems </h2>
 
-<p> Two-factor authentication is inconsistent with Kerberos key tables and with
-cron jobs. By definition, two-factor authentication requires you to use a
-second factor to authenticate. There's no way cron can get the second factor.
-The same problem exists if you want to be able to start daemons with your
-userid automatically when the system restarts.
+<p> Two-factor authentication is inconsistent with Kerberos key tables. 
+Cron support via kgetcred now works. Generally anyplace you could use a key table
+you should be able to use kgetcred instead.
 
-<p> We have several solutions for people who use two-factor authentication
-and also need to use cron:
 
-<ul>
-<li> Use <a href="https://www.cs.rutgers.edu/~makmur/howto/googleauthenticator/index.html">Google authenticator</a>.
-While Google authenticator uses the same technology as the two-factor code in Kerberos, it's
-checked a different way. Login checks Google authenticator but cron does not.
-It's not quite as secure, because if someone is able to become root, and knows your
-password, they can access your files without the second factor. However for many users it 
-may be good enough. It works with cron jobs, though you'll still
-need to use "kgetcred -r" to register any system where you run
-cron jobs.
-<li> Use a second user id. E.g. user smith might have a second userid, smith-cron
-for cron jobs. That id wouldn't use two-factor authentication. Because it's
-a separate user, it wouldn't have any special access to smith's files, and
-thus compromises of smith-cron would have no effect on smith's files. If
-there are specific files that need to be shared, that can done easily
-with group access. To request a second userid, please send email
-to help@cs.rutgers.edu. (Alternatively, you could use two-factor
-authentication for the second userid and not your primary userid.)
-<li> Store all files needed by the cron job on local file systems.
-For many systems that's /freespace. Note however that freespace is
-not backed up, and is likely to get wiped between semesters. For that
-reason we recommend keeping a copy of the files in your home directory.
-</ul>
