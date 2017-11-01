@@ -36,6 +36,7 @@ to help@cs.rutgers.edu.
 <form th:action="@{/groups/login}" method="post">
 <label>Username: <input type="text" name="user"/></label><br/>
 <label>Password: <input type="password" name="pass"/></label>
+<input type="hidden" name="app" th:value="${app}"/>
 <p></p>
 <input type="submit" value="login"/>
 </form>

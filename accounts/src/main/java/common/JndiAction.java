@@ -57,6 +57,10 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 
 	    String filter = args[0];
 	    String base = args[1];
+	    Config config = Config.getConfig();
+
+	    if (base == null || "".equals(base))
+		base = config.accountbase;
 	    // rest are the attrs to return
 
 	    Hashtable<String,String> env = null;
@@ -66,7 +70,7 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		env = new Hashtable<String,String>(11);
 		
 		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
-		env.put(Context.PROVIDER_URL, Config.getConfig().kerbldapurl);
+		env.put(Context.PROVIDER_URL, config.kerbldapurl);
 		
 		env.put(Context.SECURITY_AUTHENTICATION, "GSSAPI");
 		env.put("com.sun.jndi.ldap.connect.pool", "true");
@@ -93,6 +97,12 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		    val.add(ans);
 
 		    SearchResult sr = (SearchResult)answer.next();
+
+		    // add pseudo-attribute dn
+		    ArrayList<String>dns = new ArrayList<String>();
+		    dns.add(sr.getNameInNamespace());
+		    ans.put("dn", dns);
+
 		    Attributes attributes = sr.getAttributes();
 		    NamingEnumeration attrEnum = attributes.getAll();
 		    while (attrEnum.hasMore()) {

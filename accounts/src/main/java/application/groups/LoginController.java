@@ -39,6 +39,8 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
 import com.sun.security.auth.callback.TextCallbackHandler;
 import javax.naming.*;
 import javax.naming.directory.*;
@@ -154,17 +156,24 @@ public class LoginController {
 
 
     @GetMapping("/groups/login")
-    public String loginGet(HttpServletRequest request, HttpServletResponse response, Model model) {
+    public String loginGet(@RequestParam(value="app", required=false) String app,
+			   HttpServletRequest request, HttpServletResponse response, Model model) {
+	model.addAttribute("app", (app == null) ? "" : app);
 	try {
-	    if (request.getSession().getAttribute("krb5subject") != null)
-		response.sendRedirect("showgroups");
+	    if (request.getSession().getAttribute("krb5subject") != null) {
+		if ("user".equals(model.asMap().get("app")))
+		    response.sendRedirect("../users/showuser");
+		else
+		    response.sendRedirect("showgroups");
+	    }
 	} catch (Exception e){
 	}
         return "groups/login";
     }
 
     @PostMapping("/groups/login")
-    public String loginSubmit(@RequestParam(value="user", required=false) String user,
+    public String loginSubmit(@RequestParam(value="app", required=false) String app,
+			      @RequestParam(value="user", required=false) String user,
 			      @RequestParam(value="pass", required=false) String pass,
 			      HttpServletRequest request, HttpServletResponse response,
 			      Model model) {
@@ -177,8 +186,7 @@ public class LoginController {
 	String password = filterpass(pass);
 
 	if (!username.equals(user)) {
-	    messages.add("Bad username or password");
-	    return loginGet(request, response, model);
+	    return loginGet(app, request, response, model);
 	}
 
 	// make credentials cache   
@@ -186,7 +194,7 @@ public class LoginController {
 	String cc = makeCC (username, password, messages);
 	if (cc == null) {
 	    // should have gotten error message already
-	    return loginGet(request, response, model);
+	    return loginGet(app, request, response, model);
 	}
 
 	// do the actuall login. Output is a Subject.
@@ -197,43 +205,46 @@ public class LoginController {
 	    lc.login();
 	} catch (LoginException le) {
 	    messages.add("Cannot create LoginContext. " + le.getMessage());
-	    return loginGet(request, response, model);
+	    return loginGet(app, request, response, model);
 	} catch (SecurityException se) {
 	    messages.add("Cannot create LoginContext. " + se.getMessage());
-	    return loginGet(request, response, model);
+	    return loginGet(app, request, response, model);
 	}
 
 	Subject subj = lc.getSubject();  
 	if (subj == null) {
 	    messages.add("Login failed");
-	    return loginGet(request, response, model);
+	    return loginGet(app, request, response, model);
 	}
 
-	// the following JndAction will verify that they're in the right group,
-
+	// check group privs
    
 	Config conf = Config.getConfig();
 	String filter = conf.groupmanagerfilter.replaceAll("%u", username);
 
-	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
+	// first, see if they are in group managers. They can create groups
 	common.JndiAction action = new common.JndiAction(new String[]{filter, "", "uid"});
 
 	Subject.doAs(subj, action);
 
-	// look at the result of the LDAP query. Query needs to find the user, which verifies that they're in the group
-	if (action.val.size() >= 1) {
-	    request.getSession().setAttribute("krb5subject", subj);
-	    request.getSession().setAttribute("krb5user", username);
-	    try {
+	Set<String>privs = new HashSet<String>();
+
+	if (action.val.size() >= 1)
+	    privs.add("addgroup");
+
+	// now set up session and go to application
+	request.getSession().setAttribute("privs", privs);
+	request.getSession().setAttribute("krb5subject", subj);
+	request.getSession().setAttribute("krb5user", username);
+	try {
+	    if ("user".equals(app)) {
+		response.sendRedirect("../users/showuser");
+	    } else
 		response.sendRedirect("showgroups");
-	    } catch (Exception e) {
-		messages.add("Unable to redirect to main application: " + e);
-		return loginGet(request, response, model);
-	    }
-	} else {
-	    messages.add("You're not authorized to manaage groups. If you should be, please send email to " + conf.helpmail + ".");
-	    return loginGet(request, response, model);
-	} 
+	} catch (Exception e) {
+	    messages.add("Unable to redirect to main application: " + e);
+	    return loginGet(app, request, response, model);
+	}
 
 	// shouldn't happen
         return "groups/login";

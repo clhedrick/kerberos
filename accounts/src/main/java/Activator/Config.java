@@ -60,6 +60,7 @@ public class Config {
     public String defaultmaildomain = null;
     public String kerberosdomain = null;
     public String accountbase = null;
+    public String base = null;
     public String kerbldapurl = null;
     public String groupmanagerfilter = null;
     public String groupsownedfilter = null;
@@ -172,6 +173,8 @@ public class Config {
 			kerberosdomain = atoms[1];
 		    if (atoms[0].equals("accountbase"))
 			accountbase = atoms[1];
+		    if (atoms[0].equals("base"))
+			base = atoms[1];
 		    if (atoms[0].equals("kerbldapurl"))
 			kerbldapurl = atoms[1];
 		    if (atoms[0].equals("groupmanagerfilter"))

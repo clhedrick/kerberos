@@ -204,15 +204,8 @@ public class User {
 	    return null;
 	}
 
-	int i = dn.indexOf("," + config.accountbase);
-
-	if (i < 0) {
-	    throw new java.lang.IllegalArgumentException("invalid dn " + dn);
-	}
-	String relDn = dn.substring(0, i);
-
 	// ldapsearch with the group dn as base and a test for whether it's login
-	JndiAction action = new JndiAction(new String[]{"(businessCategory=login)", relDn, "host", "cn"});
+	JndiAction action = new JndiAction(new String[]{"(businessCategory=login)", dn, "host", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    // normal group, return set of clusters it's valid for
