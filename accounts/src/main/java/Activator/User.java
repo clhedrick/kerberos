@@ -418,14 +418,15 @@ public class User {
 	}
 
 	if (mods.size() > 0) {
-	    logger.info("ipa user-mod " + username + mods);
 	    if (!test) {
 		mods.add(0, username);
 		mods.add(0, "user-mod");
 		mods.add(0, "/bin/ipa");
 		// continue even if this fails
+		logger.info(mods);
 		docommand.docommand (mods.toArray(new String[1]), env);;
-	    }
+	    } else
+		logger.info("ipa user-mod " + username + " " +  mods);
 	}
     }
 
