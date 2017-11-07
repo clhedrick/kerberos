@@ -401,27 +401,30 @@ public class User {
 	boolean needmod = false;
 	String first = lu.oneVal(universityData.get("givenname"),"-");
 	String ofirst = lu.oneVal(ourData.get("givenname"));
-	if (!first.equals(ofirst)) {
-	    needmod = true;
+	if (!first.equalsIgnoreCase(ofirst)) {
+	    mods.add("--first=" + first);
 	}
 
 	String last = lu.oneVal(universityData.get("sn"),"-");
 	String olast = lu.oneVal(ourData.get("sn"));
-	if (!last.equals(olast)) {
-	    needmod = true;
+	if (!last.equalsIgnoreCase(olast)) {
+	    mods.add("--last=" + last);
 	}
 
 	String cn = lu.oneVal(universityData.get("cn"),"-");
 	String ocn = lu.oneVal(ourData.get("gecos"));
 	if (!cn.equals(ocn)) {
-	    needmod = true;
+	    mods.add("--gecos=" + cn);
 	}
 
-	if (needmod) {
-	    logger.info("ipa user-mod " + username + " --first=" + first + " --last=" + last + " --gecos=" + cn);
+	if (mods.size() > 0) {
+	    logger.info("ipa user-mod " + username + mods);
 	    if (!test) {
+		mods.add(0, username);
+		mods.add(0, "user-mod");
+		mods.add(0, "/bin/ipa");
 		// continue even if this fails
-		docommand.docommand (new String[]{"/bin/ipa", "user-mod", username, "--first=" + first, "--last=" + last, "--gecos=" + cn}, env);
+		docommand.docommand (mods.toArray(new String[1]), env);;
 	    }
 	}
     }
@@ -898,14 +901,14 @@ public class User {
 					}
 				    }
 				} else {
-				    logger.info("User has been notified for " + cluster + " but it's not time to delete them");
+				    logger.info("User " + username + " has been notified for " + cluster + " but it's not time to delete them");
 				}
 			    } else {
 				// not to remove. if they were warned but are no longer to be removed,
 				// remove warning file. If they lose access again we need to go through
 				// the whole warning cycle. Without this they would be removed immediately.
 				if (warned) {
-				    logger.info("User has been previously notified for " + cluster + " but is now OK. Remove warnnig.");
+				    logger.info("User " + username + " has been previously notified for " + cluster + " but is now OK. Remove warnnig.");
 				    Files.delete(warningPath);
 				}
 			    }
