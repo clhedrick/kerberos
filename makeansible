@@ -1,0 +1,22 @@
+#!/bin/sh
+
+echo This builds kerberos.tar, with files for normal client systems. credserv and mkhomedird are not included
+cd kmkhomedir
+make install
+cd ../krenew-wrap
+make install
+cd ../pam-reg-cc
+make install
+cd ../renewd
+make install
+cd ../kgetcred
+make install -f Makefile.centos7
+cd ../skinit
+make install
+cd ..
+
+cp --parents -p /usr/share/man/man8/pam_kmkhomedir.8 /usr/lib64/security/pam_reg_cc.so /usr/share/man/man8/pam_reg_cc.8 /etc/systemd/system/renewd.service /usr/share/man/man8/renewd.8 /usr/bin/kgetcred /usr/lib64/security/pam_kgetcred.so /usr/share/man/man1/kgetcred.1 /usr/share/man/man8/pam_kgetcred.8 /usr/local/bin/skinit /usr/share/man/man1/skinit.1 /usr/libexec/krenew-wrap.so /usr/local/bin/ssh /etc/krb5.ticketwarning /config/kerberos-files/copy/
+
+cp -p /usr/sbin/renewd /config/kerberos-files/usr/sbin/
+
+
