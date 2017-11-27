@@ -416,6 +416,7 @@ int main(int argc, char *argv[])
     krb5_appdefault_string(context, "kgetcred", &realm_data, "server", "", &serverhostlist);
 
     // address of credserv server
+#ifndef NOSRV
     if (strlen(serverhostlist) == 0) {
         serverhostarray = getsrv(default_realm, "kerberos", "tcp");
         if (serverhostarray == NULL) {
@@ -423,6 +424,7 @@ int main(int argc, char *argv[])
             goto done;
         }
     }
+#endif
 
     // our hostname
     realhost[sizeof(realhost)-1] = '\0';
@@ -534,8 +536,10 @@ int main(int argc, char *argv[])
         krb5_get_init_creds_opt_set_forwardable(opts, 0);
         krb5_get_init_creds_opt_set_proxiable(opts, 0);
 
+#ifndef NOFAST
         if (krb5_cc_default(context, &ccdef) == 0)
             krb5_get_init_creds_opt_set_fast_ccache(context, opts, ccdef);
+#endif
 
         if ((retval = krb5_get_init_creds_password(context, &usercreds, client, NULL, krb5_prompter_posix, NULL,
                                                    0, NULL, opts))) {
