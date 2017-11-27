@@ -769,7 +769,7 @@ public class User {
 		    logger.debug("Add to groups: " + addGroups);
 		    logger.debug("Remove from groups: " + removeGroups);
 
-		    String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
+		    String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
 
 		    // only activate if user is allowed for this cluster
 		    // we shouldn't get called otherwise. We don't deactivate
