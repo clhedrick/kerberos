@@ -1,0 +1,46 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html lang="en">
+<head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<title>Show User Information</title>
+<script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
+</head>
+<div id="masthead"></div>
+<div id="main">
+<div class="messages" th:if="${messages?.size()}">
+<p th:each="msg : ${messages}" th:text="${msg}" />
+</div>
+
+<a href="../"> Account Management</a> | <a href="showgroups">Group list</a>
+
+<h1> Show User Information </h1>
+
+Login: <span th:text="${user}"/><br/>
+Username: <span th:text="${username}"/><br/>
+Password: <span th:text="${authtext}"/><br/>
+<p th:text="${note}"></p>
+
+<h2> Change Password Type </h2>
+<p></p>
+<form th:action="@{/users/showuser}" method="post">
+<p><label><input type="checkbox" name="university" th:checked="${university}"/> Use University password.</label> Use this option if you would prefer not to maintain a separate password here, but want to use the same password you use for other University business.</p>
+<div th:if="${!university}">
+<p><label><input type="checkbox" name="passwordchange" th:checked="${passwordchange}"/> Allow password change using tool in this site. That tool authenticates you using your University password</label> If you forget your password, this lets you login with your Univeristy password to reset it. If you are particularly concerned about security, you might prefer to disable this. That way if your Univeristy password becomes known, it won't compromise this password.</p>
+<p th:if="${authtype == 'otp'}">
+NOTE: You are currently using a one-time password. To return to a conventional password, on any of our systems
+use the command "ipa otptoken-find" to show all your one-time tokens, and then "ipa token-del" to delete each of them.
+</p>
+<p th:if="${authtype != 'otp'}">
+NOTE: If you want to use a one-time password, set up FreeOTP or Google Authenticator on your mobile device.
+Open the application, and click on the icon to add a token. That will activate your camera. 
+Use the command "ipa otptoken-add" on any of our systems. That will display a QR code. Point the camera at it to
+add the token. If this process fails, use "ipa otptoken-del" to delete the token from the system, or you won't be
+able to login again.
+</p>
+
+</div>
+<input type="submit" name="Change password type"/>
+</form>
+
+</div>
+</html>
+
