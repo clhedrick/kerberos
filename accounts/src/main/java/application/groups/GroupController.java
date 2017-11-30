@@ -261,8 +261,11 @@ public class GroupController {
 	    }
 
 	    List<String> creators = attrs.get("creatorsname");
-	    if (creators != null)
-		people.addAll(creators);
+	    for (String creator: creators) {
+		// creator can be a service. don't want that
+		if (creator.startsWith("uid="))
+		    people.add(creator);
+	    }
 
 	    // now have all the people displayed on the page
 	    // build a map from DN to what we want to display

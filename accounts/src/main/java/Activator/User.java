@@ -876,7 +876,7 @@ public class User {
 				if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
 				    toaddress = universityData.get("mail").get(0);
 				// if email worked, create the file. The File.write call writers a zero length file
-				logger.info("Sending notification to " + toaddress + " for " + cluster);
+				logger.info("Sending notification for " + username + " to " + toaddress + " for " + cluster);
 				if (!test) {
 				    // for testing, can put a test address in config file. It will
 				    // get all email rather than actual user
