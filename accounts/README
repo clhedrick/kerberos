@@ -111,12 +111,16 @@ LDAP questions. The wiki page for IPA gives instructions for setting
 those things.
   krb5.keytab.services:  http/services.cs.rutgers.edu
   has roles helpdesk and User Administrator
-  User Administrator has   permission: System: Read User Kerberos Login Attributes
+  User Administrator has   permission: System: Read User Kerberos Login Attributes, Rutgers Write Radius Link
      modify to add ipatokenreadusconfiglink and ipatokenradiiususername
+     create rutgers write radiuslink that can add and modify ipatokenreadusconfiglink   
   add permission Rutgers read otp tokens
      subtree cn=otp,dc=cs,dc=rutgers,dc=edu
      attributes ipatokenOwner, ipatokenUniqueID, objectClass
-  add it to User Administrators
+  add permission Rutgers read radius configuration
+     sybtree cn=radiusproxy,dc=cs,dc=rutgers,dc=edu
+     attributes cn, ipatokenRadiusServer, objectClass
+  add them to User Administrators
 
 Tomcat is called by /etc/init.d/tomcat. In addition to the obvious, it
 uses k5start to maintain credentials for the services principal.
