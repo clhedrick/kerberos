@@ -69,6 +69,8 @@ public class Config {
     public String usermgmturl = null;
     public String badpassfile = null;
     public String defaultgid = null;
+    public String systemname = null;
+    public String universityradius =  null;
 
     final static String CONFIGFILE = "/etc/activator.config";
 
@@ -191,6 +193,10 @@ public class Config {
 			badpassfile = atoms[1];
 		    if (atoms[0].equals("defaultgid"))
 			defaultgid = atoms[1];
+		    if (atoms[0].equals("systemname"))
+			systemname = atoms[1];
+		    if (atoms[0].equals("universityradius"))
+			universityradius = atoms[1];
 
 		}
 
