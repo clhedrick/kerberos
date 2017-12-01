@@ -1,0 +1,12 @@
+install new release
+move tomcat to it
+do a built in ~hedrick/kerberos/accounts
+update tomcat/config/server.xml comment out port 8080 entry
+copy lib/slf4j-api-1.7.25.jar to new version
+copy bin/setenv.sh to new version
+in bin/catalina.sh, last alternative in "start" section  change
+!       >> "$CATALINA_OUT" 2>&1 "&"
+to
+!       2>&1 | /sbin/rotatelogs -L "$CATALINA_OUT" "$CATALINA_OUT"_%Y-%m-%d_%H_%M_%S 86400 
+
+WARNING: you must restart with systemctl restart tomcat. That add k5start, which is essential
