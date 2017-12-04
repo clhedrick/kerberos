@@ -1,3 +1,4 @@
 #!/bin/sh
 
-mvn package
+JAVA_HOME=
+mvn clean package
