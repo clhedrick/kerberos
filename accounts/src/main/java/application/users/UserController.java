@@ -17,6 +17,15 @@
  * or implied warranty.
  */
 
+// lets a user display and change information about them,
+// including type of password.
+
+// as usual, display is from LDAP queries, but changes are through IPA commands
+
+// the main complexity is that authentication information isn't visible to the user
+// We've authorized http/services.cs.rutgers.edu to see and change it, but we 
+// end up juggling whether operations are done by the user or services.
+
 package application;
 
 import java.util.List;
@@ -76,6 +85,10 @@ public class UserController {
 	return ret;
     }
 
+    // this class is used to set up a configuration that uses the principal http/services.cs.rutgers.edu
+    // It is passed to LoginContext to generate a subject. Most documentation says that the
+    // info here has to go into a file, but it's a lot easier to do it in code.
+
     class ServicesConfiguration extends Configuration { 
         private String cc;
  
@@ -87,7 +100,7 @@ public class UserController {
         public AppConfigurationEntry[] getAppConfigurationEntry(String name) { 
             Map<String, String> options = new HashMap<String, String>(); 
             options.put("useKeyTab", "true"); 
-	    options.put("principal", "http/services.cs.rutgers.edu@" + Config.getConfig().kerberosdomain); 
+	    options.put("principal", Config.getConfig().servicesprincipal); 
             options.put("refreshKrb5Config", "true"); 
 	    options.put("keyTab", "/etc/krb5.keytab.services");
  

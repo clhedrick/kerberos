@@ -71,6 +71,7 @@ public class Config {
     public String defaultgid = null;
     public String systemname = null;
     public String universityradius =  null;
+    public String servicesprincipal =  null;
 
     final static String CONFIGFILE = "/etc/activator.config";
 
@@ -197,7 +198,8 @@ public class Config {
 			systemname = atoms[1];
 		    if (atoms[0].equals("universityradius"))
 			universityradius = atoms[1];
-
+		    if (atoms[0].equals("servicesprincipal"))
+			servicesprincipal = atoms[1];
 		}
 
 
