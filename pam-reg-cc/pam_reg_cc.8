@@ -33,22 +33,27 @@ should NFS choose to recheck credentials at that time.
 .PP
 For that reason, you may request this module to copy the credential to
 a second location. That way changes to the primary cache won't affect
-NFS access. There are two reasonable locations: a file in /tmp,
-or the file name in gssproxy.conf, usually 
-/var/lib/gssproxy/clients/krb5cc_%U. Note that the copy isn't
-done for credentials that come from pam_kgetcred. That's because
-cron jobs are assumed not to put credentials at risk in the same
-way. To make this happen,
+NFS access. The obvious place to copy it is a file in /tmp or /run/user/%U.
+There are the places where rpc.gssd looks for credentials for NFS. However
+you can put it in other locations, and use the -d option to rpc.gssd.
+There are two reasonable locations: a file in /tmp,
+To make this happen,
 configure krb5.conf with credcopy, e.g.
 .PP
 .nf
 [appdefaults]
 register-cc = {
-    credcopy = /var/lib/gssproxy/clients/krb5cc_%U
+    credcopy = /tmp/krb5cc_nfs_%U
 }
 .fi
 .PP
-Like gssproxy, this module will replace %U with the user's numeric userid, and %u with the username.
+Like gssproxy, this module will replace %U with the user's numeric userid, and %u with the username. 
+.PP
+The path should end in %U. It shouldn't be the same as any paths used
+for other purposes. E.g. if
+you're using krb5cc_%U for normal user credentials, you need to use a 
+path with something other than kr5cc_ before the %U. krb5cc_nfs_%U meets
+that requirement.
 .PP
 This module implements only session start (and a no-op session end).
 .PP

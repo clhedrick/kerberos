@@ -76,11 +76,11 @@ automatically renew tickets.
    The assignment narrows it to the actual size.
 */
 
-#define GSSPROXY_PREFIX "/var/lib/gssproxy/clients/krb5cc_"
 #define KEYRING_PREFIX "KEYRING:persistent:"
 
 int debug = 0;
 int test = 0;
+char * gssproxy_prefix = NULL;
 
 // hash used to collect uids of all credential caches registered with session keyrings
 
@@ -678,9 +678,10 @@ void maybe_renew(krb5_context ctx, char *ccname, time_t minleft, struct cc_entry
     int code;
     int changeduid = 0;
 
-    // cache in /var/lib is owned by root, so stay root for it
-    if (strncmp(ccname, GSSPROXY_PREFIX, strlen(GSSPROXY_PREFIX)) != 0) {
-      // we want to run as the owner of the cache.
+    // we want to run as the owner of the cache. If it's a file
+    // if_reg_cc changed ownership to user. 
+    if ((strncmp(ccname, "FILE:", 5) == 0 ||
+    	 strncmp(ccname, "/", 1) == 0)) {
       setresuid(ccentry->uid, ccentry->uid, -1L);
       changeduid = 1;
     }
@@ -813,9 +814,9 @@ void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_de
     if (*ccname == '/') {
       // if it's a GSSproxy ticket, we only ask that the user stil
       // has a process, so look up the uid, not the ccname
-      if (strncmp(ccname, GSSPROXY_PREFIX,
-		  strlen(GSSPROXY_PREFIX)) == 0)
-        key += strlen(GSSPROXY_PREFIX);
+      if (strncmp(ccname, gssproxy_prefix,
+		  strlen(gssproxy_prefix)) == 0)
+        key += strlen(gssproxy_prefix);
     } else if (strncmp(ccname, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
       cp2 = ccname + strlen(KEYRING_PREFIX);
       cp = strchr(cp2, ':');
@@ -981,6 +982,14 @@ int main(int argc, char *argv[])
 
   krb5_appdefault_string(context, "renewd", &realm_data, "delete", "all", &delete_mode);
   krb5_appdefault_string(context, "renewd", &realm_data, "wait", "5", &default_str);
+  krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", NULL, &gssproxy_prefix);
+  // we want the prefix, i.e. the ccache name before the %
+  if (gssproxy_prefix) {
+    char *cp = strchr(gssproxy_prefix, '%');
+    if (cp)
+      *cp = '\0';
+  }
+
   if (wait_str) // overridden by arg
     wait = atol(wait_str);
   else
