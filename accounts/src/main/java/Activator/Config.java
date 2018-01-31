@@ -52,6 +52,7 @@ public class Config {
     public Map<String,String> log = new HashMap<String,String>();
     public String warningdir = "/var/lib/activator";
     public String warningtemplate = "/etc/activator.template";
+    public String unwarntemplate = "/etc/activator.untemplate";
     public int warningdays = 60;
     public String fromaddress = null;
     public String reservedgroups = null;
@@ -155,6 +156,8 @@ public class Config {
 			warningdir = atoms[1];
 		    if (atoms[0].equals("warningtemplate"))
 			warningtemplate = atoms[1];
+		    if (atoms[0].equals("unwarntemplate"))
+			unwarntemplate = atoms[1];
 		    if (atoms[0].equals("warningdays")) {
 			try {
 			    warningdays = Integer.parseInt(atoms[1]);

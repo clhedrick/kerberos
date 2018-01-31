@@ -79,6 +79,7 @@ import common.lu;
 public class User {
 
     String warningtemplate = null;
+    String unwarntemplate = null;
 
     // This is to avoid having to put the configuraiton in a file.
     // The contents of the file would be host-specific. I'd rather generate it dynamically.
@@ -911,6 +912,23 @@ public class User {
 				if (warned) {
 				    logger.info("User " + username + " has been previously notified for " + cluster + " but is now OK. Remove warnnig.");
 				    Files.delete(warningPath);
+				    if (user.unwarntemplate == null)
+					user.unwarntemplate = new String(Files.readAllBytes(Paths.get(config.unwarntemplate)));
+				    // replace %c with cluster
+				    String message = user.unwarntemplate.replaceAll("%c", cluster);
+				    // first line is subject, so separate into subject and message
+				    String [] parts = message.split("\n", 2);
+				    // default address. we hope to get a better one from ldap
+				    String toaddress = username + "@" + config.defaultmaildomain;
+				    if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
+					toaddress = universityData.get("mail").get(0);
+				    logger.info("Sending notification that remove is no longer happening for " + username + " to " + toaddress + " for " + cluster);
+				    if (!test) {
+					// for testing, can put a test address in config file. It will
+					// get all email rather than actual user
+					Mail.sendMail(config.fromaddress, (config.testaddress == null ? toaddress
+									   : config.testaddress), parts[0], parts[1]);
+				    }
 				}
 			    }
 			}
