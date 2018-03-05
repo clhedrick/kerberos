@@ -261,8 +261,11 @@ public class GroupController {
 	    }
 
 	    List<String> creators = attrs.get("creatorsname");
-	    if (creators != null)
-		people.addAll(creators);
+	    for (String creator: creators) {
+		// creator can be a service. don't want that
+		if (creator.startsWith("uid="))
+		    people.add(creator);
+	    }
 
 	    // now have all the people displayed on the page
 	    // build a map from DN to what we want to display
@@ -299,7 +302,7 @@ public class GroupController {
 			       @RequestParam(value="del", required=false) List<String>del,
 			       @RequestParam(value="newmember", required=false) String newmember,
 			       @RequestParam(value="delowner", required=false) List<String>delowner,
-			       @RequestParam(value="newowner", required=false) List<String>newowner,
+			       @RequestParam(value="newowner", required=false) String newowner,
 			       @RequestParam(value="login", required=false) String loginSt,
 			       @RequestParam(value="hosts", required=false) List<String>hosts,
 			       HttpServletRequest request, HttpServletResponse response,
@@ -417,8 +420,9 @@ public class GroupController {
 	}
 
 
-	if (newowner != null && newowner.size() > 0) {
-	    for (String n: newowner) {
+	if (newowner != null) {
+	    for (String n: newowner.split("\\s")) {
+		n = n.trim();
 		if (n != null && !n.equals("")) {
 		    String retval;
 		    if (oldowners.contains(n)) {

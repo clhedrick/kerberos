@@ -73,8 +73,6 @@ public class ChangepassController {
     public String changepassGet(@RequestParam(value="cluster", required=false) String cluster,
 				HttpServletRequest request, HttpServletResponse response, Model model) {
 	String user = request.getRemoteUser();
-	if ("hedrick".equals(user))
-	    user = "clh";
 
 	model.addAttribute("allowchange", utils.allowChangePassword(user));
 	String pass = genpassword.generate(10);
@@ -105,7 +103,7 @@ public class ChangepassController {
 	String user = request.getRemoteUser();
 	int retval = -1;
 	if ("hedrick".equals(user))
-	    user = "dblair";
+	    user = "clh";
 
 	List<String> messages = new ArrayList<String>();
 
@@ -158,7 +156,8 @@ public class ChangepassController {
 
 	    Process p = null;
 	    try {
-		p = Runtime.getRuntime().exec(cmd);
+		String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
+		p = Runtime.getRuntime().exec(cmd, env);
 		try (
 		     PrintWriter writer = new PrintWriter(p.getOutputStream());
 		     BufferedReader reader2 = new BufferedReader(new InputStreamReader(p.getErrorStream()));

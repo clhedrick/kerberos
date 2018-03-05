@@ -10,7 +10,7 @@ make install
 cd ../renewd
 make install
 cd ../kgetcred
-make install
+make install -f Makefile.centos7
 cd ../skinit
 make install
 cd ..

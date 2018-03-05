@@ -122,7 +122,7 @@ void register_for_delete(pam_handle_t *pamh, const char *cache) {
   *cp2 = '\0';
   fd = open(newname, O_CREAT|O_WRONLY, 0600);
   if (fd < 0 && errno == ENOENT) {
-    fd = mkdir(RENEWDCCS, 700);
+    fd = mkdir(RENEWDCCS, 0700);
     if (fd < 0) {
       pam_syslog(pamh, LOG_ERR, "unable to create %s", RENEWDCCS);
       free(newname);

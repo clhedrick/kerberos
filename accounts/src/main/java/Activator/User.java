@@ -79,6 +79,7 @@ import common.lu;
 public class User {
 
     String warningtemplate = null;
+    String unwarntemplate = null;
 
     // This is to avoid having to put the configuraiton in a file.
     // The contents of the file would be host-specific. I'd rather generate it dynamically.
@@ -401,28 +402,32 @@ public class User {
 	boolean needmod = false;
 	String first = lu.oneVal(universityData.get("givenname"),"-");
 	String ofirst = lu.oneVal(ourData.get("givenname"));
-	if (!first.equals(ofirst)) {
-	    needmod = true;
+	if (!first.equalsIgnoreCase(ofirst)) {
+	    mods.add("--first=" + first);
 	}
 
 	String last = lu.oneVal(universityData.get("sn"),"-");
 	String olast = lu.oneVal(ourData.get("sn"));
-	if (!last.equals(olast)) {
-	    needmod = true;
+	if (!last.equalsIgnoreCase(olast)) {
+	    mods.add("--last=" + last);
 	}
 
 	String cn = lu.oneVal(universityData.get("cn"),"-");
 	String ocn = lu.oneVal(ourData.get("gecos"));
 	if (!cn.equals(ocn)) {
-	    needmod = true;
+	    mods.add("--gecos=" + cn);
 	}
 
-	if (needmod) {
-	    logger.info("ipa user-mod " + username + " --first=" + first + " --last=" + last + " --gecos=" + cn);
+	if (mods.size() > 0) {
 	    if (!test) {
+		mods.add(0, username);
+		mods.add(0, "user-mod");
+		mods.add(0, "/bin/ipa");
 		// continue even if this fails
-		docommand.docommand (new String[]{"/bin/ipa", "user-mod", username, "--first=" + first, "--last=" + last, "--gecos=" + cn}, env);
-	    }
+		logger.info(mods);
+		docommand.docommand (mods.toArray(new String[1]), env);;
+	    } else
+		logger.info("ipa user-mod " + username + " " +  mods);
 	}
     }
 
@@ -765,7 +770,7 @@ public class User {
 		    logger.debug("Add to groups: " + addGroups);
 		    logger.debug("Remove from groups: " + removeGroups);
 
-		    String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
+		    String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
 
 		    // only activate if user is allowed for this cluster
 		    // we shouldn't get called otherwise. We don't deactivate
@@ -872,7 +877,7 @@ public class User {
 				if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
 				    toaddress = universityData.get("mail").get(0);
 				// if email worked, create the file. The File.write call writers a zero length file
-				logger.info("Sending notification to " + toaddress + " for " + cluster);
+				logger.info("Sending notification for " + username + " to " + toaddress + " for " + cluster);
 				if (!test) {
 				    // for testing, can put a test address in config file. It will
 				    // get all email rather than actual user
@@ -898,15 +903,32 @@ public class User {
 					}
 				    }
 				} else {
-				    logger.info("User has been notified for " + cluster + " but it's not time to delete them");
+				    logger.info("User " + username + " has been notified for " + cluster + " but it's not time to delete them");
 				}
 			    } else {
 				// not to remove. if they were warned but are no longer to be removed,
 				// remove warning file. If they lose access again we need to go through
 				// the whole warning cycle. Without this they would be removed immediately.
 				if (warned) {
-				    logger.info("User has been previously notified for " + cluster + " but is now OK. Remove warnnig.");
+				    logger.info("User " + username + " has been previously notified for " + cluster + " but is now OK. Remove warnnig.");
 				    Files.delete(warningPath);
+				    if (user.unwarntemplate == null)
+					user.unwarntemplate = new String(Files.readAllBytes(Paths.get(config.unwarntemplate)));
+				    // replace %c with cluster
+				    String message = user.unwarntemplate.replaceAll("%c", cluster);
+				    // first line is subject, so separate into subject and message
+				    String [] parts = message.split("\n", 2);
+				    // default address. we hope to get a better one from ldap
+				    String toaddress = username + "@" + config.defaultmaildomain;
+				    if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
+					toaddress = universityData.get("mail").get(0);
+				    logger.info("Sending notification that remove is no longer happening for " + username + " to " + toaddress + " for " + cluster);
+				    if (!test) {
+					// for testing, can put a test address in config file. It will
+					// get all email rather than actual user
+					Mail.sendMail(config.fromaddress, (config.testaddress == null ? toaddress
+									   : config.testaddress), parts[0], parts[1]);
+				    }
 				}
 			    }
 			}
