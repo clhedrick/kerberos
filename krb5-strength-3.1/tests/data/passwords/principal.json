@@ -1,0 +1,86 @@
+[
+    {
+        "name": "based on principal",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "someuser",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "based on principal (reversed)",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "resuemos",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "based on principal with digits",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "someuser123",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "is full principal",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "test@EXAMPLE.ORG",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "principal with leading digits",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "123someuser",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "principal with leading and trailing digits",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "1someuser2",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "is realm (lowercase)",
+        "principal": "someuser@NEWEXAMPLE.ORG",
+        "password": "newexample",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "is realm (lowercase) with digits",
+        "principal": "someuser@NEWEXAMPLE.ORG",
+        "password": "newexample123",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "is realm (lowercase) with leading digits",
+        "principal": "someuser@NEWEXAMPLE.ORG",
+        "password": "123newexample",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "is realm reversed",
+        "principal": "someuser@NEWEXAMPLE.ORG",
+        "password": "ELPMAXEWEN",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "is second realm with digits",
+        "principal": "someuser@NEWEXAMPLE.ORG",
+        "password": "ORG1791520",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    },
+    {
+        "name": "is whole realm (mixed case)",
+        "principal": "someuser@NEWEXAMPLE.ORG",
+        "password": "NewExample.Org",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password based on username or principal"
+    }
+]

@@ -1,0 +1,106 @@
+[
+    {
+        "name": "non-ASCII characters",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "عربى",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password contains non-ASCII or control characters"
+    },
+    {
+        "name": "control character",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "ouchD\u0001artetch",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password contains non-ASCII or control characters"
+    },
+    {
+        "name": "tab",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "\touchDartetch",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "Password contains non-ASCII or control characters"
+    },
+    {
+        "name": "all alphabetic",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "ouchDartetch",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password is only letters and spaces"
+    },
+    {
+        "name": "all alphabetic with spaces",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "the perils of all good dogs",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password is only letters and spaces"
+    },
+    {
+        "name": "punctuation",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "the perils of all good dogs!"
+    },
+    {
+        "name": "digits",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "the perils 0of all good dogs"
+    },
+    {
+        "name": "mindiff (1 character)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "11111111111111111111",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password does not contain enough unique characters"
+    },
+    {
+        "name": "mindiff (2 characters)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1b1b1b1b1b1b1b1b1b1b",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password does not contain enough unique characters"
+    },
+    {
+        "name": "mindiff (3 characters)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1bc1bc1bc1bc1bc1bc1b",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password does not contain enough unique characters"
+    },
+    {
+        "name": "mindiff (4 characters)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1bcd1bcd1bcd1bcd1bcd",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password does not contain enough unique characters"
+    },
+    {
+        "name": "mindiff (5 characters)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1bcde1bcde1bcde1bcde",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password does not contain enough unique characters"
+    },
+    {
+        "name": "mindiff (6 characters)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1bcdef1bcdef1bcdef1b",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password does not contain enough unique characters"
+    },
+    {
+        "name": "mindiff (7 characters)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1cdbfge1cdbeg1fcdbef",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password does not contain enough unique characters"
+    },
+    {
+        "name": "mindiff (8 characters)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1dbegchf1cdbfgh1ebcd"
+    },
+    {
+        "name": "mindiff (9 characters)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bcd1fgei1bhdefchig1b"
+    }
+]

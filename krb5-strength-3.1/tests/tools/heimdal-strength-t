@@ -1,0 +1,354 @@
+#!/usr/bin/perl
+#
+# Test suite for basic Heimdal external strength checking functionality.
+#
+# Written by Russ Allbery <eagle@eyrie.org>
+# Copyright 2016 Russ Allbery <eagle@eyrie.org>
+# Copyright 2009, 2012, 2013, 2014
+#     The Board of Trustees of the Leland Stanford Junior University
+#
+# See LICENSE for licensing terms.
+
+use 5.006;
+use strict;
+use warnings;
+
+use lib "$ENV{SOURCE}/tap/perl";
+
+use File::Copy qw(copy);
+use Test::RRA qw(use_prereq);
+use Test::RRA::Automake qw(test_file_path);
+
+use_prereq('IPC::Run', 'run');
+use_prereq('JSON');
+use_prereq('Perl6::Slurp', 'slurp');
+use_prereq('Test::More',   '0.87_01');
+
+# Run the newly-built heimdal-strength command and return the status, output,
+# and error output as a list.  If told to expect an immediate error, does not
+# pass input to the process.
+#
+# $principal - Principal to pass to the command
+# $password  - Password to pass to the command
+# $error     - Whether to expect an immediate error
+#
+# Returns: The exit status, standard output, and standard error as a list
+#  Throws: Text exception on failure to run the test program
+sub run_heimdal_strength {
+    my ($principal, $password, $error) = @_;
+
+    # Build the input to the strength checking program.
+    my $in = q{};
+    if (!$error) {
+        $in .= "principal: $principal\n";
+        $in .= "new-password: $password\n";
+        $in .= "end\n";
+    }
+
+    # Find the newly-built password checking program.
+    my $program = test_file_path('../tools/heimdal-strength');
+
+    # Run the password strength checker.
+    my ($out, $err);
+    my $harness = run([$program, $principal], \$in, \$out, \$err);
+    my $status = $? >> 8;
+
+    # Return the results.
+    return ($status, $out, $err);
+}
+
+# Run the newly-built heimdal-strength command to check a password and reports
+# the results using Test::More.  This uses the standard protocol for Heimdal
+# external password strength checking programs.
+#
+# $test_ref - Reference to hash of test parameters
+#   name      - The name of the test case
+#   principal - The principal changing its password
+#   password  - The new password
+#   status    - If present, the exit status (otherwise, it should be 0)
+#   error     - If present, the expected rejection error
+#
+# Returns: undef
+#  Throws: Text exception on failure to run the test program
+sub check_password {
+    my ($test_ref) = @_;
+    my $principal  = $test_ref->{principal};
+    my $password   = $test_ref->{password};
+
+    # Run the heimdal-strength command.
+    my ($status, $out, $err) = run_heimdal_strength($principal, $password);
+    chomp($out, $err);
+
+    # Check the results.  If there is an error in the password, it should come
+    # on standard error; otherwise, standard output should be APPROVED.  If
+    # there is a non-zero exit status, we expect the error on standard error
+    # and use that field to check for system errors.
+    is($status, $test_ref->{status} || 0, "$test_ref->{name} (status)");
+    if (defined($test_ref->{error})) {
+        is($err, $test_ref->{error}, '...error message');
+        is($out, q{}, '...no output');
+    } else {
+        is($err, q{},        '...no errors');
+        is($out, 'APPROVED', '...approved');
+    }
+    return;
+}
+
+# Create a new krb5.conf file that includes arbitrary settings passed in via
+# a hash reference.
+#
+# $settings_ref - Hash of keys and values to put into [appdefaults]
+#
+# Returns: Path to the new krb5.conf file
+#  Throws: Text exception if the new krb5.conf file cannot be created
+sub create_krb5_conf {
+    my ($settings_ref) = @_;
+
+    # Paths for krb5.conf creation.
+    my $old    = test_file_path('data/krb5.conf');
+    my $tmpdir = $ENV{BUILD} ? "$ENV{BUILD}/tmp" : 'tests/tmp';
+    my $new    = "$tmpdir/krb5.conf";
+
+    # Create a temporary directory for the new file.
+    if (!-d $tmpdir) {
+        mkdir($tmpdir, 0777) or die "Cannot create $tmpdir: $!\n";
+    }
+
+    # Start with the testing krb5.conf file shipped in the package.
+    copy($old, $new) or die "Cannot copy $old to $new: $!\n";
+
+    # Append the local configuration.
+    open(my $config, '>>', $new) or die "Cannot append to $new: $!\n";
+    print {$config} "\n[appdefaults]\n    krb5-strength = {\n"
+      or die "Cannot append to $new: $!\n";
+    for my $key (keys %{$settings_ref}) {
+        print {$config} q{ } x 8, $key, ' = ', $settings_ref->{$key}, "\n"
+          or die "Cannot append to $new: $!\n";
+    }
+    print {$config} "    }\n"
+      or die "Cannot append to $new: $!\n";
+    close($config) or die "Cannot append to $new: $!\n";
+
+    # Return the path to the new file.
+    return $new;
+}
+
+# Load a set of password test cases and return them as a list.  The given file
+# name is relative to data/passwords in the test suite.
+#
+# $file - The file name containing the test data in JSON
+#
+# Returns: List of anonymous hashes representing password test cases
+#  Throws: Text exception on failure to load the test data
+sub load_password_tests {
+    my ($file) = @_;
+    my $path = test_file_path("data/passwords/$file");
+
+    # Load the test file data into memory.
+    my $testdata = slurp($path);
+
+    # Decode the JSON into Perl objects and return them.
+    my $json = JSON->new->utf8;
+    return $json->decode($testdata);
+}
+
+# Test a required_classes syntax error.  Takes the string for required_classes
+# and verifies that the appropriate error message is returned.
+#
+# $bad_class - Bad class specification
+#
+# Returns: undef
+sub test_require_classes_syntax {
+    my ($bad_class)  = @_;
+    my $error_prefix = 'Cannot initialize strength checking';
+    my $bad_message  = 'bad character class requirement in configuration';
+    my $bad_minimum  = 'bad character class minimum in configuration';
+
+    # Run heimdal-strength.
+    my $krb5_conf = create_krb5_conf({ require_classes => $bad_class });
+    local $ENV{KRB5_CONFIG} = $krb5_conf;
+    my ($status, $output, $err) = run_heimdal_strength('test', 'password', 1);
+
+    # Check the results.
+    is($status, 1,   "Bad class specification '$bad_class' (status)");
+    is($output, q{}, '...no output');
+    my $expected;
+    if ($bad_class =~ m{ \A (\d+ [^-]*) \z | : (\d+) \z }xms) {
+        my $minimum = $1 || $2;
+        $expected = "$error_prefix: $bad_minimum: $minimum\n";
+    } else {
+        $expected = "$error_prefix: $bad_message: $bad_class\n";
+    }
+    is($err, $expected, '...correct error');
+    return;
+}
+
+# Load the password tests from JSON.  Accumulate a total count of tests for
+# the testing plan.
+my (%tests, $count);
+for my $type (qw(cdb classes cracklib length letter principal sqlite)) {
+    my $tests = load_password_tests("$type.json");
+    $tests{$type} = $tests;
+    $count += scalar(@{$tests});
+}
+
+# We run the principal tests three times, for CrackLib, CDB, and SQLite.
+$count += 2 * scalar(@{ $tests{principal} });
+
+# We run the length checks twice.
+$count += scalar(@{ $tests{length} });
+
+# We can now calculate our plan based on three tests for each password test,
+# plus 27 additional tests for error handling.
+plan(tests => $count * 3 + 27);
+
+# Install the krb5.conf file with a configuration pointing to the test
+# CrackLib dictionary.
+my $datadir = $ENV{BUILD} ? "$ENV{BUILD}/data" : 'tests/data';
+my $krb5_conf
+  = create_krb5_conf({ password_dictionary => "$datadir/dictionary" });
+local $ENV{KRB5_CONFIG} = $krb5_conf;
+
+# Run the CrackLib password tests and based-on-principal tests from JSON.
+note('CrackLib tests');
+for my $test (@{ $tests{cracklib} }) {
+    check_password($test);
+}
+note('Generic tests with CrackLib');
+for my $test (@{ $tests{principal} }) {
+    check_password($test);
+}
+
+# Install the krb5.conf file with a length restriction.
+$krb5_conf = create_krb5_conf({ minimum_length => 12 });
+local $ENV{KRB5_CONFIG} = $krb5_conf;
+
+# Run the password length checks.
+note('Password length checks');
+for my $test (@{ $tests{length} }) {
+    check_password($test);
+}
+
+# Add a CrackLib dictionary and a maximum password length setting.
+$krb5_conf = create_krb5_conf(
+    {
+        password_dictionary => "$datadir/dictionary",
+        minimum_length      => 12,
+        cracklib_maxlen     => 11,
+    }
+);
+local $ENV{KRB5_CONFIG} = $krb5_conf;
+
+# Run the length checks again.  They should have the same result, even though
+# there's a CrackLib dictionary, since the dictionary hit is above the minimum
+# length.
+note('Password length checks with cracklib_maxlen');
+for my $test (@{ $tests{length} }) {
+    check_password($test);
+}
+
+# Install the krb5.conf file for simple character class restrictions.
+$krb5_conf = create_krb5_conf(
+    {
+        minimum_different       => 8,
+        require_ascii_printable => 'true',
+        require_non_letter      => 'true',
+    }
+);
+local $ENV{KRB5_CONFIG} = $krb5_conf;
+
+# Run the simple character class tests.
+note('Simple password character class checks');
+for my $test (@{ $tests{letter} }) {
+    check_password($test);
+}
+
+# Install the krb5.conf file for complex character class restrictions.
+my $classes = '8-19:lower,upper 8-15:digit 8-11:symbol 24-24:3';
+$krb5_conf = create_krb5_conf({ require_classes => $classes });
+local $ENV{KRB5_CONFIG} = $krb5_conf;
+
+# Run the complex character class tests.
+note('Complex password character class checks');
+for my $test (@{ $tests{classes} }) {
+    check_password($test);
+}
+
+# Install the krb5.conf file with configuration pointing to the CDB
+# dictionary.
+my $cdb_database = test_file_path('data/wordlist.cdb');
+$krb5_conf = create_krb5_conf({ password_dictionary_cdb => $cdb_database });
+local $ENV{KRB5_CONFIG} = $krb5_conf;
+
+# Check whether we were built with CDB support.  If so, run those tests.
+my ($status, $output, $err) = run_heimdal_strength('test', 'password');
+SKIP: {
+    if ($status == 1 && $err =~ m{ not [ ] built [ ] with [ ] CDB }xms) {
+        my $total = scalar(@{ $tests{cdb} }) + scalar(@{ $tests{principal} });
+        skip('not built with CDB support', $total * 3);
+    }
+
+    # Run the CDB and principal password tests from JSON.
+    note('CDB tests');
+    for my $test (@{ $tests{cdb} }) {
+        check_password($test);
+    }
+    note('Generic tests with CDB');
+    for my $test (@{ $tests{principal} }) {
+        check_password($test);
+    }
+}
+
+# Install the krb5.conf file with configuration pointing to the SQLite
+# dictionary.
+my $sqlite_database = test_file_path('data/wordlist.sqlite');
+$krb5_conf
+  = create_krb5_conf({ password_dictionary_sqlite => $sqlite_database });
+local $ENV{KRB5_CONFIG} = $krb5_conf;
+
+# Check whether we were built with SQLite support.  If so, run those tests.
+($status, $output, $err) = run_heimdal_strength('test', 'password');
+SKIP: {
+    if ($status == 1 && $err =~ m{ not [ ] built [ ] with [ ] SQLite }xms) {
+        my $total = scalar(@{ $tests{sqlite} });
+        $total += scalar(@{ $tests{principal} });
+        skip('not built with SQLite support', $total * 3);
+    }
+
+    # Run the SQLite and principal password tests from JSON.
+    note('SQLite tests');
+    for my $test (@{ $tests{sqlite} }) {
+        check_password($test);
+    }
+    note('Generic tests with SQLite');
+    for my $test (@{ $tests{principal} }) {
+        check_password($test);
+    }
+}
+
+# Test error for an unknown character class.
+$krb5_conf = create_krb5_conf({ require_classes => 'bogus' });
+local $ENV{KRB5_CONFIG} = $krb5_conf;
+my $error_prefix = 'Cannot initialize strength checking';
+($status, $output, $err) = run_heimdal_strength('test', 'password', 1);
+is($status, 1,   'Bad character class (status)');
+is($output, q{}, '...no output');
+is($err, "$error_prefix: unknown character class bogus\n", '...correct error');
+
+# Test a variety of configuration syntax errors in require_classes.
+my @bad_classes = qw(
+  8 8bogus 8:bogus 4-:bogus 4-bogus 4-8bogus 10:3 10-11:5
+);
+for my $bad_class (@bad_classes) {
+    test_require_classes_syntax($bad_class);
+}
+
+# Clean up our temporary krb5.conf file on any exit.
+END {
+    my $tmpdir = $ENV{BUILD} ? "$ENV{BUILD}/tmp" : 'tests/tmp';
+    my $config = "$tmpdir/krb5.conf";
+    if (-f $config) {
+        unlink($config) or warn "Cannot remove $config\n";
+        rmdir($tmpdir);
+    }
+}

@@ -1,0 +1,9 @@
+Developed by Derrick Brashear and Ken Hornstein of Sine Nomine Associates,
+on behalf of Stanford University.
+
+The embedded version of CrackLib (all files in the `cracklib`
+subdirectory) is covered by the Artistic license.  See the file
+`cracklib/LICENCE` for more information.  Combined derivative works that
+include this code, such as binaries built with the embedded CrackLib, will
+need to follow the terms of the Artistic license as well as the above
+license.

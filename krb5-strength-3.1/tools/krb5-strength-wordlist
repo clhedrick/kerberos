@@ -1,0 +1,464 @@
+#!/usr/bin/perl
+#
+# Turn a wordlist into a CDB or SQLite database.
+#
+# This program takes as input a word list (a file of words separated by
+# newlines) and turns it into either a CDB or a SQLite database that can be
+# used by the krb5-strength plugin or heimdal-strength program to check
+# passwords against a password dictionary.  It can also filter a word list in
+# various ways to create a new word list.
+
+##############################################################################
+# Declarations and configuration
+##############################################################################
+
+require 5.006;
+use strict;
+use warnings;
+
+use File::Basename qw(basename);
+use Getopt::Long qw(GetOptions);
+
+# The path to the cdb utility, used to create the final database.  By default,
+# the user's PATH is searched for cdb.
+my $CDB = 'cdb';
+
+# The SQL used to create the SQLite database.
+## no critic (ValuesAndExpressions::ProhibitImplicitNewlines)
+my $SQLITE_CREATE = q{
+    CREATE TABLE passwords (
+        password TEXT UNIQUE NOT NULL,
+        drowssap TEXT UNIQUE NOT NULL
+    )
+};
+
+# The SQL used to insert passwords into the database.
+my $SQLITE_INSERT = q{
+    INSERT OR IGNORE INTO passwords (password, drowssap) values (?, ?)
+};
+## use critic
+
+##############################################################################
+# Utility functions
+##############################################################################
+
+# print with error checking and an explicit file handle.
+#
+# $fh   - Output file handle
+# @args - Remaining arguments to print
+#
+# Returns: undef
+#  Throws: Text exception on output failure
+sub print_fh {
+    my ($fh, @args) = @_;
+    print {$fh} @args or croak('print failed');
+    return;
+}
+
+##############################################################################
+# Database output
+##############################################################################
+
+# Filter the given input file and write it to a CDB data file, and then use
+# cdb to turn that into a database.
+#
+# $in_fh  - Input file handle for the source wordlist
+# $output - Name of the output CDB file
+# $filter - Reference to sub that returns true to keep a word, false otherwise
+#
+# Returns: undef
+#  Throws: Text exception on output failure or pre-existing temporary file
+sub write_cdb {
+    my ($in_fh, $output, $filter) = @_;
+
+    # Check that the output CDB file doesn't exist.
+    if (-f $output) {
+        die "$0: output file $output already exists\n";
+    }
+
+    # Create a temporary file to write the CDB input into.
+    my $tmp = $output . '.data';
+    if (-f $tmp) {
+        die "$0: temporary output file $tmp already exists\n";
+    }
+    open(my $tmp_fh, '>', $tmp)
+      or die "$0: cannot create output file $tmp: $!\n";
+
+    # Walk through the input word list and write each word that passes the
+    # filter to the output file handle as CDB data.
+    while (defined(my $word = <$in_fh>)) {
+        chomp($word);
+        next if !$filter->($word);
+        my $length = length($word);
+        print_fh($tmp_fh, "+$length,1:$word->1\n");
+    }
+
+    # Add a trailing newline, required by the CDB data format, and close.
+    print_fh($tmp_fh, "\n");
+    close($tmp_fh) or die "$0: cannot write to temporary file $tmp: $!\n";
+
+    # Run cdb to turn the result into a CDB database.  Ignore duplicate keys.
+    system($CDB, '-c', '-u', $output, $tmp) == 0
+      or die "$0: cdb -c failed\n";
+
+    # Remove the temporary file and return.
+    unlink($tmp) or die "$0: cannot remove temporary file $tmp: $!\n";
+    return;
+}
+
+# Filter the given input file and write it to a newly-created SQLite database.
+# Requires the DBI and DBD::SQLite modules be installed.  The database will
+# contain one table, passwords, with two columns, password and drowssap, which
+# store the word and the word reversed for each word that passes the filter.
+#
+# $in_fh  - Input file handle for the source wordlist
+# $output - Name of the output SQLite database
+# $filter - Reference to sub that returns true to keep a word, false otherwise
+#
+# Returns: undef
+#  Throws: Text exception on output failure, pre-existing output file, or
+#          missing Perl modules
+sub write_sqlite {
+    my ($in_fh, $output, $filter) = @_;
+
+    # Check that the output SQLite file doesn't exist.
+    if (-f $output) {
+        die "$0: output file $output already exists\n";
+    }
+
+    # Load the required modules.
+    require DBI;
+    require DBD::SQLite;
+
+    # Open and create the database.
+    my $options = { PrintError => 0, RaiseError => 1, AutoCommit => 1 };
+    my $dbh = DBI->connect("dbi:SQLite:dbname=$output", q{}, q{}, $options);
+    $dbh->do($SQLITE_CREATE);
+
+    # Tune SQLite to improve the speed of bulk inserts.  Use unsafe insert
+    # processing and increase the index cache to 500MB.
+    $dbh->do('PRAGMA synchronous = 0');
+    $dbh->do('PRAGMA cache_size = 500000');
+
+    # Start a transaction and prepare the insert statement for each word.
+    $dbh->begin_work();
+    my $sth = $dbh->prepare($SQLITE_INSERT);
+
+    # Walk through the input word list and add each word that passes the
+    # filter to the database, both as-is and reversed.
+    while (defined(my $word = <$in_fh>)) {
+        chomp($word);
+        next if !$filter->($word);
+        my $reversed = reverse($word);
+        $sth->execute($word, $reversed);
+    }
+
+    # Commit and close the database.
+    $dbh->commit;
+    $dbh->disconnect;
+    return;
+}
+
+# Filter the given input file and write the results to a new wordlist.
+#
+# $in_fh  - Input file handle for the source wordlist
+# $output - Output file name to which to write the resulting wordlist
+# $filter - Reference to sub that returns true to keep a word, false otherwise
+#
+# Returns: undef
+#  Throws: Text exception on output failure
+sub write_wordlist {
+    my ($in_fh, $output, $filter) = @_;
+    open(my $out_fh, '>', $output)
+      or die "$0: cannot create output file $output: $!\n";
+
+    # Walk through the input word list and write each word that passes the
+    # filter to the output file handle.
+    while (defined(my $word = <$in_fh>)) {
+        chomp($word);
+        next if !$filter->($word);
+        print_fh($out_fh, "$word\n");
+    }
+
+    # All done.
+    close($out_fh) or die "$0: cannot write to output file $output: $!\n";
+    return;
+}
+
+##############################################################################
+# Filtering
+##############################################################################
+
+# Given the parsed command-line options as a hash, construct a filter for the
+# word list and return it.  The filter will, given a word, return true if the
+# word should be included in the dictionary and false otherwise.
+#
+# $config_ref - Hash of configuration options
+#   ascii      - Strip non-printable or non-ASCII words
+#   exclude    - Reference to array of regex patterns to exclude
+#   min_length - Minimum word length
+#   max_length - Maximum word length
+#
+# Returns: Filter function to check a word.
+sub build_filter {
+    my ($config_ref) = @_;
+
+    # Build a filter from our command-line parameters.  This is an anonymous
+    # sub that returns true to keep a word and false otherwise.
+    my $filter = sub {
+        my ($word)     = @_;
+        my $length     = length($word);
+        my $min_length = $config_ref->{'min-length'};
+        my $max_length = $config_ref->{'max-length'};
+
+        # Check length.
+        return if (defined($min_length) && $length < $min_length);
+        return if (defined($max_length) && $length > $max_length);
+
+        # Check character classes.
+        if ($config_ref->{ascii}) {
+            return if $word =~ m{ [^[:ascii:]] }xms;
+            return if $word =~ m{ [[:cntrl:]] }xms;
+        }
+
+        # Check regex exclusions.
+        if ($config_ref->{exclude}) {
+            for my $pattern (@{ $config_ref->{exclude} }) {
+                return if $word =~ m{ $pattern }xms;
+            }
+        }
+
+        # Word passes.  Return success.
+        return 1;
+    };
+    return $filter;
+}
+
+##############################################################################
+# Main routine
+##############################################################################
+
+# Always flush output.
+STDOUT->autoflush;
+
+# Clean up the script name for error reporting.
+my $fullpath = $0;
+local $0 = basename($0);
+
+# Parse the argument list.
+my %config;
+my @options = (
+    'ascii|a',      'cdb|c=s',    'max-length|L=i', 'min-length|l=i',
+    'manual|man|m', 'output|o=s', 'sqlite|s=s',     'exclude|x=s@',
+);
+Getopt::Long::config('bundling', 'no_ignore_case');
+GetOptions(\%config, @options);
+if ($config{manual}) {
+    print_fh(\*STDOUT, "Feeding myself to perldoc, please wait...\n");
+    exec('perldoc', '-t', $fullpath);
+}
+if (@ARGV != 1) {
+    die "Usage: krb5-strength-wordlist <wordlist>\n";
+}
+if ($config{cdb} && ($config{output} || $config{sqlite})) {
+    die "$0: -c cannot be used with -o or -s\n";
+} elsif ($config{output} && $config{sqlite}) {
+    die "$0: -o cannot be used with -c or -s\n";
+}
+my $input = $ARGV[0];
+
+# Build the filter closure.
+my $filter = build_filter(\%config);
+
+# Process the input file into either wordlist output or a CDB file.
+open(my $in_fh, '<', $input)
+  or die "$0: cannot open input file $input: $!\n";
+if ($config{output}) {
+    write_wordlist($in_fh, $config{output}, $filter);
+} elsif ($config{cdb}) {
+    write_cdb($in_fh, $config{cdb}, $filter);
+} elsif ($config{sqlite}) {
+    write_sqlite($in_fh, $config{sqlite}, $filter);
+}
+close($in_fh) or die "$0: cannot read all of input file $input: $!\n";
+
+# All done.
+exit(0);
+__END__
+
+##############################################################################
+# Documentation
+##############################################################################
+
+=for stopwords
+krb5-strength-wordlist krb5-strength cdb whitespace lookups lookup
+sublicense MERCHANTABILITY NONINFRINGEMENT krb5-strength --ascii Allbery
+regexes output-wordlist heimdal-strength SQLite output-wordlist
+output-sqlite DBI wordlist
+
+=head1 NAME
+
+krb5-strength-wordlist - Create a krb5-strength database from a word list
+
+=head1 SYNOPSIS
+
+B<krb5-strength-wordlist> [B<-am>] [B<-c> I<output-cdb>] [B<-l> I<min-length>]
+    [B<-L> I<max-length>] [B<-o> I<output-wordlist>] [B<-s> I<output-sqlite>]
+    [B<-x> I<exclude> ...] I<wordlist>
+
+=head1 DESCRIPTION
+
+B<krb5-strength-wordlist> converts a word list (a file containing one word
+per line) into a database that can be used by the krb5-strength plugin or
+B<heimdal-strength> command for checking passwords.  Two database formats
+are supported, with different features.  CDB is more space-efficient and
+possibly faster, but supports checking passwords only against exact
+matches or simple transformations (removing small numbers of leading and
+trailing characters).  SQLite creates a much larger database, but supports
+rejecting any password within edit distance one of a word in the word
+list.
+
+CDB is a format invented by Dan Bernstein for fast, constant databases.
+The database is fixed during creation and cannot be changed without
+rebuilding it, and is optimized for very fast access.  For cdb, the
+database generated by this program will have keys for each word in the
+word list and the constant C<1> as the value.
+
+SQLite stores the word list in a single table containing both each word
+and each word reversed.  This allows the krb5-strength plugin or
+B<heimdal-strength> command to reject passwords within edit distance one
+of any word in the word list.  (Edit distance one means that the word list
+entry can be formed by changing a single character of the password, either
+by adding one character, removing one character, or changing one character
+to a different character.)  However, the SQLite database will be much
+larger and lookups may be somewhat slower.
+
+B<krb5-strength-wordlist> takes one argument, the input word list file.
+Use the B<-c> option to specify an output CDB file, B<-s> to specify an
+output SQLite file, or B<-o> to just filter the word list against the
+criteria given on the command line and generate a new word list.
+The input word list file does not have to be sorted.  See the individual
+option descriptions for more information.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-a>, B<--ascii>
+
+Filter all words that contain non-ASCII characters or control characters
+from the resulting cdb file, leaving only words that consist solely of
+ASCII non-control characters.
+
+=item B<-c> I<output-cdb>, B<--cdb>=I<output-cdb>
+
+Create a CDB database in I<output-cdb>.  A temporary file named after
+I<output-cdb> with C<.data> appended will be created in the same directory
+and used to stage the database contents.  The actual CDB file will be
+built using the B<cdb> command, which must be on the user's path.  If
+either file already exists, B<krb5-strength-wordlist> will abort with an
+error.
+
+This option cannot be used with B<-o> or B<-s>.
+
+=item B<-L> I<maximum>, B<--max-length>=I<maximum>
+
+Filter all words of length greater than I<maximum> from the resulting cdb
+database.  The length of each line (minus the separating newline) in the
+input word list will be checked against I<minimum> and will be filtered
+out of the resulting database if it is shorter.  Useful for generating
+password dictionaries from word lists that contain random noise that's
+highly unlikely to be used as a password.
+
+The default is to not filter out any words for maximum length.
+
+=item B<-l> I<minimum>, B<--min-length>=I<minimum>
+
+Filter all words of length less than I<minimum> from the resulting cdb
+database.  The length of each line (minus the separating newline) in the
+input word list will be checked against I<minimum> and will be filtered
+out of the resulting database if it is shorter.  Useful for generating
+password dictionaries where shorter passwords will be rejected by a
+generic length check and no dictionary lookup will be done for a transform
+of the password shorter than the specified minimum.
+
+The default is not to filter out any words for minimum length.
+
+=item B<-m>, B<--man>, B<--manual>
+
+Print out this documentation (which is done simply by feeding the script to
+C<perldoc -t>).
+
+=item B<-o> I<wordlist>, B<--output>=I<wordlist>
+
+Rather than creating a database, apply the filter rules given by the other
+command-line arguments and generate a new word list in the file name given
+by the I<wordlist> option.  This can be used to reduce the size of a raw
+word list file (such as one taken from Internet sources) by removing the
+words that will be filtered out of the dictionary anyway, thus reducing
+the size of the source required to regenerate the dictionary.
+
+This option cannot be used with B<-c> or B<-s>.
+
+=item B<-s> I<output-sqlite>, B<--sqlite>=I<output-sqlite>
+
+Create a SQLite database in I<output-sqlite>.  If this file already
+exists, B<krb5-strength-wordlist> will abort with an error.  The resulting
+SQLite database will have one table, C<passwords>, with two columns,
+C<password> and C<drowssap>.  The first holds a word from the word list,
+and the second holds the same word reversed.
+
+Using this option requires the DBI and DBD::SQLite Perl modules be
+installed.
+
+This option cannot be used with B<-c> or B<-o>.
+
+=item B<-x> I<exclude>, B<--exclude>=I<exclude>
+
+Filter all words matching the regular expression I<exclude> from the
+resulting cdb database.  This regular expression will be matched against
+each line of the source word list after the trailing newline is removed.
+This option may be given repeatedly to add multiple exclusion regexes.
+
+=back
+
+=head1 AUTHOR
+
+Russ Allbery <eagle@eyrie.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2016 Russ Allbery <eagle@eyrie.org>
+
+Copyright 2013, 2014 The Board of Trustees of the Leland Stanford Junior
+University
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+=head1 SEE ALSO
+
+cdb(1), L<DBI>, L<DBD::SQLite>
+
+The cdb file format is defined at L<http://cr.yp.to/cdb.html>.
+
+The current version of this program is available from its web page at
+L<https://www.eyrie.org/~eagle/software/krb5-strength/> as part of the
+krb5-strength package.
+
+=cut

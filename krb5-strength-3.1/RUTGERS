@@ -1,0 +1,24 @@
+This is a somewht modify version of the Stanford code.
+Changes are in plugin/general.c and plugin/sqlite.c
+
+The changes simplify the operation. The iitial code makes lots of checks.
+I want it to follow NIST rules. The only checks are
+* at least 10 chars
+* not in our database of 1000000 passwords.
+
+The change to general.c removes all tests except that.
+The change in sqlite.c changes a complex set of SQL queries to simply
+  asking whether the password is in the database.
+
+The result is plugin/.libs/strength.so. That goes to 
+/usr/local/libexec/strength.so, which is configured in /etc/krb5.conf
+
+The database is /usr/local/etc/strengthcheck.sqlite.  That is
+built here in the tools directory.
+
+./krb5-strength-wordlist -s strengthcheck.sqlite -l 10 top1000000
+
+strengthcheck.sqlite then has to be copied to /usr/local/etc. The -l 10 
+option causes it to omit passwords shorter than 10 chars, since those
+will never match.
+

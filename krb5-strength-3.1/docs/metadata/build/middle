@@ -1,0 +1,21 @@
+By default, the Heimdal external password check function is installed as
+`/usr/local/bin/heimdal-strength`, and the plugin is installed as
+`/usr/local/lib/krb5/plugins/pwqual/strength.so`.  You can change these
+paths with the `--prefix`, `--libdir`, and `--bindir` options to
+configure.
+
+By default, the embedded version of CrackLib will be used.  To build with
+the system version of CrackLib, pass `--with-cracklib` to configure.  You
+can optionally add a directory, giving the root directory where CrackLib
+was installed, or separately set the include and library path with
+`--with-cracklib-include` and `--with-cracklib-lib`.
+
+krb5-strength will automatically build with TinyCDB if it is found.  To
+specify the installation path of TinyCDB, use `--with-tinycdb`.  You can
+also separately set the include and library path with
+`--with-tinycdb-include` and `--with-tinycdb-lib`.
+
+Similarly, krb5-strength will automatically build with SQLite if it is
+found.  To specify the installation path of SQLite, use `--with-sqlite`.
+You can also separately set the include and library path with
+`--with-sqlite-include` and `--with-sqlite-lib`.

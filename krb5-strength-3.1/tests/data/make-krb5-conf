@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# Generate a krb5.conf file with an [appdefault] krb5-strength section that
+# contains all the key/value pairs given on the command line.  This script is
+# used by C tests to set up the environment.
+#
+# Written by Russ Allbery <eagle@eyrie.org>
+# Copyright 2009, 2013
+#     The Board of Trustees of the Leland Stanford Junior University
+#
+# See LICENSE for licensing terms.
+
+set -e
+
+# Command-line arguments are the source krb5.conf template, the directory into
+# which to write the resulting krb5.conf file, and then any number of key and
+# value pairs to put into krb5.conf.
+source="$1"
+tmpdir="$2"
+if [ -z "$tmpdir" ] ; then
+    echo 'Syntax: make-krb5-conf <source> <tmpdir> <key> <value> ...' >&2
+    exit 1
+fi
+shift
+shift
+
+# Copy over the template and ensure it's writable.
+cp "$source" "$tmpdir"/krb5.conf
+chmod 644 "$tmpdir"/krb5.conf
+
+# Add the appdefaults section.
+cat <<EOF >>"$tmpdir"/krb5.conf
+
+[appdefaults]
+    krb5-strength = {
+EOF
+
+# Add the key-value pairs.
+while [ -n "$1" ] ; do
+    echo "        $1 = $2" >>"$tmpdir"/krb5.conf
+    shift
+    shift
+done
+
+# End the appdefaults section.
+echo '    }' >>"$tmpdir"/krb5.conf
+
+# Done.
+exit 0

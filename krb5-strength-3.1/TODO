@@ -1,0 +1,19 @@
+                         krb5-strength To-Do List
+
+ * Update to CrackLib 2.9, which is currently shipped in Debian.  This
+   requires testing to confirm that the on-disk data format is still the
+   same.
+
+ * Feed back modifications to CrackLib to allow a program to use a custom
+   set of rules, which would allow us to stop embedding our own copy of
+   CrackLib customized to add additional rules.
+
+ * Do something useful with errors when parsing numeric arguments from
+   krb5.conf configuration or failing to allocate memory when getting
+   string arguments.
+
+ * Use the realm of the principal changing its password to determine the
+   krb5.conf configuration rather than always using the default realm.
+
+ * Refactor the tests for configuration errors in the heimdal-strength
+   test suite into JSON.

@@ -1,0 +1,919 @@
+#!/usr/bin/perl
+#
+# Password history via Heimdal external strength checking.
+#
+# This script is meant to be called via the Heimdal external password strength
+# checking interface and maintains per-user password history.  Password
+# history is stored as Crypt::PBKDF2 hashes with random salt for each
+# password.
+
+##############################################################################
+# Declarations and configuration
+##############################################################################
+
+require 5.010;
+use autodie;
+use strict;
+use warnings;
+
+use DB_File::Lock;
+use Crypt::PBKDF2;
+use Fcntl qw(O_CREAT O_RDWR);
+use File::Basename qw(basename);
+use Getopt::Long::Descriptive qw(describe_options);
+use IPC::Run qw(run);
+use JSON qw(encode_json decode_json);
+use POSIX qw(setgid setuid);
+use Readonly;
+use Sys::Syslog qw(openlog syslog LOG_AUTH LOG_INFO LOG_WARNING);
+
+# The most convenient interface to Berkeley DB files is ties.
+## no critic (Miscellanea::ProhibitTies)
+
+# The number of PBKDF2 iterations to use when hashing passwords.  This number
+# should be chosen so as to force the hash operation to take approximately 0.1
+# seconds on current hardware.
+Readonly my $HASH_ITERATIONS => 14592;
+
+# Path to the history database.  Currently, this must be a Berkeley DB file in
+# the old DB_HASH format.  Keys will be principal names, and values will be a
+# JSON array of hashes.  Each hash will have two keys: timestamp, which holds
+# the seconds since UNIX epoch at which the history entry was stored, and
+# hash, which holds the Crypt::PBKDF2 LDAP-style password hash.
+Readonly my $HISTORY_PATH => '/var/lib/heimdal-history/history.db';
+
+# User and group used to do all password history lookups and writes, assuming
+# that this program is invoked as root and can therefore change UID and GID.
+Readonly my $HISTORY_USER  => '_history';
+Readonly my $HISTORY_GROUP => '_history';
+
+# Path to the Berkeley DB file (DB_HASH format) that stores statistics on
+# password length of accepted passwords.  Each successful password validation
+# will increase the counter for that length.  This is read and written with
+# $HISTORY_USER and $HISTORY_GROUP.
+Readonly my $LENGTH_STATS_PATH => '/var/lib/heimdal-history/lengths.db';
+
+# The message to return to the user if we reject the password because it was
+# found in the user's history.
+Readonly my $REJECT_MESSAGE => 'Password was previously used';
+
+# The path to the external strength checking program to run.  This is done
+# first before checking history, and if it fails, that failure is returned as
+# the failure for this program.
+Readonly my $STRENGTH_PROGRAM => '/usr/bin/heimdal-strength';
+
+# User and group used to do password strength checking.  Generally, this
+# doesn't require any privileges since the strength dictionary is
+# world-readable.
+Readonly my $STRENGTH_USER  => 'nobody';
+Readonly my $STRENGTH_GROUP => 'nogroup';
+
+# Global boolean variable saying whether to log with syslog.  This is set
+# based on the presence of the -q (--quiet) command-line option.
+my $SYSLOG = 1;
+
+##############################################################################
+# Utility functions
+##############################################################################
+
+# Change real and effective UID and GID to those for the given user and group.
+# Does nothing if not running as root.
+#
+# $user  - User to change the UID to
+# $group - Group to change the GID to (and clear all supplemental groups)
+#
+# Returns: undef
+#  Throws: Text exception on any failure
+sub drop_privileges {
+    my ($user, $group) = @_;
+
+    # If running as root, drop privileges.  Fail if we can't get the UID and
+    # GID corresponding to our users.
+    if ($> == 0 || $< == 0) {
+        my $uid = getpwnam($user)
+          or die "$0: cannot get UID for $user\n";
+        my $gid = getgrnam($group)
+          or die "$0: cannot get GID for $group\n";
+        setgid($gid) or die "$0: cannot setgid to $gid: $!\n";
+        setuid($uid) or die "$0: cannot setuid to $uid: $!\n";
+        if ($> == 0 || $< == 0) {
+            die "$0: failed to drop permissions\n";
+        }
+    }
+    return;
+}
+
+##############################################################################
+# Logging
+##############################################################################
+
+# Given a list of keys and values for a log message as a hash reference,
+# return in encoded format following our logging protocol.  The log format is
+# a set of <key>=<value> parameters separated by a space.  Values containing
+# whitespace are quoted with double quotes, with any internal double quotes
+# doubled.
+#
+# Here also is defined a custom sort order for the encoded key/value pairs to
+# keep them in a reasonable order for a human to read.
+#
+# $params_ref - Reference to a hash of key/value pairs
+#
+# Returns: The encoded format as a string
+sub encode_log_message {
+    my ($params_ref) = @_;
+
+    # Define the custom sort order for keys.
+    my $order = 1;
+    my %order
+      = map { $_ => $order++ } qw(action principal error result reason);
+
+    # Build the message from the parameters.
+    my $message;
+    for my $key (sort { $order{$a} <=> $order{$b} } keys %{$params_ref}) {
+        my $value = $params_ref->{$key};
+        $value =~ s{ \" }{\"\"}xmsg;
+        if ($value =~ m{ [ \"] }xms) {
+            $value = qq{"$value"};
+        }
+        $message .= qq{$key=$value };
+    }
+    chomp($message);
+    return $message;
+}
+
+# Log a non-fatal error encountered while trying to check or store password
+# history.  This is used for errors where the password is accepted, but we ran
+# into some anomalous event such as corrupted history data that should be
+# drawn to the attention of an administrator.  The log format is a set of
+# <key>=<value> parameters, with the following keys:
+#
+# - action:    the action performed (currently always "check")
+# - principal: the principal to check a password for
+# - error:     an error message explaining the anomalous situation
+#
+# Values containing whitespace are quoted with double quotes, with any
+# internal double quotes doubled.  No logging will be done if $SYSLOG is
+# false.
+#
+# $principal - Principal for which we checked a password
+# $error     - The error message
+#
+# Returns: undef
+sub log_error {
+    my ($principal, $error) = @_;
+    if (!$SYSLOG) {
+        return;
+    }
+    my $message = encode_log_message(
+        action    => 'check',
+        principal => $principal,
+        error     => $error,
+    );
+    syslog(LOG_WARNING, '%s', $message);
+    return;
+}
+
+# Log the disposition of a particular password strength checking request.  All
+# log messages are logged through syslog at class info.  The log format is a
+# set of <key>=<value> parameters, with the following keys:
+#
+# - action:    the action performed (currently always "check")
+# - principal: the principal to check a password for
+# - result:    either "accepted" or "rejected"
+# - reason:    the reason for a rejection
+#
+# Values containing whitespace are quoted with double quotes, with any
+# internal double quotes doubled.  No logging will be done if $SYSLOG is
+# false.
+#
+# $principal - Principal for which we checked a password
+# $result    - "accepted" or "rejected" per above
+# $reason    - On rejection, the reason
+#
+# Returns: undef
+sub log_result {
+    my ($principal, $result, $reason) = @_;
+    if (!$SYSLOG) {
+        return;
+    }
+
+    # Create the message.
+    my %message = (
+        action    => 'check',
+        principal => $principal,
+        result    => $result,
+    );
+    if ($result eq 'rejected' && defined($reason)) {
+        $message{reason} = $reason;
+    }
+    my $message = encode_log_message(\%message);
+
+    # Log the message.
+    syslog(LOG_INFO, '%s', $message);
+    return;
+}
+
+##############################################################################
+# Crypto
+##############################################################################
+
+# Given a password, return the hash for that password.  Hashing is done with
+# PBKDF2 using SHA-2 as the underlying hash function.  As of version 0.133330,
+# this uses SHA-256.
+#
+# $password   - Password to hash
+# $iterations - Optional iteration count, defaulting to $HASH_ITERATIONS
+#
+# Returns: Hash encoded in the LDAP-compatible Crypt::PBKDF2 format
+sub password_hash {
+    my ($password, $iterations) = @_;
+    $iterations //= $HASH_ITERATIONS;
+    my $hasher = Crypt::PBKDF2->new(
+        hash_class => 'HMACSHA2',
+        iterations => $iterations,
+    );
+    return $hasher->generate($password);
+}
+
+# Given a password and the password history for the user as a reference to a
+# array, check whether that password is found in the history.  The history
+# array is expected to contain anonymous hashes.  The only key of interest is
+# the "hash" key, whose value is expected to be a hash in the LDAP-compatible
+# Crypt::PBKDF2 format.
+#
+# Invalid history entries are ignored for the purposes of this check and
+# treated as if the entry did not exist.
+#
+# $principal   - Principal to check (solely for logging purposes)
+# $password    - Password to check
+# $history_ref - Reference to array of anonymous hashes with "hash" keys
+#
+# Returns: True if the password matches one of the history hashes, false
+#          otherwise
+sub is_in_history {
+    my ($principal, $password, $history_ref) = @_;
+    my $hasher = Crypt::PBKDF2->new(hash_class => 'HMACSHA2');
+
+    # Walk the history looking at each hash key.
+    for my $entry (@{$history_ref}) {
+        my $hash = $entry->{hash};
+        next if !defined($hash);
+
+        # validate throws an exception if the hash is in an invalid format.
+        # Treat that case the same as a miss, but log it.
+        if (eval { $hasher->validate($hash, $password) }) {
+            return 1;
+        } elsif ($@) {
+            log_error($principal, "hash validate failed: $@");
+        }
+    }
+
+    # No match.
+    return;
+}
+
+##############################################################################
+# Benchmarking
+##############################################################################
+
+# Perform a binary search for a number of hash iterations that makes password
+# hashing take the given target time on the current system.
+#
+# Assumptions:
+#
+# * The system load is low enough that this benchmark result is meaningful
+#   and not heavily influenced by other programs running on the system.  The
+#   binary search may be unstable if the system load is too variable.
+#
+# * The static "password" string used for benchmarking will exhibit similar
+#   performance to the statistically average password.
+#
+# Information about the iteration search process is printed to standard output
+# while the search runs.
+#
+# $target - The elapsed time, in real seconds, we're aiming for
+# $delta  - The permissible delta around the target time
+#
+# Returns: The number of hash iterations with that performance characteristic
+#  Throws: Text exception on failure to write to standard output
+sub find_iteration_count {
+    my ($target, $delta) = @_;
+    my $high = 0;
+    my $low  = 0;
+
+    # A static password to use for benchmarking.
+    my $password = 'this is a benchmark';
+
+    # Start at the current configured iteration count.  If this doesn't take
+    # long enough, it becomes the new low mark and we try double that
+    # iteration count.  Otherwise, do binary search.
+    #
+    # We time twenty iterations each time, chosen because it avoids the
+    # warnings from Benchmark about too few iterations for a reliable count.
+    require Benchmark;
+    my $iterations = $HASH_ITERATIONS;
+    while (1) {
+        my $hash = sub { password_hash($password, $iterations) };
+        my $times = Benchmark::timethis(20, $hash, q{}, 'none');
+
+        # Extract the CPU time from the formatted time string.  This will be
+        # the total time for all of the iterations, so divide by the iteration
+        # count to recover the time per iteration.
+        my $report = Benchmark::timestr($times);
+        my ($time) = ($report =~ m{ ([\d.]+) [ ] CPU }xms);
+        $time = $time / 20;
+
+        # Tell the user what we discovered.
+        say {*STDOUT} "Performing $iterations iterations takes $time seconds"
+          or die "$0: cannot write to standard output: $!\n";
+
+        # If this is what we're looking for, we're done.
+        if (abs($time - $target) < $delta) {
+            last;
+        }
+
+        # Determine the new iteration target.
+        if ($time > $target) {
+            $high = $iterations;
+        } else {
+            $low = $iterations;
+        }
+        if ($time < $target && $high == 0) {
+            $iterations = $iterations * 2;
+        } else {
+            $iterations = int(($high + $low) / 2);
+        }
+    }
+
+    # Report the result and return it.
+    say {*STDOUT} "Use $iterations iterations"
+      or die "$0: cannot write to standard output: $!\n";
+    return $iterations;
+}
+
+##############################################################################
+# Database
+##############################################################################
+
+# Given a principal and a password, determine whether the password was found
+# in the password history for that user.
+#
+# $path      - Path to the history file
+# $principal - Principal for which to check history
+# $password  - Check history for this password
+#
+# Returns: True if $password is found in history, false otherwise
+#  Throws: On failure to open, lock, or tie the database
+sub check_history {
+    my ($path, $principal, $password) = @_;
+
+    # Open and lock the database and retrieve the history for the user.
+    # We have to lock for write so that we can create the database if it
+    # doesn't already exist.  Password change should be infrequent enough
+    # and our window is fast enough that it shouldn't matter.  We do this
+    # in a separate scope so that the history hash goes out of scope and
+    # is freed and unlocked.
+    my $history_json;
+    {
+        my %history;
+        my $mode = O_CREAT | O_RDWR;
+        tie(%history, 'DB_File::Lock', $path, $mode, oct(600), $DB_HASH,
+            'write')
+          or die "$0: cannot open $path: $!\n";
+        $history_json = $history{$principal};
+    }
+
+    # If there is no history for the user, return the trivial false.
+    if (!defined($history_json)) {
+        return;
+    }
+
+    # Decode history from JSON.  If this fails (corrupt history), treat it as
+    # if the user has no history, but log the error message.
+    my $history_ref = eval { decode_json($history_json) };
+    if (!defined($history_ref)) {
+        log_error($principal, "history JSON decoding failed: $@");
+        return;
+    }
+
+    # Finally, check the password against the hashes in history.
+    return is_in_history($principal, $password, $history_ref);
+}
+
+# Write a new history entry to the database given the principal and the
+# password to record.  History records are stored as JSON arrays of objects,
+# with keys "timestamp" and "hash".
+#
+# $path      - Path to the history file
+# $principal - Principal for which to check history
+# $password  - Check history for this password
+#
+# Returns: undef
+#  Throws: On failure to open, lock, or tie the database
+sub write_history {
+    my ($path, $principal, $password) = @_;
+
+    # Open and lock the database for write.
+    my %history;
+    my $mode = O_CREAT | O_RDWR;
+    tie(%history, 'DB_File::Lock', $path, $mode, oct(600), $DB_HASH, 'write')
+      or die "$0: cannot open $path: $!\n";
+
+    # Read the existing history.  If the existing history is corrupt, treat
+    # that as equivalent to not having any history, but log an error.
+    my $history_json = $history{$principal};
+    my $history_ref;
+    if (defined($history_json)) {
+        $history_ref = eval { decode_json($history_json) };
+        if ($@) {
+            log_error($principal, "history JSON decoding failed: $@");
+        }
+    }
+    if (!defined($history_ref)) {
+        $history_ref = [];
+    }
+
+    # Add a new history entry.
+    my $entry = { timestamp => time(), hash => password_hash($password) };
+    unshift(@{$history_ref}, $entry);
+
+    # Store the encoded data back in the history database.
+    $history{$principal} = encode_json($history_ref);
+
+    # The database is closed and unlocked when %history goes out of scope.
+    # Unfortunately, we lose on error detection here, since there doesn't
+    # appear to be a way to determine whether all the writes succeeded.  But
+    # losing a bit of history in the rare error case of failing to write to
+    # local disk is probably not a big deal.
+    return;
+}
+
+# Write statistics about password length.  Given the length of the password
+# and the path to the length statistics database, increments the counter for
+# that password length.
+#
+# Any failure to open or write to the database is ignored, since this is
+# considered optional logging and should not block the password change.
+#
+# $path   - Path to the length statistics file
+# $length - Length of the accepted password
+#
+# Returns: undef
+sub update_length_counts {
+    my ($path, $length) = @_;
+
+    # Open and lock the database for write.
+    my %lengths;
+    my $mode = O_CREAT | O_RDWR;
+    tie(%lengths, 'DB_File::Lock', $path, $mode, oct(600), $DB_HASH, 'write')
+      or return;
+
+    # Write each of the hashes.
+    $lengths{$length}++;
+
+    # The database is closed and unlocked when %lengths goes out of scope.
+    return;
+}
+
+##############################################################################
+# Heimdal password quality protocol
+##############################################################################
+
+# Run another external password quality checker and return the results.  This
+# allows us to chain to another program that handles the actual strength
+# checking prior to handling history.
+#
+# $path      - Password quality check program to run
+# $principal - Principal attempting to change their password
+# $password  - The new password
+#
+# Returns: Scalar context: true if the password was accepted, false otherwise
+#          List context: whether the password is okay, the exit status of the
+#            quality checking program, and the error message if the first
+#            element is false
+#  Throws: Text exception on failure to execute the program, or read or write
+#          from it or to it, or if it fails without an error
+sub strength_check {
+    my ($path, $principal, $password) = @_;
+
+    # Run the external quality checking program.  If we're root, we'll run it
+    # as the strength checking user and group.
+    my $in = "principal: $principal\nnew-password: $password\nend\n";
+    my $init = sub { drop_privileges($STRENGTH_USER, $STRENGTH_GROUP) };
+    my ($out, $err);
+    run([$path, $principal], \$in, \$out, \$err, init => $init);
+    my $status = ($? >> 8);
+
+    # Check the results.
+    my $okay = ($status == 0 && $out eq "APPROVED\n");
+
+    # If the program failed, collect the error message.
+    if (!$okay) {
+        if ($err) {
+            $err =~ s{ \n .* }{}xms;
+        } else {
+            die "$0: password strength checking failed without an error\n";
+        }
+    }
+
+    # Return the results.
+    return wantarray ? ($okay, $err, $status) : $okay;
+}
+
+# Read a Heimdal external password quality checking request from the provided
+# file handle and return the principal (ignored for our application) and the
+# password.
+#
+# The protocol expects the following data (without leading whitespace) on
+# standard input, in precisely this order:
+#
+#     principal: <principal>
+#     new-password: <password>
+#     end
+#
+# There is one and only one space after the colon, and any subsequent spaces
+# are part of the value (such as leading spaces in the password).
+#
+# $fh - File handle from which to read
+#
+# Returns: Scalar context: the password
+#          List context: a list of the password and the principal
+#  Throws: Text exception on any protocol violations or IO errors
+sub read_change_data {
+    my ($fh) = @_;
+    my @keys = qw(principal new-password);
+    my %data;
+
+    # Read the data elements we expect.  Verify that they come in the correct
+    # order and the correct format.
+    local $/ = "\n";
+    for my $key (@keys) {
+        my $line = readline($fh);
+        if (!defined($line)) {
+            die "$0: truncated input before $key: $!\n";
+        }
+        chomp($line);
+        if ($line =~ s{ \A \Q$key\E : [ ] }{}xms) {
+            $data{$key} = $line;
+        } else {
+            die "$0: unrecognized input line before $key\n";
+        }
+    }
+
+    # The final line of input must be a literal "end\n";
+    my $line = readline($fh);
+    if (!defined($line)) {
+        die "$0: truncated input before end: $!\n";
+    } elsif ($line ne "end\n") {
+        die "$0: unrecognized input line before end\n";
+    }
+
+    # Return the results.
+    my $password  = $data{'new-password'};
+    my $principal = $data{principal};
+    return wantarray ? ($password, $principal) : $password;
+}
+
+##############################################################################
+# Main routine
+##############################################################################
+
+# Always flush output.
+STDOUT->autoflush;
+
+# Clean up the script name for error reporting.
+my $fullpath = $0;
+local $0 = basename($0);
+
+# Parse the argument list.
+my ($opt, $usage) = describe_options(
+    '%c %o',
+    ['benchmark|b=f', 'Benchmark hash iterations for this target time'],
+    ['database|d=s',  'Path to the history database, overriding the default'],
+    ['help|h',        'Print usage message and exit'],
+    ['manual|man|m',  'Print full manual and exit'],
+    ['quiet|q',       'Suppress logging to syslog'],
+    ['stats|S=s',     'Path to hash of length statistics'],
+    ['strength|s=s',  'Path to strength checking program to run'],
+);
+if ($opt->help) {
+    print {*STDOUT} $usage->text
+      or die "$0: cannot write to standard output: $!\n";
+    exit(0);
+} elsif ($opt->manual) {
+    say {*STDOUT} 'Feeding myself to perldoc, please wait...'
+      or die "$0: cannot write to standard output: $!\n";
+    exec('perldoc', '-t', $fullpath);
+}
+my $database = $opt->database || $HISTORY_PATH;
+my $stats_db = $opt->stats    || $LENGTH_STATS_PATH;
+my $strength = $opt->strength || $STRENGTH_PROGRAM;
+
+# If asked to do benchmarking, ignore other arguments and just do that.
+# Currently, we hard-code a 0.005-second granularity on our binary search.
+if ($opt->benchmark) {
+    find_iteration_count($opt->benchmark, 0.005);
+    exit(0);
+}
+
+# Open syslog for result reporting.
+if ($opt->quiet) {
+    $SYSLOG = 0;
+} else {
+    openlog($0, 'pid', LOG_AUTH);
+}
+
+# Read the principal and password that we're supposed to check.
+my ($password, $principal) = read_change_data(\*STDIN);
+
+# Delegate to the external strength checking program.
+my ($okay, $error, $status) = strength_check($strength, $principal, $password);
+if (!$okay) {
+    log_result($principal, 'rejected', $error);
+    warn "$error\n";
+    exit($status);
+}
+
+# Drop privileges for the rest of the program.
+drop_privileges($HISTORY_USER, $HISTORY_GROUP);
+
+# Hash the password and check history.  Exit if a hash is in history.
+if (check_history($database, $principal, $password)) {
+    log_result($principal, 'rejected', $REJECT_MESSAGE);
+    warn "$REJECT_MESSAGE\n";
+    exit(0);
+}
+
+# The password is accepted.  Record it, update the length counter, and return
+# success.
+log_result($principal, 'accepted');
+write_history($database, $principal, $password);
+say {*STDOUT} 'APPROVED'
+  or die "$0: cannot write to standard output: $!\n";
+update_length_counts($stats_db, length($password));
+exit(0);
+
+__END__
+
+##############################################################################
+# Documentation
+##############################################################################
+
+=for stopwords
+heimdal-history heimdal-strength Heimdal -hmq BerkeleyDB timestamps POSIX
+whitespace API Allbery sublicense MERCHANTABILITY NONINFRINGEMENT syslog
+pseudorandom JSON LDAP-compatible PBKDF2 SHA-256 KDC
+
+=head1 NAME
+
+heimdal-history - Password history via Heimdal external strength checking
+
+=head1 SYNOPSIS
+
+B<heimdal-history> [B<-hmq>] [B<-b> I<target-time>] [B<-d> I<database>]
+    [B<-S> I<length-stats-db>] [B<-s> I<strength-program>] [B<principal>]
+
+=head1 DESCRIPTION
+
+B<heimdal-history> is an implementation of password history via the
+Heimdal external password strength checking interface.  It stores separate
+history for each principal, hashed using Crypt::PBKDF2 with
+randomly-generated salt.  (The randomness is from a weak pseudorandom
+number generator, not strongly random.)
+
+Password history is stored in a BerkeleyDB DB_HASH file.  The key is the
+principal.  The value is a JSON array of objects, each of which has two
+keys.  C<timestamp> contains the time when the history entry was added (in
+POSIX seconds since UNIX epoch), and C<hash> contains the hash of a
+previously-used password in the Crypt::PBKDF2 LDAP-compatible format.
+Passwords are hashed using PBKDF2 (from PKCS#5) with SHA-256 as the
+underlying hash function using a number of rounds configured in this
+script.  See L<Crypt::PBKDF2> for more information.
+
+B<heimdal-history> also checks password strength before checking history.
+It does so by invoking another program that also uses the Heimdal external
+password strength checking interface.  By default, it runs
+B</usr/bin/heimdal-strength>.  Only if that program approves the password
+does it hash it and check history.
+
+For more information on how to set up password history, see
+L</CONFIGURATION> below.
+
+As with any implementation of the Heimdal external password strength
+checking protocol, B<heimdal-history> expects, on standard input:
+
+    principal: <principal>
+    new-password: <password>
+    end
+
+(with no leading whitespace).  <principal> is the principal changing its
+password (passed to the other password strength checking program but
+otherwise unused here), and <password> is the new password.  There must
+be exactly one space after the colon.  Any subsequent spaces are taken to
+be part of the principal or password.
+
+If invoked as root, B<heimdal-history> will run the external strength
+checking program as user C<nobody> and group C<nogroup>, and will check
+and write to the history database as user C<_history> and group
+C<_history>.  These users must exist on the system if it is run as root.
+
+The result of each password check will be logged to syslog (priority
+LOG_INFO, facility LOG_AUTH).  Each log line will be a set of key/value
+pairs in the format C<< I<key>=I<value> >>.  The keys are:
+
+=over 4
+
+=item action
+
+The action performed (currently always C<check>).
+
+=item principal
+
+The principal for which a password was checked.
+
+=item error
+
+An internal error message that did not stop the history check, but which
+may indicate that something is wrong with the history database (such as
+corrupted entries or invalid hashes).  If this key is present, neither
+C<result> nor C<reason> will be present.  There will be a subsequent log
+message from the same invocation giving the final result of the history
+check (assuming B<heimdal-history> doesn't exit with a fatal error).
+
+=item result
+
+Either C<accepted> or C<rejected>.
+
+=item reason
+
+If the password was rejected, the reason for the rejection.
+
+=back
+
+The value will be surrounded with double quotes if it contains a double
+quote or space.  Any double quotes in the value will be doubled, so C<">
+becomes C<"">.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-b> I<target-time>, B<--benchmark>=I<target-time>
+
+Do not do a password history check.  Instead, benchmark the hash algorithm
+with various possible iteration counts and find an iteration count that
+results in I<target-time> seconds of computation time required to hash a
+password (which should be a real number).  A result will be considered
+acceptable if it is within 0.005 seconds of the target time.  The results
+will be printed to standard output and then B<heimdal-history> will exit
+successfully.
+
+=item B<-d> I<database>, B<--database>=I<database>
+
+Use I<database> as the history database file instead of the default
+(F</var/lib/heimdal-history/history.db>).  Primarily used for testing,
+since Heimdal won't pass this argument.
+
+=item B<-h>, B<--help>
+
+Print a short usage message and exit.
+
+=item B<-m>, B<--manual>, B<--man>
+
+Display this manual and exit.
+
+=item B<-q>, B<--quiet>
+
+Suppress logging to syslog and only return the results on standard output
+and standard error.  Primarily used for testing, since Heimdal won't pass
+this argument.
+
+=item B<-S> I<length-stats-db>, B<--stats>=I<length-stats-db>
+
+Use I<length-stats-db> as the database file for password length statistics
+instead of the default (F</var/lib/heimdal-history/lengths.db>).
+Primarily used for testing, since Heimdal won't pass this argument.
+
+=item B<-s> I<strength-program>, B<--strength>=I<strength-program>
+
+Run I<strength-program> as the external strength-checking program instead
+of the default (F</usr/bin/heimdal-strength>).  Primarily used for
+testing, since Heimdal won't pass this argument.
+
+=back
+
+=head1 CONFIGURATION
+
+Additional setup is required to use this history implementation with your
+Heimdal KDC.
+
+First, ensure that its dependencies are installed, and then examine the
+local configuration settings at the top of the B<heimdal-history> program.
+By default, it requires a C<_history> user and C<_history> group be
+present on the system, and all history information will be read and
+written as that user and group.  It also requires a C<nobody> user and
+C<nogroup> group to be present (this should be the default with most
+variants of UNIX), and all strength checking will be done as that user and
+group.  It uses various files in F</var/lib/heimdal-history> to store
+history and statistical information by default, so if using the defaults,
+create that directory and ensure it is writable by the C<_history> user.
+
+Once that setup is done, change your C<[password_quality]> configuration
+in F<krb5.conf> or F<kdc.conf> to:
+
+    [password_quality]
+        policies         = external-check
+        external_program = /usr/local/bin/heimdal-history
+
+The B<heimdal-history> program will automatically also run
+B<heimdal-strength> as well, looking for it in F</usr/bin>.  Change the
+C<$STRENGTH_PROGRAM> setting at the top of the script if you have that
+program in a different location.  You should continue to configure
+B<heimdal-strength> as if you were running it directly.
+
+=head1 RETURN STATUS
+
+On approval of the password, B<heimdal-history> will print C<APPROVED> and
+a newline to standard output and exit with status 0.
+
+If the password is rejected by the strength checking program or if it (or
+a version with a single character removed) matches one of the hashes stored
+in the password history, B<heimdal-history> will print the reason for
+rejection to standard error and exit with status 0.
+
+On any internal error, B<heimdal-history> will print the error to standard
+error and exit with a non-zero status.
+
+=head1 FILES
+
+=over 4
+
+=item F</usr/bin/heimdal-strength>
+
+The default password strength checking program.  This program must follow
+the Heimdal external password strength checking API.
+
+=item F</var/lib/heimdal-history/history.db>
+
+The default database path.  If B<heimdal-strength> is run as root, this
+file needs to be readable and writable by user C<_history> and group
+C<_history>.  If it doesn't exist, it will be created with mode 0600.
+
+=item F</var/lib/heimdal-history/history.db.lock>
+
+The lock file used to synchronize access to the history database.  As with
+the history database, if B<heimdal-strength> is run as root, this file
+needs to be readable and writable by user C<_history> and group
+C<_history>.
+
+=item F</var/lib/heimdal-history/lengths.db>
+
+The default length statistics path, which will be a BerkeleyDB DB_HASH
+file of password lengths to counts of passwords with that length.  If
+B<heimdal-strength> is run as root, this file needs to be readable and
+writable by user C<_history> and group C<_history>.  If it doesn't exist,
+it will be created with mode 0600.
+
+=item F</var/lib/heimdal-history/lengths.db.lock>
+
+The lock file used to synchronize access to the length statistics
+database.  As with the length statistics database, if B<heimdal-strength>
+is run as root, this file needs to be readable and writable by user
+C<_history> and group C<_history>.
+
+=back
+
+=head1 AUTHOR
+
+Russ Allbery <eagle@eyrie.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2016 Russ Allbery <eagle@eyrie.org>
+
+Copyright 2013, 2014 The Board of Trustees of the Leland Stanford Junior
+University
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+=head1 SEE ALSO
+
+L<Crypt::PBKDF2>, L<heimdal-strength(1)>
+
+=cut

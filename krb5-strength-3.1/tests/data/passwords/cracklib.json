@@ -1,0 +1,91 @@
+[
+    {
+        "name": "good password",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "known good password",
+        "code": 0
+    },
+    {
+        "name": "in dictionary",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "password",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is based on a dictionary word"
+    },
+    {
+        "name": "in dictionary (longer)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbane",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is based on a dictionary word"
+    },
+    {
+        "name": "in dictionary (repeated)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "stanfordstanford",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is based on a (duplicated) dictionary word"
+    },
+    {
+        "name": "in dictionary (reversed)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "enabrettib",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is based on a (reversed) dictionary word"
+    },
+    {
+        "name": "seven characters",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "dfareas",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is too short"
+    },
+    {
+        "name": "four characters",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "food",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is too short"
+    },
+    {
+        "name": "three characters",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "foo",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is WAY too short"
+    },
+    {
+        "name": "empty",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is WAY too short"
+    },
+    {
+        "name": "all whitespace",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "  \t  \t\t  ",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it does not contain enough DIFFERENT characters"
+    },
+    {
+        "name": "too simplistic",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "abcdefghi",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it is too simplistic/systematic"
+    },
+    {
+        "name": "not enough characters",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "22413411",
+        "code": "KADM5_PASS_Q_GENERIC",
+        "error": "it does not contain enough DIFFERENT characters"
+    },
+    {
+        "name": "long password complexity",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "OwenDericksegregationistshumiliatemeningitis'smainmast",
+        "code": 0
+    }
+]

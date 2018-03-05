@@ -1,0 +1,174 @@
+[
+    {
+        "name": "no lowercase (11)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "PASSWORD98!",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain a lowercase letter"
+    },
+    {
+        "name": "no uppercase (11)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "password98!",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain an uppercase letter"
+    },
+    {
+        "name": "no digit (11)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX!",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain a number"
+    },
+    {
+        "name": "no symbol (11)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX9",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain a space or punctuation character"
+    },
+    {
+        "name": "all classes (11)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordX9!"
+    },
+    {
+        "name": "all classes with space (11)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "pass wordX9"
+    },
+    {
+        "name": "no lowercase (15)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "PASSWORD98!WORD",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain a lowercase letter"
+    },
+    {
+        "name": "no uppercase (15)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "password98!word",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain an uppercase letter"
+    },
+    {
+        "name": "no digit (15)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX!word",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain a number"
+    },
+    {
+        "name": "no symbol (12)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX9w"
+    },
+    {
+        "name": "no symbol (15)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX9word"
+    },
+    {
+        "name": "all classes (15)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordX9!word"
+    },
+    {
+        "name": "all classes with space (15)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "pass wordX9word"
+    },
+    {
+        "name": "no lowercase (19)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "PASSWORD98!WORDWORD",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain a lowercase letter"
+    },
+    {
+        "name": "no uppercase (19)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "password98!wordword",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain an uppercase letter"
+    },
+    {
+        "name": "no digit (16)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX!wordw"
+    },
+    {
+        "name": "no digit (19)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX!wordword"
+    },
+    {
+        "name": "no symbol (19)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX9wordword"
+    },
+    {
+        "name": "all classes (19)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordX9!wordword"
+    },
+    {
+        "name": "all classes with space (19)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "pass wordX9wordword"
+    },
+    {
+        "name": "no lowercase (20)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "PASSWORD98!WORDWORDW"
+    },
+    {
+        "name": "no uppercase (20)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "password98!wordwordw"
+    },
+    {
+        "name": "no digit (20)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX!wordwordw"
+    },
+    {
+        "name": "no symbol (20)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordXX9wordwordw"
+    },
+    {
+        "name": "all classes (20)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "passwordX9!wordwordw"
+    },
+    {
+        "name": "all classes with space (20)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "pass wordX9wordwordw"
+    },
+    {
+        "name": "only lowercase (24)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "alllowercasewithclassreq",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain 3 types of characters (lowercase, uppercase, numbers, symbols)"
+    },
+    {
+        "name": "lower and uppercase (24)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "LowerUprcasewithclassreq",
+        "code": "KADM5_PASS_Q_CLASS",
+        "error": "Password must contain 3 types of characters (lowercase, uppercase, numbers, symbols)"
+    },
+    {
+        "name": "lower, uppercase, symbols (24)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "LowerUp!casewithclassreq"
+    },
+    {
+        "name": "only lowercase (25)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "alllowercasewithclassreqr"
+    }
+]

@@ -1,0 +1,63 @@
+[
+    {
+        "name": "good password",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "known good password",
+        "code": 0
+    },
+    {
+        "name": "in dictionary",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "password",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (longer)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (drop first)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1bitterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (drop last)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbane1",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (drop first two)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "abbitterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (drop last two)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbane12",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (drop first and last)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "'bitterbane'",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "dictionary with three characters",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbane123",
+        "code": 0
+    }
+]

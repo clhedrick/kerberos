@@ -1,0 +1,69 @@
+For Heimdal, you may use either the external password quality check tool,
+installed as heimdal-strength, or the plugin as you choose.  It has been
+tested with Heimdal 1.2.1 and later, but has not recently been tested with
+versions prior to 1.5.
+
+For MIT Kerberos, version 1.9 or higher is required for the password
+quality plugin interface.  MIT Kerberos does not support an external
+password quality check tool directly, so you will need to install the
+plugin.
+
+You can optionally build against the system CrackLib library.  Any version
+should be supported, but note that some versions, particularly older
+versions close to the original code, do things like printing diagnostics
+to stderr, calling exit, and otherwise not being well-behaved for use
+inside plugins or libraries.  They also have known security
+vulnerabilities.  If using a system CrackLib library, use version 2.8.22
+or later to avoid these problems.
+
+You can also optionally build against the TinyCDB library, which provides
+support for simpler and faster password checking against a CDB dictionary
+file, and the SQLite library (a version new enough to support the
+`sqlite3_open_v2` API; 3.7 should be more than sufficient), which provides
+support for checking whether passwords are within edit distance one of a
+dictionary word.
+
+For this module to be effective for either Heimdal or MIT Kerberos, you
+will also need to construct a dictionary.  The `mkdict` and `packer`
+utilities to build a CrackLib dictionary from a word list are included in
+this toolkit but not installed by default.  You can run them out of the
+`cracklib` directory after building.  You can also use the utilities that
+come with the stock CrackLib package (often already packaged in a Linux
+distribution); the database format is compatible.
+
+For building a CDB or SQLite dictionary, use the provided
+`krb5-strength-wordlist` program.  For CDB dictionries, the `cdb` utility
+must be on your `PATH`.  For SQLite, the DBI and DBD::SQLite Perl modules
+are required.  `krb5-strength-wordlist` requires Perl 5.006 or later.
+
+For a word list to use as source for the dictionary, you can use
+`/usr/share/dict/words` if it's available on your system, but it would be
+better to find a more comprehensive word list.  Since word lists are
+bulky, often covered by murky copyrights, and easily locatable on the
+Internet with a modicum of searching, none are included in this toolkit.
+
+The password history program, heimdal-history, requires Perl 5.010 or
+later plus the following CPAN modules:
+
+* DB_File::Lock
+* Crypt::PBKDF2
+* Getopt::Long::Descriptive
+* IPC::Run
+* JSON
+* Readonly
+
+and their dependencies.
+
+To run the test suite, you will need Perl 5.010 or later and the
+dependencies of the `heimdal-history` program.  The following additional
+Perl modules will also be used by the test suite if present:
+
+* Perl6::Slurp
+* Test::MinimumVersion
+* Test::Perl::Critic
+* Test::Pod
+* Test::Spelling
+* Test::Strict
+
+All are available on CPAN.  Some tests will be skipped if the modules
+are not available.
