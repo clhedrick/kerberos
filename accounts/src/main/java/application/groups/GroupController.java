@@ -326,7 +326,7 @@ public class GroupController {
 	// Get current values of login attributes so we know what to change.
 	// They show up as values of variables in action
 
-	common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + name + "))", "", "member", "host", "businessCategory", "owner"});
+	common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + name + "))", "", "member", "host", "businessCategory", "owner", "creatorsname"});
 
 	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
 	if (subject == null) {
@@ -359,6 +359,15 @@ public class GroupController {
 		oldowners.add(lu.dn2user(m));
 	    }
 	}
+	List<String> creators = attrs.get("creatorsname");
+	if (creators == null)
+	    creators = new ArrayList<String>();
+	List<String> creatorsNames = new ArrayList<String>();
+	for (String m: creators) {
+	    creatorsNames.add(lu.dn2user(m));
+	}
+
+
 	boolean ok = true;
 
 	String user = (String)request.getSession().getAttribute("krb5user");
@@ -408,6 +417,11 @@ public class GroupController {
 
 	if (delowner != null && delowner.size() > 0) {
 
+	    if (oldowners.size() < 2) {
+		messages.add("Can't delete the last owner.");
+		return groupGet(name, request, response, model);	
+	    }
+
 	    for (String d: delowner) {
 		logger.info("ip group-mod " + name + " --delattr=owner=uid=" + filtername(d) + conf.usersuffix);
 		if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--delattr=owner=uid=" + filtername(d) + conf.usersuffix}, env) != 0) {
@@ -421,13 +435,18 @@ public class GroupController {
 
 
 	if (newowner != null) {
+	    boolean first = true;
 	    for (String n: newowner.split("\\s")) {
 		n = n.trim();
 		if (n != null && !n.equals("")) {
 		    String retval;
-		    if (oldowners.contains(n)) {
+		    if (oldowners.size() > 0 && oldowners.contains(n)) {
 			messages.add("User " + n + " is already an owner.");
 			continue;
+		    } else if (oldowners.size() == 0 && creatorsNames.contains(n)) {
+			messages.add("User " + n + " is already an owner.");
+			continue;
+
 		    } else if ((retval = assureUser(messages, request, filtername(n), false)) != null) {
 			// error message already in model
 			if (retval.equals("login"))
@@ -437,6 +456,20 @@ public class GroupController {
 			    continue;
 			}
 		    }
+		    // if we've never modified the group, it will have a creator but no owners
+		    // if we add an owner, we have to put the creator as the first owner. So if there's any
+		    // owner we look at the owners and ignore the creator. Otherwise there's no way to
+		    // delete the original creator from being an owner.
+		    if (first && oldowners.size() == 0 && creators.size() > 0) {
+			for (String c: creators) {
+			    logger.info("ipa group-mod " + name + " --addattr=owner=" + c);
+			    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=owner=" + c}, env) != 0) { 
+				messages.add("Unable to add creator as owner: " + c);
+				return groupGet(name, request, response, model);
+			    }
+			}
+		    }
+		    first = false;
 		    logger.info("ipa group-mod " + name + " --addattr=owner=uid=" + filtername(n) + conf.usersuffix);	     
 		    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=owner=uid=" + filtername(n) + conf.usersuffix}, env) != 0) {
 			messages.add("Unable to add user " + n + " as owner.");

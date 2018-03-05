@@ -114,12 +114,9 @@ Make sure you add at least one member to the group.
 <p> An owner is someone who can make changes to the group. This allows you to
 delegate management of the group to someone else.</p>
 <div th:if="${group['creatorsname'] != null or group['owner'] != null}">
-<span th:if="${group['creatorsname'] != null}" th:text="${membernames.get(group.creatorsname[0])}"/><br/>
-<div th:if="${group['owner'] != null}">
-<div th:each="o: ${group.owner}">
+<div th:each="o: ${(group['owner'] != null) ? (group.owner) : (group.creatorsname)}">
 <c:set var="o" value="${lu.dn2user(odn)}"/>
 <span th:text="${membernames.get(o)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete owner ' + lu.dn2user(o)}" class="deleteOwnerButton"/><input type="hidden" name="deleteOwnerName" th:value="${lu.dn2user(o)}"/><br/>
-</div>
 </div>
 </div>
 
