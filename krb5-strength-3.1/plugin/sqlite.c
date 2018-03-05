@@ -1,0 +1,432 @@
+/*
+ * Check a SQLite database for a password within edit distance one.
+ *
+ * This file implements yet another variation on dictionary lookups.
+ * Passwords are checked against a SQLite database (generally created with the
+ * krb5-strength-wordlist utility) that holds words and reversed words, and
+ * all passwords within edit distance one of a word in the database are
+ * rejected.
+ *
+ * To find passwords within edit distance one, this algorithm checks, for each
+ * dictionary word, whether the length of longest common prefix plus the
+ * length of the longest common suffix between that word and the password is
+ * within 1 of the length of the password.  It will be one less if a letter
+ * has been removed or replaced, and equal if the password is an exact match.
+ *
+ * To do this, the SQLite database contains one row for each dictionary word,
+ * containing both the word and the reversed version of the word.  The
+ * password is divided into two components, a prefix and a suffix.  It is
+ * checked against all dictionary words that fall lexicographically between
+ * the prefix and the prefix with its last character incremented, and then
+ * against all words where the word reversed falls lexicographically between
+ * the suffix reversed and the suffix reversed with its last character
+ * incremented.
+ *
+ * If the password matches a dictionary word, the edit must either be in the
+ * first half of the password or the last half of the password.  If in the
+ * first half, the word it will match will fall in the prefix range.  If in
+ * the last half, the word it will match will fall in the suffix range.
+ *
+ * Written by Russ Allbery <eagle@eyrie.org>
+ * Based on work by David Mazières
+ * Copyright 2016 Russ Allbery <eagle@eyrie.org>
+ * Copyright 2014
+ *     The Board of Trustees of the Leland Stanford Junior University
+ *
+ * See LICENSE for licensing terms.
+ */
+
+#include <config.h>
+#include <portable/kadmin.h>
+#include <portable/krb5.h>
+#include <portable/system.h>
+
+#ifdef HAVE_SQLITE3_H
+# include <sqlite3.h>
+#endif
+
+#include <plugin/internal.h>
+#include <util/macros.h>
+
+/*
+ * The prefix and suffix SQLite query.  Finds all candidate words in range of
+ * the prefix or suffix.  The prefix query should get bind variables for the
+ * prefix and the prefix with the last character incremented; the suffix query
+ * gets the same, but the suffix should be reversed.
+ */
+#define PREFIX_QUERY \
+    "SELECT password, drowssap FROM passwords WHERE password BETWEEN ? AND ?;"
+#define SUFFIX_QUERY \
+    "SELECT password, drowssap FROM passwords WHERE drowssap BETWEEN ? AND ?;"
+#define QUERY \
+    "SELECT password FROM passwords WHERE password = ?;"    
+
+/*
+ * Stub for strength_init_sqlite if not built with SQLite support.
+ */
+#ifndef HAVE_SQLITE
+krb5_error_code
+strength_init_sqlite(krb5_context ctx, krb5_pwqual_moddata data UNUSED)
+{
+    char *path = NULL;
+
+    /* Get CDB dictionary path from krb5.conf. */
+    strength_config_string(ctx, "password_dictionary_sqlite", &path);
+
+    /* If it was set, report an error, since we don't have CDB support. */
+    if (path == NULL)
+        return 0;
+    free(path);
+    krb5_set_error_message(ctx, KADM5_BAD_SERVER_PARAMS, "SQLite dictionary"
+                           " requested but not built with SQLite support");
+    return KADM5_BAD_SERVER_PARAMS;
+}
+#endif
+
+
+/* Skip the rest of this file if SQLite is not available. */
+#ifdef HAVE_SQLITE
+
+/*
+ * Report a SQLite error.  Takes the module data (used to access the SQLite
+ * object) and the Kerberos context, stores the SQLite error in the Kerberos
+ * context, and returns the generic KADM5_FAILURE code, since there doesn't
+ * appear to be anything better.
+ */
+static krb5_error_code __attribute__((__format__(printf, 3, 4)))
+error_sqlite(krb5_context ctx, krb5_pwqual_moddata data, const char *format,
+             ...)
+{
+    va_list args;
+    ssize_t length;
+    char *message;
+    const char *errmsg;
+    
+    errmsg = sqlite3_errmsg(data->sqlite);
+    va_start(args, format);
+    length = vasprintf(&message, format, args);
+    va_end(args);
+    if (length < 0)
+        return strength_error_system(ctx, "cannot allocate memory");
+    krb5_set_error_message(ctx, KADM5_FAILURE, "%s: %s", message, errmsg);
+    free(message);
+    return KADM5_FAILURE;
+}
+
+
+/*
+ * Given a string, returns a reversed version of that string in newly
+ * allocated memory.  The caller is responsible for freeing.  Returns NULL on
+ * memory allocation failure.
+ */
+static char *
+reverse_string(const char *string)
+{
+    size_t length, i;
+    char *reversed;
+
+    length = strlen(string);
+    reversed = malloc(length + 1);
+    if (reversed == NULL)
+        return NULL;
+    reversed[length] = '\0';
+    for (i = 0; i < length; i++)
+        reversed[length - i - 1] = string[i];
+    return reversed;
+}
+
+
+/*
+ * Given two strings, return the length of their common prefix, not counting
+ * the nul character that terminates either string.
+ */
+static size_t
+common_prefix_length(const char *a, const char *b)
+{
+    size_t i;
+
+    for (i = 0; a[i] == b[i] && a[i] != '\0' && b[i] != '\0'; i++)
+        ;
+    return i;
+}
+
+
+/*
+ * Given the length of the password, the password, the reversed password, and
+ * an executed SQLite statement that contains the word and reversed word as
+ * the first two column texts, determine whether this password is a match
+ * within edit distance one.
+ *
+ * It will be a match if the length of the common prefix of the password and
+ * word plus the length of the common prefix of the reversed password and the
+ * reversed word (which is the length of the common suffix) is greater than or
+ * equal to the length of the password minus one.
+ *
+ * To see why the sum of the prefix and suffix length can be longer than the
+ * length of the password when the password doesn't match the word, consider
+ * the password "aaaa" and the word "aaaaaaaaa"
+ * (The prefix length plus the
+ * suffix length may be greater than the length of the password if the
+ * password is an exact match for the word or 
+ */
+static bool
+match(size_t length, const char *password, const char *drowssap,
+      sqlite3_stmt *query)
+{
+    const char *word, *drow;
+    size_t prefix_length, suffix_length, match_length, word_length;
+
+    /* Discard all words whose length is too different. */
+    word = (const char *) sqlite3_column_text(query, 0);
+    word_length = strlen(word);
+    if (length > word_length + 1 || length + 1 < word_length)
+        return false;
+
+    /*
+     * Get the common prefix length and check if the password is an exact
+     * match.
+     */
+    prefix_length = common_prefix_length(password, word);
+    if (prefix_length == length)
+        return true;
+
+    /*
+     * Ensure there aren't too many different characters for this to be a
+     * match.  If the common prefix and the common suffix together have a
+     * length that's more than one character shorter than the password length,
+     * this is different by at least edit distance two.  The sum of the
+     * lengths of the common prefix and suffix can be greater than length in
+     * cases of an edit in the middle of repeated passwords, such as the
+     * password "baaab" and the word "baab", but those are all matches.
+     */
+    drow = (const char *) sqlite3_column_text(query, 1);
+    suffix_length = common_prefix_length(drowssap, drow);
+    match_length = prefix_length + suffix_length;
+    return (match_length > length || length - match_length <= 1);
+}
+
+
+/*
+ * Initialize the SQLite dictionary.  Opens the database and compiles the two
+ * queries that we'll use.  Returns 0 on success, non-zero on failure (and
+ * sets the error in the Kerberos context).
+ */
+krb5_error_code
+strength_init_sqlite(krb5_context ctx, krb5_pwqual_moddata data)
+{
+    char *path = NULL;
+    int status;
+
+    /* Get SQLite dictionary path from krb5.conf. */
+    strength_config_string(ctx, "password_dictionary_sqlite", &path);
+
+    /* If there is no configured dictionary, nothing to do. */
+    if (path == NULL)
+        return 0;
+
+    /* Open the database. */
+    status = sqlite3_open_v2(path, &data->sqlite, SQLITE_OPEN_READONLY, NULL);
+    if (status != 0)
+        return error_sqlite(ctx, data, "cannot open dictionary %s", path);
+
+    if (0) {
+    /* Precompile the queries we'll use. */
+    status = sqlite3_prepare_v2(data->sqlite, PREFIX_QUERY, -1,
+                                &data->prefix_query, NULL);
+    if (status != 0)
+        return error_sqlite(ctx, data, "cannot prepare prefix query");
+    status = sqlite3_prepare_v2(data->sqlite, SUFFIX_QUERY, -1,
+                                &data->suffix_query, NULL);
+    }
+
+    status = sqlite3_prepare_v2(data->sqlite, QUERY, -1,
+                                &data->prefix_query, NULL);
+
+    if (status != 0)
+        return error_sqlite(ctx, data, "cannot prepare suffix query");
+
+    /* Finished.  Return success. */
+    free(path);
+    return 0;
+}
+
+
+/*
+ * Given a password, look for a word in the database within edit distance one.
+ * The full algorithm used here is described in the comment at the start of
+ * this file.  Returns a Kerberos status code, which will be KADM5_PASS_Q_DICT
+ * if the password was found in the dictionary.
+ */
+krb5_error_code
+strength_check_sqlite(krb5_context ctx, krb5_pwqual_moddata data,
+                      const char *password)
+{
+    krb5_error_code code;
+    size_t length, prefix_length, suffix_length;
+    char *prefix = NULL;
+    char *drowssap = NULL;
+    bool found = false;
+    int status;
+
+    /* If we have no dictionary, there is nothing to do. */
+    if (data->sqlite == NULL)
+        return 0;
+
+    /*
+     * Determine the length of the prefix and suffix into which we'll divide
+     * the string.  Passwords shorter than two characters cannot be
+     * meaningfully checked using this method and cause boundary condition
+     * problems.
+     */
+    if (0) {
+    length = strlen(password);
+    if (length < 2)
+        return 0;
+    prefix_length = length / 2;
+    suffix_length = length - prefix_length;
+
+    /* Obtain the reversed password, used for suffix checks. */
+    drowssap = reverse_string(password);
+    if (drowssap == NULL)
+        return strength_error_system(ctx, "cannot allocate memory");
+
+    /* Set up the query for prefix matching. */
+    prefix = strdup(password);
+    if (prefix == NULL) {
+        code = strength_error_system(ctx, "cannot allocate memory");
+        goto fail;
+    }
+    status = sqlite3_bind_text(data->prefix_query, 1, password, prefix_length,
+                               NULL);
+    if (status != SQLITE_OK) {
+        code = error_sqlite(ctx, data, "cannot bind prefix start");
+        goto fail;
+    }
+    prefix[prefix_length - 1]++;
+
+    status = sqlite3_bind_text(data->prefix_query, 2, prefix, prefix_length,
+                               NULL);
+
+    if (status != SQLITE_OK) {
+        code = error_sqlite(ctx, data, "cannot bind prefix end");
+        goto fail;
+    }
+
+    /*
+     * Do prefix matching.  Get the set of all database entries starting with
+     * the same prefix and, for each, check whether our password matches that
+     * entry within edit distance one.
+     */
+    if ((status = sqlite3_step(data->prefix_query)) == SQLITE_ROW) {
+      found = true;
+    } else if (status != SQLITE_DONE) {
+      code = error_sqlite(ctx, data, "error searching by password prefix");
+      goto fail;
+    }
+    status = sqlite3_reset(data->prefix_query);
+    if (status != SQLITE_OK) {
+      code = error_sqlite(ctx, data, "error resetting prefix query");
+      goto fail;
+    }
+    if (found)
+        goto found;
+
+    /* Set up the query for suffix matching. */
+    status = sqlite3_bind_text(data->suffix_query, 1, drowssap, suffix_length,
+                               SQLITE_TRANSIENT);
+    if (status != SQLITE_OK) {
+        code = error_sqlite(ctx, data, "cannot bind suffix start");
+        goto fail;
+    }
+    drowssap[prefix_length - 1]++;
+    status = sqlite3_bind_text(data->suffix_query, 2, drowssap, suffix_length,
+                               SQLITE_TRANSIENT);
+    drowssap[prefix_length - 1]--;
+    if (status != SQLITE_OK) {
+        code = error_sqlite(ctx, data, "cannot bind suffix end");
+        goto fail;
+    }
+
+    /*
+     * Do suffix matching.  Get the set of all database entries starting with
+     * the same prefix and, for each, check whether our password matches that
+     * entry within edit distance one.
+     */
+    while ((status = sqlite3_step(data->suffix_query)) == SQLITE_ROW)
+        if (match(length, password, drowssap, data->suffix_query)) {
+            found = true;
+            break;
+        }
+    if (status != SQLITE_DONE && status != SQLITE_ROW) {
+        code = error_sqlite(ctx, data, "error searching by password suffix");
+        goto fail;
+    }
+    status = sqlite3_reset(data->suffix_query);
+    if (status != SQLITE_OK) {
+        code = error_sqlite(ctx, data, "error resetting suffix query");
+        goto fail;
+    }
+    }  // end of if (0)
+
+    status = sqlite3_bind_text(data->prefix_query, 1, password, -1,
+                               NULL);
+    if (status != SQLITE_OK) {
+        code = error_sqlite(ctx, data, "cannot bind query");
+        goto fail;
+    }
+
+    if ((status = sqlite3_step(data->prefix_query)) == SQLITE_ROW)
+      found = true;
+    else if (status != SQLITE_DONE) {
+      code = error_sqlite(ctx, data, "error searching by password suffix");
+      goto fail;
+    }
+
+    status = sqlite3_reset(data->prefix_query);
+    if (status != SQLITE_OK) {
+      code = error_sqlite(ctx, data, "error resetting suffix query");
+      goto fail;
+    }
+
+    if (found)
+        goto found;
+
+    if (0) {
+    /* No match.  Clean up and return success. */
+    memset(prefix, 0, length);
+    memset(drowssap, 0, length);
+    free(prefix);
+    free(drowssap);
+    }
+    return 0;
+
+found:
+    /* We found the password in the dictionary. */
+    code = strength_error_dict(ctx, ERROR_DICT);
+
+fail:
+    if (0) {
+    memset(prefix, 0, length);
+    memset(drowssap, 0, length);
+    free(prefix);
+    free(drowssap);
+    }
+    return code;
+}
+
+
+/*
+ * Free internal SQLite state and close the SQLite database.
+ */
+void
+strength_close_sqlite(krb5_context ctx UNUSED, krb5_pwqual_moddata data)
+{
+    if (data->prefix_query != NULL)
+        sqlite3_finalize(data->prefix_query);
+    if (data->suffix_query != NULL)
+        sqlite3_finalize(data->suffix_query);
+    if (data->sqlite != NULL)
+        sqlite3_close(data->sqlite);
+}
+
+#endif /* HAVE_SQLITE */

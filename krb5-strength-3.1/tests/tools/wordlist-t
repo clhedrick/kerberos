@@ -1,0 +1,89 @@
+#!/usr/bin/perl
+#
+# Test suite for krb5-strength-wordlist filtering functions.
+#
+# Written by Russ Allbery <eagle@eyrie.org>
+# Copyright 2016 Russ Allbery <eagle@eyrie.org>
+# Copyright 2014
+#     The Board of Trustees of the Leland Stanford Junior University
+#
+# See LICENSE for licensing terms.
+
+use 5.006;
+use strict;
+use warnings;
+
+use lib "$ENV{SOURCE}/tap/perl";
+
+use Encode qw(encode);
+use Test::More;
+use Test::RRA qw(use_prereq);
+use Test::RRA::Automake qw(automake_setup test_file_path test_tmpdir);
+
+# Load prerequisite modules.
+use_prereq('IPC::Run',     'run');
+use_prereq('Perl6::Slurp', 'slurp');
+
+# Set up for testing of an Automake project.
+automake_setup();
+
+# Declare the plan.
+plan tests => 5;
+
+# Run krb5-strength-wordlist with the given arguments and verify that it exits
+# successfully with no output.  For planning purposes, this function will
+# report three tests.
+#
+# @args - Arguments to krb5-strength-wordlist
+#
+# Returns: undef
+sub run_wordlist {
+    my (@args) = @_;
+
+    # Find the krb5-strength-wordlist program in the distribution.
+    my $wordlist = test_file_path('../tools/krb5-strength-wordlist');
+
+    # Run the program, capturing its output and status.
+    my ($out, $err);
+    run([$wordlist, @args], \undef, \$out, \$err);
+    my $status = ($? >> 8);
+
+    # Check the results.
+    is($status, 0,   "krb5-strength-wordlist @args");
+    is($out,    q{}, '...with no output');
+    is($err,    q{}, '...and no errors');
+    return;
+}
+
+# Read the word list that we'll use for testing.
+my @wordlist = slurp(test_file_path('data/wordlist'));
+
+# Generate a filtered version that should match the eventual output of
+# krb5-strength-wordlist, removing words containing the letter d and any
+# shorter than 8 characters.
+my @filtered = grep { !m{d}xms && length >= 8 } @wordlist;
+
+# Add a non-ASCII word to test non-ASCII filtering.
+push(@wordlist, encode('UTF-8', "\N{U+0639}\N{U+0631}\N{U+0628}\N{U+649}"));
+
+# Write the new wordlist, including the non-ASCII word, to a new file.
+my $tmpdir = test_tmpdir();
+open(my $wordlist_fh, q{>}, "$tmpdir/wordlist")
+  or BAIL_OUT("cannot create to $tmpdir/wordlist: $!");
+print {$wordlist_fh} join("\n", @wordlist), "\n"
+  or BAIL_OUT("cannot write to $tmpdir/wordlist: $!");
+close($wordlist_fh)
+  or BAIL_OUT("cannot flush $tmpdir/wordlist: $!");
+
+# Generate a new, filtered word list.  Remove non-ASCII, words containing the
+# letter d, and words shorter than eight characters.
+my @options = qw(-a -x .*d -l 8);
+run_wordlist(@options, '-o', "$tmpdir/wordlist.new", "$tmpdir/wordlist");
+
+# Verify that the new filtered list exists and has the correct content.
+my @got = eval { slurp("$tmpdir/wordlist.new") };
+is($@, q{}, 'New word list exists');
+is_deeply(\@got, \@filtered, '...with correct contents');
+
+# Remove the files created by the test.
+unlink("$tmpdir/wordlist", "$tmpdir/wordlist.new");

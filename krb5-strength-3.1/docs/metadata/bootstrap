@@ -1,0 +1,3 @@
+You will also need Perl 5.010 or later and the DBI, DBD::SQLite, JSON,
+Perl6::Slurp, and Readonly modules (from CPAN) to generate man pages and
+bootstrap the test suite data from a Git checkout.

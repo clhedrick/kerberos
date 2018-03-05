@@ -1,0 +1,41 @@
+[
+    {
+        "name": "valid simple password",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "password"
+    },
+    {
+        "name": "repeating the same password",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "password",
+        "error": "Password was previously used"
+    },
+    {
+        "name": "different password works",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "password2"
+    },
+    {
+        "name": "now that one fails",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "password2",
+        "error": "Password was previously used"
+    },
+    {
+        "name": "previous password still fails",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "password",
+        "error": "Password was previously used"
+    },
+    {
+        "name": "succeeds for different user",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "password"
+    },
+    {
+        "name": "based on principal",
+        "principal": "someuser@EXAMPLE.ORG",
+        "password": "someuser",
+        "error": "Password based on username or principal"
+    }
+]

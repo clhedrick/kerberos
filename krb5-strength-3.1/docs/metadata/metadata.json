@@ -1,0 +1,67 @@
+{
+    "name": "krb5-strength",
+    "version": "3.1",
+    "synopsis": "Kerberos password strength checking plugin",
+    "maintainer": "Russ Allbery <eagle@eyrie.org>",
+    "copyrights": [
+        {
+            "holder": "Russ Allbery <eagle@eyrie.org>",
+            "years": "2016",
+        },
+        {
+            "holder": "The Board of Trustees of the Leland Stanford Junior University",
+            "years": "2006-2007, 2009-2010, 2012-2014",
+        },
+        {
+            "holder": "Alec Muffett",
+            "years": "1993",
+        },
+    ],
+    "license": "Expat",
+    "build": {
+        "lancaster": true,
+        "autotools": true,
+        "automake": "1.11",
+        "autoconf": "2.64",
+        "type": "Autoconf",
+        "reduced_depends": true,
+        "kerberos": true,
+    },
+    "support": {
+        "email": "eagle@eyrie.org",
+        "github": "rra/krb5-strength",
+        "web": "https://www.eyrie.org/~eagle/software/krb5-strength/",
+    },
+    "vcs": {
+        "type": "Git",
+        "url": "https://git.eyrie.org/git/kerberos/krb5-strength.git",
+        "browse": "https://git.eyrie.org/?p=devel/krb5-strength.git",
+        "github": "rra/krb5-strength",
+        "openhub": "https://www.openhub.net/p/krb5-strength",
+    },
+    "distribution": {
+        "section": "kerberos",
+        "tarname": "krb5-strength",
+        "version": "krb5-strength",
+    },
+    "docs": {
+        "user": [
+            {
+                "name": "heimdal-history",
+                "title": "heimdal-history",
+            },
+            {
+                "name": "heimdal-strength",
+                "title": "heimdal-strength",
+            },
+            {
+                "name": "krb5-strength",
+                "title": "krb5-strength plugin",
+            },
+            {
+                "name": "krb5-strength-wordlist",
+                "title": "krb5-strength-wordlist",
+            },
+        ],
+    },
+}

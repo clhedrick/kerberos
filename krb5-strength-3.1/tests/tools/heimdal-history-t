@@ -1,0 +1,166 @@
+#!/usr/bin/perl
+#
+# Test suite for Heimdal per-principal history.
+#
+# Written by Russ Allbery <eagle@eyrie.org>
+# Copyright 2014
+#     The Board of Trustees of the Leland Stanford Junior University
+#
+# See LICENSE for licensing terms.
+
+use 5.006;
+use strict;
+use warnings;
+
+use lib "$ENV{SOURCE}/tap/perl";
+
+use Fcntl qw(O_CREAT O_RDWR);
+use Test::More;
+use Test::RRA qw(use_prereq);
+use Test::RRA::Automake qw(test_file_path test_tmpdir);
+
+# Not all of these are used by the test suite, but the rest are required to
+# run the program we're testing, so make sure they can all be loaded.
+use_prereq('DB_File::Lock');
+use_prereq('Crypt::PBKDF2');
+use_prereq('Getopt::Long::Descriptive');
+use_prereq('IPC::Run', 'run');
+use_prereq('JSON');
+use_prereq('Perl6::Slurp', 'slurp');
+use_prereq('Readonly');
+
+# The most convenient interface to Berkeley DB files is ties.
+## no critic (Miscellanea::ProhibitTies)
+
+# Run the heimdal-history command and return the status, output, and error
+# output as a list.
+#
+# $principal - Principal to pass to the command
+# $password  - Password to pass to the command
+#
+# Returns: The exit status, standard output, and standard error as a list
+#  Throws: Text exception on failure to run the test program
+sub run_heimdal_history {
+    my ($principal, $password) = @_;
+
+    # Build the input to the strength checking program.
+    my $in = "principal: $principal\n";
+    $in .= "new-password: $password\n";
+    $in .= "end\n";
+
+    # Find the newly-built history and strengty programs.
+    my $history  = test_file_path('../tools/heimdal-history');
+    my $strength = test_file_path('../tools/heimdal-strength');
+
+    # Get a temporary directory for statistics and history databases.
+    my $tmpdir = test_tmpdir();
+
+    # Assemble the standard options.
+    my @options = (
+        '-q',
+        '-d' => "$tmpdir/history.db",
+        '-S' => "$tmpdir/lengths.db",
+        '-s' => $strength,
+    );
+
+    # Run the password strength checker.
+    my ($out, $err);
+    run([$history, @options, $principal], \$in, \$out, \$err);
+    my $status = ($? >> 8);
+
+    # Return the results.
+    return ($status, $out, $err);
+}
+
+# Run the heimdal-history command to check a password and reports the results
+# using Test::More.  This uses the standard protocol for Heimdal external
+# password strength checking programs.
+#
+# $test_ref - Reference to hash of test parameters
+#   name      - The name of the test case
+#   principal - The principal changing its password
+#   password  - The new password
+#   status    - If present, the exit status (otherwise, it should be 0)
+#   error     - If present, the expected rejection error
+#
+# Returns: undef
+#  Throws: Text exception on failure to run the test program
+sub check_password {
+    my ($test_ref) = @_;
+    my $principal  = $test_ref->{principal};
+    my $password   = $test_ref->{password};
+
+    # Run the heimdal-strength command.
+    my ($status, $out, $err) = run_heimdal_history($principal, $password);
+    chomp($out, $err);
+
+    # Check the results.  If there is an error in the password, it should come
+    # on standard error; otherwise, standard output should be APPROVED.  If
+    # there is a non-zero exit status, we expect the error on standard error
+    # and use that field to check for system errors.
+    is($status, $test_ref->{status} || 0, "$test_ref->{name} (status)");
+    if (defined($test_ref->{error})) {
+        is($err, $test_ref->{error}, '...error message');
+        is($out, q{}, '...no output');
+    } else {
+        is($err, q{},        '...no errors');
+        is($out, 'APPROVED', '...approved');
+    }
+    return;
+}
+
+# Load a set of password test cases and return them as a list.  The given file
+# name is relative to data/passwords in the test suite.
+#
+# $file - The file name containing the test data in JSON
+#
+# Returns: List of anonymous hashes representing password test cases
+#  Throws: Text exception on failure to load the test data
+sub load_password_tests {
+    my ($file) = @_;
+    my $path = test_file_path("data/passwords/$file");
+
+    # Load the test file data into memory.
+    my $testdata = slurp($path);
+
+    # Decode the JSON into Perl objects and return them.
+    my $json = JSON->new->utf8;
+    return $json->decode($testdata);
+}
+
+# Load our tests from JSON source.
+my $tests = load_password_tests('history.json');
+
+# Calculate and declare the plan.  We run three tests for each password test,
+# and then do some additional testing of the length statistics.
+plan(tests => scalar(@{$tests}) * 3 + 2);
+
+# Point to a generic krb5.conf file.  This ensures that the heimdal-strength
+# program will only do principal-based strength checks.
+local $ENV{KRB5_CONFIG} = test_file_path('data/krb5.conf');
+
+# Run the basic history tests and accumulate the length statistics.
+my %lengths;
+for my $test_ref (@{$tests}) {
+    check_password($test_ref);
+    if (!defined($test_ref->{error})) {
+        $lengths{ length($test_ref->{password}) }++;
+    }
+}
+
+# Open the length database and check that it is correct.
+my %lengthdb;
+my $mode = O_CREAT | O_RDWR;
+my $path = test_tmpdir() . '/lengths.db';
+ok(tie(%lengthdb, 'DB_File::Lock', [$path, $mode, oct(600)], 'write'),
+    'Length database exists');
+is_deeply(\%lengthdb, \%lengths, '...and contents are correct');
+
+# Clean up the databases and lock files on any exit.
+END {
+    my $tmpdir = test_tmpdir();
+    for my $file (qw(history.db lengths.db)) {
+        unlink("$tmpdir/$file", "$tmpdir/$file.lock")
+          or warn "cannot unlink $tmpdir/$file: $!\n";
+    }
+}

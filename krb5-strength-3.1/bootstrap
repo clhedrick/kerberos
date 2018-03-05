@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# Run this shell script to bootstrap as necessary after a fresh checkout.
+#
+# Written by Russ Allbery <eagle@eyrie.org>
+# Copyright 2016 Russ Allbery <eagle@eyrie.org>
+# Copyright 2007, 2010, 2013, 2014
+#     The Board of Trustees of the Leland Stanford Junior University
+#
+# See LICENSE for licensing terms.
+
+set -e
+
+# Regenerate all the autotools files.
+autoreconf -i --force
+
+# Generate manual pages.
+version=`grep '^krb5-strength' NEWS | head -1 | cut -d' ' -f2`
+pod2man --release="$version" --center='krb5-strength' --section=5 \
+    docs/krb5-strength.pod > docs/krb5-strength.5.in
+pod2man --release="$version" --center='krb5-strength' \
+    tools/heimdal-history > tools/heimdal-history.1
+pod2man --release="$version" --center='krb5-strength' \
+    tools/heimdal-strength.pod > tools/heimdal-strength.1
+pod2man --release="$version" --center='krb5-strength' \
+    tools/krb5-strength-wordlist > tools/krb5-strength-wordlist.1
+
+# Generate the C version of our password test data.
+for data in tests/data/passwords/*.json ; do
+    tests/data/passwords/make-c-data "$data" \
+        > $(echo "$data" | sed 's/\.json$/.c/')
+done
+
+# Generate the CDB database from the test wordlist for plugin tests.
+rm -f tests/data/wordlist.cdb tests/data/wordlist.sqlite
+tools/krb5-strength-wordlist -c tests/data/wordlist.cdb tests/data/wordlist
+tools/krb5-strength-wordlist -s tests/data/wordlist.sqlite tests/data/wordlist

@@ -1,0 +1,40 @@
+This copy of CrackLib is based on the 2.7 release by Alec Muffett.  The
+following modifications have been made:
+
+ * Require more different characters in the password.
+ * Strengthen the prefix and suffix rules for longer passwords.
+ * Increased the minimum password length to 8 characters.
+ * Modified the adjacent character check to depend on the password length.
+ * Remove checks against the user's GECOS entry.
+ * Don't exit on failure to open the database.
+ * Improve the search algorithm in FindPW somewhat.
+ * Don't segfault on corrupt dictionaries.
+ * Fixed the data format output by packer to properly pad the end.
+ * Add ANSI C prototypes for all functions and mark const variables.
+ * Remove unused functions.
+ * Various compilation warning and portability fixes.
+ * Use Autoconf and portable/system.h to find types of specific lengths.
+ * Increase MINLENGTH.
+ * Add a check for a duplicated dictionary word.
+ * Changed error for very short passwords to match current CrackLib.
+ * Remove last block optimization in GetPW and start fresh each time.
+ * Close the dictionary after each password lookup.
+ * Set hidden visibility on all CrackLib symbols.
+ * Close the wfp file handle on PWClose if it's open.
+ * Applied various patches from distributions for security vulnerabilities.
+ * Changed the type of some variables to size_t to avoid truncation.
+ * Forced locale in mkdict to avoid problems with non-C-locale sort.
+ * Added a warning to packer if processing out-of-order words.
+
+See the leading comments in each source file for a more detailed timeline
+and list of changes.
+
+Below is the original changelog for CrackLib:
+
+v2.7    mkdict/tr problem eliminated;
+	misc fixes suggested by Andrey Savochkin <saw@msu.ru> (with thanks)
+v2.6    buffer overflow problems addressed - 1st attempt
+	permutations of fascist deconstructors fixed/enhanced
+v2.5    added decent info to the "shadow" directory patches.
+v2.4    forwarded to ch & jfh3 for beta testing/comments
+v2.3-   internal beta test versions

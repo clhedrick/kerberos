@@ -1,0 +1,15 @@
+language: c
+compiler:
+  - gcc
+dist: trusty
+sudo: required
+
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install libcdb-dev libdb-file-lock-perl libcrypt-pbkdf2-perl libdbd-sqlite3-perl libdbi-perl libgetopt-long-descriptive-perl libipc-run-perl libjson-perl libkrb5-dev libperl6-slurp-perl libreadonly-perl libsqlite3-dev libtest-minimumversion-perl libtest-perl-critic-perl libtest-pod-perl libtest-strict-perl pkg-config sqlite tinycdb
+env: AUTHOR_TESTING=1
+script: ./bootstrap && ./configure && make warnings && make check
+
+branches:
+  only:
+    - master

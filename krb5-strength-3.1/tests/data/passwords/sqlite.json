@@ -1,0 +1,265 @@
+[
+    {
+        "name": "good password",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "known good password",
+        "code": 0
+    },
+    {
+        "name": "in dictionary",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "password",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (longer)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (drop first)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "1bitterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (drop last)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbane1",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "dictionary with three characters",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbane123",
+        "code": 0
+    },
+    {
+        "name": "two-character dictionary word",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "ab",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "three-character dictionary word",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "one",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "single-character password",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "a",
+        "code": 0
+    },
+    {
+        "name": "in dictionary (edit: delete 1)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "itterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: delete 2)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "btterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: delete 3/4)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "biterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: delete 5)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bittrbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: delete 6)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bittebane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: delete 7)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: delete 8)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbne",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: delete 9)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbae",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: delete 10)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterban",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 1)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "Citterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 2)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "b7tterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 3)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bi#terbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 4)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bit*erbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 5)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bittgrbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 6)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitte.bane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 7)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitter ane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 8)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterb-ne",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 9)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbame",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: modify 10)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbanq",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 2)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "b7itterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 3)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bi#tterbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 4)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bit*terbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 4)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bit*terbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 5)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bittgerbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 6)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitte.rbane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 7)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitter bane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 8)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterb-ane",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 9)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbamne",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    },
+    {
+        "name": "in dictionary (edit: add 10)",
+        "principal": "test@EXAMPLE.ORG",
+        "password": "bitterbanqe",
+        "code": "KADM5_PASS_Q_DICT",
+        "error": "Password found in list of common passwords"
+    }
+]

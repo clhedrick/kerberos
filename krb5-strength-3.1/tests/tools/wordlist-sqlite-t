@@ -1,0 +1,101 @@
+#!/usr/bin/perl
+#
+# Test suite for krb5-strength-wordlist SQLite database generation
+#
+# Written by Russ Allbery <eagle@eyrie.org>
+# Copyright 2014
+#     The Board of Trustees of the Leland Stanford Junior University
+#
+# See LICENSE for licensing terms.
+
+use 5.006;
+use strict;
+use warnings;
+
+use lib "$ENV{SOURCE}/tap/perl";
+
+use Test::More;
+use Test::RRA qw(use_prereq);
+use Test::RRA::Automake qw(automake_setup test_file_path test_tmpdir);
+
+# Load prerequisite modules.
+use_prereq('DBI');
+use_prereq('DBD::SQLite');
+use_prereq('IPC::Run',     'run');
+use_prereq('Perl6::Slurp', 'slurp');
+
+# Set up for testing of an Automake project.
+automake_setup();
+
+# Run krb5-strength-wordlist on the given word list, generating a SQLite
+# dictionary in a temporary directory and returning its path.  Ensure that
+# krb5-strength exits successfully with no output.  For planning purposes,
+# this function will report three tests.  Calls BAIL_OUT if the output file
+# already exists and can't be deleted.
+#
+# $input - Input wordlist file, used to form the output file name
+#
+# Returns: Path to new temporary SQLite dictionary
+sub run_wordlist {
+    my ($input) = @_;
+    my $output = test_tmpdir() . '/wordlist.sqlite';
+
+    # Find the krb5-strength-wordlist program in the distribution.
+    my $wordlist = test_file_path('../tools/krb5-strength-wordlist');
+
+    # Ensure the output file does not exist.
+    if (-f $output) {
+        unlink($output) or BAIL_OUT("cannot delete $output: $!");
+    }
+
+    # Run the program, capturing its output and status.
+    my ($out, $err);
+    run([$wordlist, '-s', $output, $input], \undef, \$out, \$err);
+    my $status = ($? >> 8);
+
+    # Check the results.
+    is($status, 0,   'krb5-strength-wordlist -s');
+    is($out,    q{}, '...with no output');
+    is($err,    q{}, '...and no errors');
+
+    # Return the newly-created database.
+    return $output;
+}
+
+# Read the word list that we'll use for testing so that we can validate the
+# contents of the generated SQLite database.
+my $wordlist = test_file_path('data/wordlist');
+my @words    = slurp($wordlist);
+chomp(@words);
+
+# Declare the plan now that we know how many tests there will be.  There is
+# one test for each word, plus four for creating the database and another for
+# checking that it contains the right passwords.
+plan tests => 5 + scalar(@words);
+
+# Build the SQLite database.
+my $dictionary = run_wordlist($wordlist);
+
+# Ensure that we can open the result as a SQLite database.
+my $options = { PrintError => 1, RaiseError => 1, AutoCommit => 1 };
+my $dbh = DBI->connect("dbi:SQLite:dbname=$dictionary", q{}, q{}, $options);
+ok(defined($dbh), 'Opening SQLite database succeeded');
+
+# Walk through every row in the passwords table and ensure that the drowssap
+# column is the reverse of the password column.  Accumulate the passwords so
+# that we can check against the contents of the word list.
+my $sql      = 'SELECT PASSWORD, DROWSSAP FROM PASSWORDS';
+my $data_ref = $dbh->selectall_arrayref($sql);
+my @got;
+for my $row (@{$data_ref}) {
+    my ($password, $drowssap) = @{$row};
+    push(@got, $password);
+    is($drowssap, scalar(reverse($password)), "Reversal for $password");
+}
+$dbh->disconnect;
+
+# Ensure that the list of passwords in the database are what we expected.
+is_deeply(\@got, \@words, 'Passwords in dictionary');
+
+# Remove the files created by the test.
+unlink($dictionary);

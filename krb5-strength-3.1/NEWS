@@ -1,0 +1,311 @@
+                    User-Visible krb5-strength Changes
+
+krb5-strength 3.1 (2016-12-25)
+
+    A new configuration option, cracklib_maxlen, can be set to skip
+    CrackLib checks of passwords longer than that length.  The CrackLib
+    rules were designed in a world in which most passwords were four to
+    eight characters long and tend to spuriously reject longer passwords.
+    SQLite dictionaries work better for checking longer passwords and
+    passphrases.  Patch from Jorj Bauer.
+
+    The require_classes configuration option can now require a particular
+    number of character classes in the password (whatever those classes
+    are).  Patch from Toby Blake.
+
+    Change the error messages returned for passwords that fail strength
+    checking to start with a capital letter.  This appears to be more
+    consistent with the error message conventions used inside Heimdal.
+
+    Change the DB_File::Lock calling method in heimdal-history to work
+    properly with the (buggy) CPAN version of DB_File::Lock, instead of
+    relying on Debian's patched version.  Thanks to Bernt Jernberg for the
+    report.
+
+    Apply the SuSE patch for a buffer overflow when using duplicate rules
+    to the embedded CrackLib.  No duplicating rules are used in the rule
+    set included with this package, and this package doesn't expose the
+    general API, so this was not exploitable, but best to close the latent
+    issue.  (The other recent CrackLib vulnerability, CVE-2016-6318,
+    doesn't apply since all the GECOS manipulation code was removed from
+    the embedded CrackLib in this package.)
+
+    Patch the mkdict and packer in the embedded copy of CrackLib to force
+    C locale when sorting (avoiding a corrupted dictionary) and warn and
+    skip out-of-order words rather than creating a corrupted dictionary.
+    Patch from Mark Sirota.
+
+    Configuration instrutions are now in the heimdal-history and
+    heimdal-strength man pages and a new krb5-strength man page (which
+    documents configuration of the KDC plugin) instead of the README file
+    to make it more accessible after the software has been installed.
+
+    Update to rra-c-util 6.2:
+
+    * Use calloc in preference to malloc wherever appropriate.
+    * Use reallocarray in preference to realloc wherever appropriate.
+    * Suppress warnings from Kerberos headers under make warnings.
+    * Support the embedded Kerberos in Solaris 10 in library probes.
+    * Add missing va_end in xasprintf implementation.
+    * Fix logic in Test::RRA::Automake for new Automake dist checking.
+    * Fix all return-value checks for snprintf to avoid off-by-one error.
+    * Update warning flags for make warnings to GCC 6.1.0.
+    * Fix Test::RRA::Config for new "do" semantics in Perl 5.22.2.
+    * Add a new test for obsolete eyrie.org URLs.
+    * Require Test::Strict 0.25 or newer for Perl strictness checks.
+
+    Update to C TAP Harness 4.1:
+
+    * Replace all remaining uses of sprintf.
+    * Test lists may now have comments and blank lines.
+    * runtests -v will show the complete output from a test.
+    * Fix segfault in runtests when given an empty test list.
+    * Tests use C_TAP_SOURCE and C_TAP_BUILD instead of SOURCE and BUILD.
+
+krb5-strength 3.0 (2014-03-25)
+
+    The krb5-strength plugin and heimdal-strength program now support a
+    SQLite password dictionary.  This format of dictionary can detect any
+    password within edit distance one of a dictionary word, meaning that
+    the dictionary word can be formed by adding, removing, or changing a
+    single character in the password.  A SQLite password dictionary can be
+    used alone or in combination with any of the other supported
+    dictionary types.  SQLite dictionary support is based on work by David
+    Mazières.
+
+    cdbmake-wordlist has been renamed to krb5-strength-wordlist.
+    Generating CDB dictionaries now requires the -c option; see the
+    documentation for more information.  A SQLite database of dictionary
+    words can now be created instead, using the -s option.
+
+    A password history implementation for Heimdal is now included.  This
+    is a separate Perl program, heimdal-history, that stacks with the
+    external program implementation of strength checking.  It is not
+    available in the form of a plugin, only as a Heimdal external password
+    quality check.  (MIT Kerberos provides its own password history
+    mechanism.)  This program has more extensive Perl module dependencies
+    than the other programs in this distribution.
+
+    A new configuration option, minimum_different, can be set to require
+    that passwords contain at least that many unique characters.  This can
+    be used to reject long strings of identical characters or short
+    patterns, which may pass other checks but still be too easy to guess.
+
+    Update to rra-c-util 5.4:
+
+    * Fix portable/krb5.h build with a C++ compiler.
+    * Use Lancaster Consensus environment variables to control tests.
+    * Work around perltidy bug that leaves behind stray log files.
+
+    Update to C TAP Harness 3.0:
+
+    * Reopen standard input to /dev/null when running a test list.
+    * Don't leak extraneous file descriptors to tests.
+
+krb5-strength 2.2 (2013-12-16)
+
+    More complex character class requirements can be specified with the
+    configuration option require_classes.  This option lists the character
+    classes the password must contain.  These restrictions may be
+    qualified with password length ranges, allowing the requirements to
+    change with the length of the password.  See README for more details
+    and the option syntax.
+
+    cdbmake-wordlist now supports filtering out words based on maximum
+    length (-L) and arbitrary user-provided regular expressions (-x).  It
+    also supports running in filter mode to produce a new wordlist instead
+    of a CDB file (-o).
+
+    Close a file descriptor and memory leak in the included version of
+    CrackLib.  This problem was already fixed in CrackLib 2.9.0.
+
+    Update to rra-c-util 4.12:
+
+    * Properly check the return status of snprintf and friends.
+
+    Update to C TAP Harness 2.3:
+
+    * Suppress lazy plans and test summaries if the test failed with bail.
+    * Add warn_unused_result gcc attributes to relevant functions.
+
+krb5-strength 2.1 (2013-10-10)
+
+    Fix the package build when CDB support is disabled or TinyCDB was not
+    found.
+
+    Some of the password rejection error messages have been changed to
+    make them more accurate or comprehensible to the user.
+
+    Passing --with-tinycdb to configure now correctly makes TinyCDB
+    support mandatory without adding bogus directories to the library and
+    include search paths.
+
+krb5-strength 2.0 (2013-10-07)
+
+    Add support for the MIT Kerberos password quality plugin interface,
+    available in MIT Kerberos 1.9 and later, contributed by Greg Hudson
+    and MIT.  Drop the patch for MIT Kerberos 1.4 (and hence support for
+    versions of MIT Kerberos prior to 1.9).  A dictionary path set in
+    krb5.conf takes precedence over the dictionary path provided by MIT
+    Kerberos when the plugin is initialized, if both are set, to allow the
+    dict_path configuration setting to be used for other plugins while
+    using a separate dictionary for krb5-strength.
+
+    The default installation path for this plugin is now
+    /usr/local/lib/krb5/plugins/pwqual/strength.so (for both MIT and
+    Heimdal), assuming a --libdir setting of /usr/local/lib.  This may
+    require updates to the Kerberos KDC configuration or moving the plugin
+    when upgrading from earlier versions.
+
+    Add support for building with TinyCDB and then checking passwords
+    against a CDB database.  There is a new password_dictionary_cdb
+    krb5.conf configuration setting that configures a CDB directory to
+    use.  The tests with a CDB dictionary are much simpler: passwords are
+    rejected if found in the dictionary either literally, with one or two
+    characters removed from the start or end, or with one character
+    removed from both the start and the end.  Both a CrackLib and a CDB
+    dictionary can be specified to check both dictionaries.  A new
+    cdbmake-wordlist utility (written in Perl) is included to ease the
+    process of creating a CDB database from a simple word list.
+
+    A minimum password length can now be enforced directly via the plugin
+    or external check program without relying on CrackLib.  To set a
+    minimum password length, add a minimum_length setting to the
+    krb5-strength section of [appdefaults] in krb5.conf.
+
+    New boolean settings require_ascii_printable and require_non_letter
+    are supported in the krb5-strength setting of [appdefaults] in
+    krb5.conf.  The former rejects passwords containing characters other
+    than printable ASCII characters (including space), and the latter
+    requires that passwords contain at least one character that is not a
+    letter (upper or lower case) or a space.
+
+    The plugin can now be configured without a dictionary, in which case
+    only checks for a password based on the principal and the simpler
+    checks available through the new configuration variables are done.
+    This mode is mostly useful for testing, since such simple checking can
+    more easily be done via less complex password strength configurations.
+
+    The check for passwords based on the principal now check for passwords
+    formed by reversing or adding numbers before and after each separate
+    component of the principal.  This will catch passwords based on the
+    realm or components of the realm, which will often catch passwords
+    based on the name of the local institution.
+
+    The plugin now sets the Kerberos error message in the context to pass
+    error information, resulting in higher-quality error reporting in the
+    MIT Kerberos plugin.
+
+    CrackLib checks for passwords where a character is a simple increment
+    or decrement of the previous character.  In previous versions, the
+    embedded version of CrackLib allowed at most four such occurrences in
+    the entire password.  This results in false positives on long
+    passphrases, since such accidental letter relationships aren't
+    uncommon in human languages.  Change the embedded CrackLib to allow
+    one such simple increment for every three characters in the password,
+    which tightens the check somewhat for shorter passwords and loosens it
+    considerably for longer passwords.
+
+    Expect the Heimdal password strength checking plugin header in
+    kadm5/kadm5-pwcheck.h instead of outside of the kadm5 directory.  This
+    is the path used by current versions of Heimdal.  Drop support for
+    older versions of Heimdal that don't install this header file.
+
+    Update to rra-c-util 4.9:
+
+    * Probe for Kerberos headers using file checks instead of compiles.
+    * Improve probe for the Heimdal libroken library.
+    * Always build with large file support.
+    * Conditionally call AM_PROG_AR for portability to new Autotools.
+
+    Update to C TAP Harness 2.2:
+
+    * Allow more easily running single programs under tests/runtests.
+    * Flush the output from the test harness after each test.
+
+krb5-strength 1.1 (2012-05-11)
+
+    Change the minimum password length in the embedded CrackLib to 8.
+
+    Reject passwords formed from the username portion of the principal
+    with digits appended.
+
+    In the embedded CrackLib, also check for a duplicated dictionary word.
+
+    Support linking with the system CrackLib instead of the embedded and
+    stricter copy by passing --with-cracklib to configure.
+
+    Fix variable sizes in the embedded CrackLib on 64-bit platforms.  This
+    may fix interoperability problems with databases created on platforms
+    with a different native integer size.  Thanks, Karl Lehnberger and
+    Benj Carson.
+
+    Stop using local in the test suite for portability to Solaris /bin/sh.
+
+    Update to rra-c-util 4.4:
+
+    * Use PATH_KRB5_CONFIG to override krb5-config location.
+    * Fix probing for ibm_svc/krb5_svc.h on AIX.
+    * Support Heimdal libraries without libroken, like OpenBSD.
+    * Fix manual Kerberos library probing without transitive dependencies.
+    * Support systems that only have krb5/krb5.h.
+    * Pass --deps to krb5-config in the non-reduced-dependencies case.
+    * Silence __attribute__ warnings on more compilers.
+    * Update warning flags for make warnings.
+    * Flesh out MAINTCLEANFILES to remove autogen results.
+    * Add notices to all files copied from rra-c-util.
+
+    Update to C TAP Harness 1.12:
+
+    * Drop is_double from the C TAP library to avoid requiring -lm.
+    * Avoid using local in the shell libtap.sh library.
+    * Silence __attribute__ warnings on more compilers.
+    * runtests now frees all allocated resources on exit.
+    * Fix runtests to still honor SOURCE and -s without BUILD and -b.
+    * Add tests/HOWTO documenting how to add new tests.
+    * Ensure correct output ordering in test results.
+    * Add -h and a better usage message to tests/runtests.
+
+krb5-strength 1.0 (2010-02-16)
+
+    Add heimdal-strength, a program that checks password strength using
+    the protocol for a Heimdal external check program.
+
+    The shared module now also exports the interface expected by Heimdal's
+    dynamically loaded password strength checking API and can be used as a
+    Heimdal kadmin plugin.
+
+    Add a new plugin API for MIT Kerberos modelled after the plugin API
+    used for other MIT Kerberos plugins.  Thanks to Marcus Watts for
+    substantial research and contributions to the interface design.  This
+    work is incomplete in this release, missing the corresponding patch to
+    MIT Kerberos.
+
+    Fixed the data format written by the included packer program to add
+    enough nul bytes at the end of the data.  Previously, there was not
+    enough trailing nul bytes for the expected input format, leading to
+    uninitialized memory reads in the password lookup.
+
+    Add a test suite using the driver and library from C TAP Harness 1.1.
+
+    Add portability code for platforms without a working snprintf or other
+    deficiencies and updated the code to take advantage of those
+    guarantees.
+
+krb5-strength 0.5 (2007-07-18)
+
+    The check of the password against the principal checked against the
+    fully-qualified principal, which is not the usual problem.
+    Additionally check that the password doesn't match the principal with
+    the realm removed or the reverse of that (case-insensitive).
+
+krb5-strength 0.4 (2007-03-28)
+
+    The patches directory was omitted from the distribution.  Really
+    include it.
+
+krb5-strength 0.3 (2007-03-23)
+
+    Initial public release.  Includes a patch for MIT Kerberos, a slightly
+    modified version of CrackLib, and glue wrapped around CrackLib to make
+    a loadable module.

@@ -1,0 +1,19 @@
+[
+    {
+        "name": "password too short (limit 12)",
+        "principal": "test@EXAMPLE.COM",
+        "password": "vUCZ2aX$Y.e",
+        "code": "KADM5_PASS_Q_TOOSHORT",
+        "error": "Password is too short"
+    },
+    {
+        "name": "sufficiently long password",
+        "principal": "test@EXAMPLE.COM",
+        "password": "vUCZ2aX$Y.e1"
+    },
+    {
+        "name": "password in (unchecked) dictionary",
+        "principal": "test@EXAMPLE.COM",
+        "password": "happenstance"
+    }
+]

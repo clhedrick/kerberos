@@ -1,0 +1,219 @@
+#!/usr/bin/perl
+#
+# Read a JSON file of password tests and generate C data.
+#
+# The canonical representation of our password tests is in JSON, but I don't
+# want to require a JSON parser for the C tests to run.  This script reads the
+# JSON input and generates a C data structure that holds all of the tests.
+
+use 5.010;
+use autodie;
+use strict;
+use warnings;
+
+use Carp qw(croak);
+use Encode qw(encode);
+use File::Basename qw(basename);
+use JSON;
+use Perl6::Slurp qw(slurp);
+use Readonly;
+
+##############################################################################
+# Global variables
+##############################################################################
+
+# The header on the generated source file.
+Readonly my $HEADER => <<'END_HEADER';
+/*
+ * Automatically generated -- do not edit!
+ *
+ * This file was automatically generated from the original JSON source file
+ * for the use in C test programs.  To make changes, modify the original
+ * JSON source or (more rarely) the make-c-data script and run it again.
+ *
+ * Copyright 2013
+ *     The Board of Trustees of the Leland Stanford Junior University
+ *
+ * See LICENSE for licensing terms.
+ */
+
+#include <tests/data/passwords/tests.h>
+
+END_HEADER
+
+# The list of attributes, in order, whose values go into the C struct.
+Readonly my @ATTRIBUTES => qw(name principal password code error);
+
+# A hash of attributes that should be put in the C struct as they literally
+# appear in the JSON, rather than as strings.  (In other words, attributes
+# that are numbers or C constants.)  Only the keys are of interest.
+Readonly my %IS_LITERAL_ATTRIBUTE => (code => 1);
+
+##############################################################################
+# Functions
+##############################################################################
+
+# print with error checking and an explicit file handle.  autodie
+# unfortunately can't help us with these because they can't be prototyped and
+# hence can't be overridden.
+#
+# $fh   - Output file handle
+# @args - Remaining arguments to print
+#
+# Returns: undef
+#  Throws: Text exception on output failure
+sub print_fh {
+    my ($fh, @args) = @_;
+    print {$fh} @args or croak('print failed');
+    return;
+}
+
+# The same for say.
+sub say_fh {
+    my ($fh, @args) = @_;
+    say {$fh} @args or croak('say failed');
+    return;
+}
+
+# Load a password test cases and return them as a list.
+#
+# $file - The path to the file containing the test data in JSON
+#
+# Returns: List of anonymous hashes representing password test cases
+#  Throws: Text exception on failure to load the test data
+sub load_password_tests {
+    my ($file) = @_;
+
+    # Load the test file data into memory.
+    my $testdata = slurp($file);
+
+    # Decode the JSON into Perl objects and return them.
+    my $json = JSON->new->utf8;
+    return $json->decode($testdata);
+}
+
+# Output one struct's data, representing a test case.
+#
+# $fh       - The output file handle to which to send the C data
+# $test_ref - The hash reference holding the test data
+#
+# Returns: undef
+#  Throws: Text exception on I/O failure
+sub output_test {
+    my ($fh, $test_ref) = @_;
+    my $prefix = q{ } x 4;
+
+    # Output the data in the order of @ATTRIBUTES.
+    say_fh($fh, $prefix, "{\n");
+    for my $attr (@ATTRIBUTES) {
+        my $value = $test_ref->{$attr};
+        if ($IS_LITERAL_ATTRIBUTE{$attr}) {
+            $value //= 0;
+        } else {
+            $value = defined($value) ? qq{"$value"} : 'NULL';
+        }
+        say_fh($fh, $prefix x 2, encode('utf-8', $value), q{,});
+    }
+    say_fh($fh, $prefix, '},');
+    return;
+}
+
+##############################################################################
+# Main routine
+##############################################################################
+
+# Parse command-line arguments.
+if (@ARGV != 1) {
+    die "Syntax: make-c-data <json-file>\n";
+}
+my $datafile = $ARGV[0];
+
+# Load the test data.
+my $tests_ref = load_password_tests($datafile);
+
+# Print out the header.
+my $name = basename($datafile);
+$name =~ s{ [.]json \z }{}xms;
+print_fh(\*STDOUT, $HEADER);
+say_fh(\*STDOUT, "const struct password_test ${name}_tests[] = {");
+
+# Print out the test data.
+for my $test_ref (@{$tests_ref}) {
+    output_test(\*STDOUT, $test_ref);
+}
+
+# Close the struct.
+say_fh(\*STDOUT, '};');
+
+__END__
+
+##############################################################################
+# Documentation
+##############################################################################
+
+=for stopwords
+Allbery JSON krb5-strength struct sublicense MERCHANTABILITY
+NONINFRINGEMENT
+
+=head1 NAME
+
+make-c-data - Generate C data from JSON test data for krb5-strength
+
+=head1 SYNOPSIS
+
+B<make-c-data> I<input>
+
+=head1 DESCRIPTION
+
+The canonical form of the password test data for the krb5-strength package
+is in JSON, but requiring a C JSON parser to run the test suite (or
+writing one) is undesirable.  Hence this script.  B<make-c-data> takes a
+JSON file as input, interprets it as a list of password test cases, and
+outputs a C file that defines an array of C<struct password_test>.  That
+struct is expected to have the following definition:
+
+    struct password_test {
+        const char *name;
+        const char *principal;
+        const char *password;
+        krb5_error_code code;
+        const char *error;
+    };
+
+All JSON objects are expected to have fields corresponding to the above
+struct element names.  All of them are written as C strings except for
+code, where the value from JSON is written as a literal.  It should
+therefore be either a number or a symbolic constant.
+
+The written file will also include C<tests/data/passwords/tests.h>, which
+should define the above struct and any constants that will be used for the
+code field.
+
+=head1 AUTHOR
+
+Russ Allbery <eagle@eyrie.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2013 The Board of Trustees of the Leland Stanford Junior
+University
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+=cut

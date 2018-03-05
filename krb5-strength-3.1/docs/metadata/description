@@ -1,0 +1,54 @@
+Heimdal includes a capability to plug in external password quality checks
+and comes with an example that checks passwords against CrackLib.
+However, in testing at Stanford, we found that CrackLib with its default
+transform rules does not catch passwords that can be guessed using the
+same dictionary with other tools, such as Jack the Ripper.  We then
+discovered other issues with CrackLib with longer passwords, such as some
+bad assumptions about how certain measures of complexity will scale, and
+wanted to impose other limitations that it didn't support.
+
+This plugin provides the ability to check password quality against the
+standard version of CrackLib, or against a modified version of CrackLib
+that only passes passwords that resist attacks from both Crack and Jack
+the Ripper using the same rule sets.  It also supports doing simpler
+dictionary checks against a CDB database, which is fast with very large
+dictionaries, or a SQLite database, which can reject all passwords within
+edit distance one of a dictionary word.  It can also impose other
+programmatic checks on passwords such as character class requirements.
+
+If you're just now starting with password checking, I recommend using the
+SQLite database with a large wordlist and minimum password lengths.  We
+found this produced the best results with the least user frustration.
+
+For Heimdal, krb5-strength includes both a program usable as an external
+password quality check and a plugin that implements the dynamic module
+API.  For MIT Kerberos (1.9 or later), it includes a plugin for the
+password quality (pwqual) plugin API.
+
+krb5-strength can be built with either the system CrackLib or with the
+modified version of CrackLib included in this package.  Note, however,
+that if you're building against the system CrackLib, Heimdal includes in
+the distribution a strength-checking plugin and an external password check
+program that use the system CrackLib.  With Heimdal, it would probably be
+easier to use that plugin or program than build this package unless you
+want the modified CrackLib, one of the other dictionary types, or the
+additional character class and length checks.
+
+For information about the changes to the CrackLib included in this
+toolkit, see `cracklib/HISTORY`.  The primary changes are tighter rules,
+which are more aggressive at finding dictionary words with characters
+appended and prepended, which tighten the requirements for password
+entropy, and which add stricter rules for longer passwords.  They are also
+minor changes to fix portability issues, remove some code that doesn't
+make sense in the kadmind context, and close a few security issues.  The
+standard CrackLib distribution on at least some Linux distributions now
+supports an additional interface to configure its behavior, and
+krb5-strength should change in the future to use that interface and drop
+the embedded copy.
+
+krb5-strength also includes a password history implementation for Heimdal.
+This is separate from the password strength implementation but can be
+stacked with it so that both strength and history checks are performed.
+This history implementation is available only via the Heimdal external
+password quality interface.  MIT Kerberos includes its own password
+history implementation.
