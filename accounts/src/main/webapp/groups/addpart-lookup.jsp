@@ -192,17 +192,17 @@ There you can finish the process of adding the users you have identified.
         filter = "(&";
 
 	if (anywhere != null && !anywhere.trim().equals(""))
-	   filter = filter + "(cn=*"+anywhere+"*)";
+	   filter = filter + "(cn=*"+anywhere.trim()+"*)";
 	if (lastname != null && !lastname.trim().equals(""))
-	   filter = filter + "(sn="+lastname+"*)";
+	   filter = filter + "(sn="+lastname.trim()+"*)";
 	if (firstname != null && !firstname.trim().equals(""))
-	   filter = filter + "(givenname="+firstname+"*)";
+	   filter = filter + "(givenname="+firstname.trim()+"*)";
 	if (email != null && !email.trim().equals(""))
-	   filter = filter + "(mail="+email+"*)";
+	   filter = filter + "(mail="+email.trim()+"*)";
 	if (netidreq != null && !netidreq.trim().equals(""))
-	   filter = filter + "(uid="+netidreq+")";
+	   filter = filter + "(uid="+netidreq.trim()+")";
 	if (ruid != null && !ruid.trim().equals(""))
-	   filter = filter + "(rutgersEduRUID="+ruid+")";
+	   filter = filter + "(rutgersEduRUID="+ruid.trim()+")";
 
 	if (filter.equals("(&")) {
 	    throw new NoFilterException();
