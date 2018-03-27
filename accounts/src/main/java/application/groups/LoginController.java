@@ -163,6 +163,8 @@ public class LoginController {
 	    if (request.getSession().getAttribute("krb5subject") != null) {
 		if ("user".equals(model.asMap().get("app")))
 		    response.sendRedirect("../users/showuser");
+		if ("hosts".equals(model.asMap().get("app")))
+		    response.sendRedirect("../hosts/showhosts");
 		else
 		    response.sendRedirect("showgroups");
 	    }
@@ -239,6 +241,8 @@ public class LoginController {
 	try {
 	    if ("user".equals(app)) {
 		response.sendRedirect("../users/showuser");
+	    } else if ("hosts".equals(app)) {
+		response.sendRedirect("../hosts/showhosts");
 	    } else
 		response.sendRedirect("showgroups");
 	} catch (Exception e) {

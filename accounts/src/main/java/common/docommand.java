@@ -38,9 +38,16 @@ public class docommand {
     public static ConcurrentSkipListSet<Integer> cachesUsed = new ConcurrentSkipListSet<Integer>();
 
     public static int docommand (String[]command, String[]env){
-	return docommand(command, env, null);
+	return docommand(command, env, null, null);
     }
     public static int docommand (String[]command, String[]env, JspWriter out){
+	return docommand(command, env, out, null);
+    }
+    public static int docommand (String[]command, String[]env, List<String> outlist){
+	return docommand(command, env, null, outlist);
+    }
+
+    public static int docommand (String[]command, String[]env, JspWriter out, List<String> outlist){
      
  	 Integer cacheUsed = null;
          Logger logger = null;
@@ -121,6 +128,8 @@ public class docommand {
 		     logger.error(line);
 		     if (out != null)
 			 out.println(StringEscapeUtils.escapeHtml4(line) + "<br/>");
+		     if (outlist != null)
+			 outlist.add(line);
 		     line = reader.readLine();
 		 }
 		 
@@ -129,6 +138,8 @@ public class docommand {
 		     logger.error(line);
 		     if (out != null)
 			 out.println(StringEscapeUtils.escapeHtml4(line) + "<br/>");
+		     if (outlist != null)
+			 outlist.add(line);
 		     line = reader.readLine();
 		 }
 	     }

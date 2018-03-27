@@ -126,8 +126,21 @@ those things.
      attribute businesscategoryc
   add them to User Administrators
 
+Also, to update the firewall on the kerberos servers, the host running
+this must be allowed to ssh to the firewall. The user syncipt on each
+Kerberos server must list http/services.cs.rutgers.edu in .k5login.
+That user's shell is  /home/syncipt/update
+~syncipt/update is a script that runs sudo /usr/local/scripts/hosts2fw/update
+sudoers has a line
+syncipt ALL=NOPASSWD:/usr/local/scripts/hosts2fw/update
+/etc/sshd_config has
+match user syncipt
+AuthenticationMethods gssapi-with-mic
+because otherwise we don't allow logins with kerberos
+
 Tomcat is called by /etc/init.d/tomcat. In addition to the obvious, it
 uses k5start to maintain credentials for the services principal.
+
 
 KERBEROS
 

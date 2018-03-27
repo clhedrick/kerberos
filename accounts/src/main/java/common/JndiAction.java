@@ -28,6 +28,8 @@ import com.sun.security.auth.callback.TextCallbackHandler;
 import java.util.Hashtable;
 import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import Activator.Config;
 	 
@@ -37,6 +39,8 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 	public DirContext ctx = null;
 
 	public ArrayList<HashMap<String,ArrayList<String>>> val = new ArrayList<HashMap<String,ArrayList<String>>>();
+	// use this for new applications. The first one leads to really ugly declarations
+	public List<Map<String,List<String>>> data = new ArrayList<Map<String,List<String>>>();
 
 	public JndiAction(String[] origArgs) {
 	    this.args = (String[])origArgs.clone();
@@ -94,7 +98,9 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 
 		while (answer.hasMore()) {
 		    HashMap<String,ArrayList<String>>ans = new HashMap<String,ArrayList<String>>();
+		    HashMap<String,List<String>>ans2 = new HashMap<String,List<String>>();
 		    val.add(ans);
+		    data.add(ans2);
 
 		    SearchResult sr = (SearchResult)answer.next();
 
@@ -102,6 +108,7 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		    ArrayList<String>dns = new ArrayList<String>();
 		    dns.add(sr.getNameInNamespace());
 		    ans.put("dn", dns);
+		    ans2.put("dn", dns);
 
 		    Attributes attributes = sr.getAttributes();
 		    NamingEnumeration attrEnum = attributes.getAll();
@@ -114,6 +121,7 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 			    vals.add(s);
 			}			    
 			ans.put(attr.getID().toLowerCase(), vals);
+			ans2.put(attr.getID().toLowerCase(), vals);
 		    }
 		}
 
