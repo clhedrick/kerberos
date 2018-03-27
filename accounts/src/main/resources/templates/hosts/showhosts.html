@@ -1,0 +1,54 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html lang="en">
+<head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<title>Host Management</title>
+<script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
+</head>
+<div id="masthead"></div>
+<div id="main">
+
+<div class="messages" th:if="${messages?.size()}">
+<p th:each="msg : ${messages}" th:text="${msg}" />
+</div>
+
+
+<a href="../"> Account Management</a>
+
+<h1> Host Management </h1>
+
+<p> This page lists host that you manage. That means that you can create key tables for them, and
+thus you can set up Kerberos on them.</p>
+
+<form th:action="@{/hosts/showhosts}" method="post">
+
+<div th:if="${hosts != null and hosts.size() > 0}">
+
+<h2>Current hosts managed by you</h2>
+
+<div class="inset" style="padding-top:0.5em">
+
+<div th:each="h : ${hosts}">
+<span th:text="${h.fqdn[0]}"></span>
+</div>
+</div>
+</div>
+
+<h2 style="margin-top:2em"> Add Host </h2>
+
+<p> This adds hosts into our Kerberos system. </p>
+<ul>
+<li> The hostname must already be registered in DNS. That is normally done when the IP address is assigned. </li>
+<li> The host must not already be in our system. (This is to prevent people from taking over ownership of someone else's system. </li>
+<li> You must have permission to add hosts. All faculty do. They can request us to authorize others.</li>
+</ul>
+
+<div class="inset" style="margin-top:1em">
+<label>Host Name: <input type="text" name="name" id="name"/></label>
+<div>
+<input type="submit" id="submit" value="Add Host"/>
+</div>
+</div>
+</form>
+</div>
+</html>
