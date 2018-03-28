@@ -132,6 +132,10 @@ public class HostsController {
 	if (hostname == null)
 	    return "Error: you must supply a host parameter".getBytes();
 
+	int port = request.getRemotePort();
+	if (port >= 1024)
+	    return "Error: you must be root to use this".getBytes();
+
 	// check both that the hostname supplied (which should be the system's hostname) matches the
 	// ip address and the fully-qualified hostname. If things don't all agree Kerberos may not
 	// work properly.
