@@ -25,6 +25,7 @@ import org.springframework.security.config.annotation.authentication.builders.Au
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import Activator.Config;
 
 @Configuration
 public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
@@ -36,8 +37,26 @@ public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
      @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
-	    .authorizeRequests()
+	    .httpBasic().and().authorizeRequests()
+	    // use basic auth with LDAP for this one URL only
+            .antMatchers("/enrollhosts").authenticated()
 	    .antMatchers("/**").permitAll();
+    }
+
+    // when basic auth is used, this specifies what it is; LDAP in this case
+    @Override
+    public void configure(AuthenticationManagerBuilder auth) throws Exception {
+
+	auth
+	    .ldapAuthentication()
+	    .contextSource()
+	    // this should work, and does with ldap, but not ldaps
+	    //	    .url("ldaps:///dc=cs,dc=rutgers,dc=edu")
+	    // for some reason a base has to be specified. 
+	    .url(Config.getConfig().kerbldapurl + "/" + Config.getConfig().usersuffix.substring(1))
+	    .and()
+	    .userDnPatterns("uid={0}");
+
     }
 
 }
