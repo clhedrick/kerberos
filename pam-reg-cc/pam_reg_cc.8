@@ -8,6 +8,21 @@ PAM is preparing for the user process. If it is defined,
 pam_reg_cc registers the cache that was just created for
 renewd to renew automatically. 
 .PP
+It has one additional function, which is only necessary where
+sssd is being used with IPA, and local UIDs don't agree with those
+in IPA. In some a situation, sssd will create Kerberos credentials
+for the UID listed in IPA, but the user will be logged in with 
+the UID in /etc/passwd. They'll be unable to read their own
+credentials, because the cache will be owned by the wrong user.
+pam_reg_cc will copy the credentials to a cached owned by the
+right user and update KRB5CCNAME. Normally this is done by
+the session function. However if you using Google authenticator,
+correct credentials will be needed to read the Google config file.
+In that case, you'll need to call pam_reg_cc as an auth module,
+after sssd but before Google authenticator. Otherwise, this
+function will be performed in the session module, along
+with the rest of the functionality of this module.
+.PP
 KRB5CCNAME is sometimes set
 to the default collection, rather than to the specific cache.
 That can require pam_reg_cc to guess which cache was actually
