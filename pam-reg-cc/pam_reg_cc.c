@@ -280,20 +280,20 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   ret = krb5_init_context(&context);
   if (ret) goto err1;
 
+  if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) 
+    return PAM_AUTHINFO_UNAVAIL;
+      // switch uid and gid to get access to credentials
+  pwd = getpwnam(username);
+  if (!pwd) goto err;
+
   // in case pam_sm_setcred wasn't called during auth phase
-  fix_cred(pamh, context);
+  fix_cred(pamh, context, pwd);
 
   // fix_cred may have changed it
   ccname = pam_getenv(pamh, "KRB5CCNAME");
 
   ret = krb5_get_default_realm(context, &default_realm);
   if (ret) goto err;
-
-  if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) 
-    return PAM_AUTHINFO_UNAVAIL;
-      // switch uid and gid to get access to credentials
-  pwd = getpwnam(username);
-  if (!pwd) goto err;
 
   ret = krb5_build_principal(context, &userprinc, strlen(default_realm), default_realm, username, NULL);
   if (ret) goto err1;
@@ -585,12 +585,20 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
 PAM_EXTERN int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const char**argv) {
   krb5_context context = NULL;
   int ret;
+  struct passwd * pwd = NULL;
+  const char *username;
 
   ret = krb5_init_context(&context);
   if (ret)
     return PAM_SUCCESS;
 
-  fix_cred(pamh, context);
+  if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) 
+    return PAM_AUTHINFO_UNAVAIL;
+      // switch uid and gid to get access to credentials
+  pwd = getpwnam(username);
+  if (!pwd) return PAM_SUCCESS;
+
+  fix_cred(pamh, context, pwd);
 
   if (context)
     krb5_free_context(context);
@@ -599,11 +607,9 @@ PAM_EXTERN int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const cha
 }
 
 
-int fix_cred(pam_handle_t *pamh, krb5_context context) {
+int fix_cred(pam_handle_t *pamh, krb5_context context, struct passwd *pwd) {
 
   const char *ccname = pam_getenv(pamh, "KRB5CCNAME");
-  struct passwd * pwd = NULL;
-  const char *username;
   krb5_ccache cachecopy = NULL;
   krb5_ccache firstcache = NULL;
   const char *cachename = NULL; // doesn't need free
@@ -617,42 +623,26 @@ int fix_cred(pam_handle_t *pamh, krb5_context context) {
 
   // if this fails, we still allow the login
 
-  pam_syslog(pamh, LOG_DEBUG, "checking ownership of ccname %s", ccname);
+  //  pam_syslog(pamh, LOG_DEBUG, "checking ownership of ccname %s", ccname);
 
   if (!ccname) 
     return PAM_SUCCESS;  // nothing to do
 
-  // get basic user and kerberos info
+  if (strncmp(ccname, "FILE:", 5) == 0 ||
+      ccname[0] == '/') {
+    const char *cachename = ccname;
+    if (ccname[0] != '/')
+      cachename = ccname + 5;
 
-  ret = krb5_init_context(&context);
-  if (ret) goto ok;
-
-  if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) 
-    return PAM_AUTHINFO_UNAVAIL;
-      // switch uid and gid to get access to credentials
-  pwd = getpwnam(username);
-  if (!pwd) goto ok;
-
-  // now look at the cache we've got. Figure out who owns it
-  ret = krb5_cc_resolve(context, ccname, &firstcache);
-  if (ret) {pam_syslog(pamh, LOG_ERR, "can't resolve %s", ccname);  goto ok;}
-
-  cachetype = krb5_cc_get_type(context, firstcache);
-  if (!cachetype) goto ok; // impossible
-
-  cachename = krb5_cc_get_name(context, firstcache);
-  if (!cachename) goto ok; // impossible
-
-  if (strcmp(cachetype, "FILE") == 0) {
     struct stat statb;
     if (stat(cachename, &statb)) {
       pam_syslog(pamh, LOG_ERR, "can't find cache %s", cachename);
       goto ok;
     }
     cacheuid = statb.st_uid;
-  } else if (strcmp(cachetype, "KEYRING") == 0) {
+  } else if (strncmp(ccname, "KEYRING:", 8) == 0) {
     char *cp, *cp2;
-    cp = index(cachename, ':');
+    cp = index(ccname + 8, ':');
     if (!cp) {pam_syslog(pamh, LOG_ERR, "keyring missing colon %s", cachename); goto ok;}
     cacheuid = (uid_t) strtol(cp+1, NULL, 10);
   } else {
@@ -665,6 +655,10 @@ int fix_cred(pam_handle_t *pamh, krb5_context context) {
 
   pam_syslog(pamh, LOG_INFO, "wrong owner for %s, creating new cache %d %d", ccname, cacheuid, pwd->pw_uid);
 
+  // set up to copy original
+  ret = krb5_cc_resolve(context, ccname, &firstcache);
+  if (ret) {pam_syslog(pamh, LOG_ERR, "can't resolve %s", ccname);  goto ok;}
+
   ret = krb5_cc_get_principal(context, firstcache, &princ);
   if (ret) {pam_syslog(pamh, LOG_ERR, "unable to get principal for cache %s", ccname); goto ok;}
 
@@ -674,35 +668,20 @@ int fix_cred(pam_handle_t *pamh, krb5_context context) {
   setresgid(pwd->pw_gid, pwd->pw_gid, -1);
   setresuid(pwd->pw_uid, pwd->pw_uid, -1);
   
-#ifdef undef
-  // generate unique name. sssd doesn't actually do this
-  // cc_new_unique doesn't produce a name I like for /tmp; for other types it's ok
-  if (strcmp(cachetype, "FILE") == 0) {
-    char *ccfile = NULL;
-    int fd;
-    if (asprintf(&ccfile, "/tmp/krb5cc_%ld_XXXXXX", pwd->pw_uid ) <= 0) {
-      pam_syslog(pamh, LOG_ERR, "asprintf failed");
-      goto ok;
-    }
-    fd = mkstemp(ccfile);
-    close(fd);
-    ret = krb5_cc_resolve(context, ccfile, &cachecopy);
-  } else {
-    ret = krb5_cc_new_unique(context, cachetype, cachename, &cachecopy);
-  }
-#endif
-
+  // create new cache; do it as the user so he owns it
   ret = krb5_cc_default(context, &cachecopy);
   if (ret) {pam_syslog(pamh, LOG_ERR, "unable to resolve default cache for %d", pwd->pw_uid); goto ok;}
   ret = krb5_cc_initialize(context, cachecopy, princ);
   if (ret) {pam_syslog(pamh, LOG_ERR, "unable to initialize cache for %d", pwd->pw_uid); goto ok;}
 
+  // but need to be root to read old cache
   setresuid(olduid, olduid, -1);
   setresgid(oldgid, oldgid, -1);
 
   ret = krb5_cc_copy_creds(context, firstcache, cachecopy);
   if (ret) {pam_syslog(pamh, LOG_ERR, "unable to copy cache"); goto ok;}
 
+  // need type and name to set KRB5CCNAME
   cachetype = krb5_cc_get_type(context, cachecopy);
   if (!cachetype) goto ok; // impossible
 
