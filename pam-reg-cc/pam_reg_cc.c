@@ -128,9 +128,8 @@ void register_for_delete(pam_handle_t *pamh, const char *cache) {
       free(newname);
       return;
     }
+    fd = open(newname, O_CREAT|O_WRONLY, 0600);
   }
-  close(fd);
-  fd = open(newname, O_CREAT|O_WRONLY, 0600);
   if (fd < 0) {
     pam_syslog(pamh, LOG_ERR, "unable to create %s", newname);
     free(newname);
