@@ -433,6 +433,9 @@ public class User {
 
     public static void main( String[] argarray) {
 
+	// by default we get slf4j, which doesn't understand the configuration files
+        System.setProperty("log4j2.loggerContextFactory", "org.apache.logging.log4j.core.impl.Log4jContextFactory");
+
 	ArrayList<String> args = new ArrayList<String>(Arrays.asList(argarray));
 
 	boolean verbose = false;
@@ -510,6 +513,7 @@ public class User {
 	// in the web context, the configuration file comes
 	// from WEB-INF. It's the first file that matches
 	// log4j2*xml
+	// System.setProperty("log4j.configurationFile", "/var/www/tomcat/webapps/accounts/log4j-syslog.xml");
 	System.setProperty("log4j.configurationFile", logname);
 
 	if (doUser(username, clusters, currentClusters, ineligibleClusters, requestedCluster, cleanup, test, false))

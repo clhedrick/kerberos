@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+  <Appenders>
+    <RollingFile name="filex" fileName="/var/log/tomcat.log" filePattern="/var/log/tomcat-%i.log">
+      <PatternLayout>
+        <Pattern>%d %p %c{1.} [%t] %m%n</Pattern>
+      </PatternLayout>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="50 MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="5"/>
+    </RollingFile>
+    <Socket name="syslog" facility="AUTHPRIV" port="514" protocol="TCP">
+      <PatternLayout pattern="&lt;86&gt;accounts[%T]: %m%n" />
+    </Socket>
+  </Appenders>
+  <Loggers>
+    <Logger name="Activator.User" level="info">
+      <AppenderRef ref="syslog" />
+    </Logger>
+    <Root level="info">
+      <AppenderRef ref="filex" />
+    </Root>
+  </Loggers>
+</Configuration>
