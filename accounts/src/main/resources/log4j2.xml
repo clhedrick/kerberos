@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- this is loaded for the web version. log4j is configured in the pom.xml -->
 <Configuration>
   <Appenders>
     <RollingFile name="filex" fileName="/var/log/tomcat.log" filePattern="/var/log/tomcat-%i.log">

@@ -17,6 +17,7 @@
   </parent>
 
   <dependencies>
+    <!-- start special hack to get log4j logging -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
@@ -35,6 +36,7 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-log4j2</artifactId>
     </dependency>
+    <!-- end special hack to get log4j logging -->
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j-api</artifactId>
