@@ -2,6 +2,7 @@
 <!-- this is loaded for the web version. log4j is configured in the pom.xml -->
 <Configuration>
   <Appenders>
+<!--
     <RollingFile name="filex" fileName="/var/log/tomcat.log" filePattern="/var/log/tomcat-%i.log">
       <PatternLayout>
         <Pattern>%d %p %c{1.} [%t] %m%n</Pattern>
@@ -11,7 +12,11 @@
       </Policies>
       <DefaultRolloverStrategy max="5"/>
     </RollingFile>
-    <Socket name="syslog" facility="AUTHPRIV" port="514" protocol="TCP">
+-->
+    <Socket name="messages" host="${hostName}" facility="LOCAL0" port="514" protocol="TCP">
+      <PatternLayout pattern="&lt;134&gt;accounts[%T]: %m%n" />
+    </Socket>
+    <Socket name="syslog" host="${hostName}" facility="AUTHPRIV" port="514" protocol="TCP">
       <PatternLayout pattern="&lt;86&gt;accounts[%T]: %m%n" />
     </Socket>
   </Appenders>
@@ -20,7 +25,7 @@
       <AppenderRef ref="syslog" />
     </Logger>
     <Root level="info">
-      <AppenderRef ref="filex" />
+      <AppenderRef ref="messages" />
     </Root>
   </Loggers>
 </Configuration>
