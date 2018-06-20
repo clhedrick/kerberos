@@ -14,10 +14,10 @@
     </RollingFile>
 -->
     <Socket name="messages" host="${hostName}" facility="LOCAL0" port="514" protocol="TCP">
-      <PatternLayout pattern="&lt;134&gt;accounts[%T]: %m%n" />
+      <PatternLayout pattern="&lt;134&gt;accounts[%T]: %p %m%n" />
     </Socket>
     <Socket name="syslog" host="${hostName}" facility="AUTHPRIV" port="514" protocol="TCP">
-      <PatternLayout pattern="&lt;86&gt;accounts[%T]: %m%n" />
+      <PatternLayout pattern="&lt;86&gt;accounts[%T]: %p %m%n" />
     </Socket>
   </Appenders>
   <Loggers>
