@@ -13,11 +13,11 @@
       <DefaultRolloverStrategy max="5"/>
     </RollingFile>
 -->
-    <Socket name="messages" host="${hostName}" facility="LOCAL0" port="514" protocol="TCP">
-      <PatternLayout pattern="&lt;134&gt;accounts[%T]: %p %m%n" />
+    <Socket name="messages" host="${hostName}" port="514" protocol="TCP">
+      <Rfc5424Layout appName="accounts" facility="LOCAL0" newline="true" />
     </Socket>
-    <Socket name="syslog" host="${hostName}" facility="AUTHPRIV" port="514" protocol="TCP">
-      <PatternLayout pattern="&lt;86&gt;accounts[%T]: %p %m%n" />
+    <Socket name="syslog" host="${hostName}" port="514" protocol="TCP">
+      <Rfc5424Layout appName="accounts" facility="AUTHPRIV" newline="true" />
     </Socket>
   </Appenders>
   <Loggers>
