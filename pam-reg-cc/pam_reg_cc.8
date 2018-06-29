@@ -2,11 +2,32 @@
 .SH NAME
 pam_reg_cc \- register credential caches for renewd
 .SH DESCRIPTION
-.I  pam_reg_cc [usecollection]
-checks the current value of KRB5CCNAME in the environment that
+.I  pam_reg_cc [usecollection] [usedefaultname]
+.PP
+Pam_reg_cc registers Kerberos credentials so that renewd will
+renew them. Depending upon the configuration in /etc/krb5.conf,
+it may also copy the credentials cache into a new cache in /tmp,
+to make sure that Kerberized NFS can always find a credential
+cache.
+.PP
+Pam_reg_cc checks the current value of KRB5CCNAME in the environment that
 PAM is preparing for the user process. If it is defined, 
 pam_reg_cc registers the cache that was just created for
-renewd to renew automatically. 
+renewd to renew automatically, and may also copy it.
+.PP
+pam_reg_cc implements both auth and session. Logically it should be
+used in the auth stack after whatever module does Kerberos authentication.
+However sshd sets up Kerberos credentially internally, and doesn't
+call PAM's auth code. So the normal configuration is to put
+it in session fairly near the end. Auth will be used primarily when the
+application doesn't call session, or when it doesn't have KRB5CCNAME
+set for the session.
+.PP
+In case the application doesn't make KRB5CCNAME available, you can
+set "usedefaultname." This will cause pam_reg_cc to assume that the
+credential cache uses the default name as defined in /etc/krb5.conf.
+This can be dangerous, since sshd and other applications may make their
+own choice about the credential cache. But some applications need this.
 .PP
 KRB5CCNAME is sometimes set
 to the default collection, rather than to the specific cache.
@@ -55,7 +76,9 @@ you're using krb5cc_%U for normal user credentials, you need to use a
 path with something other than kr5cc_ before the %U. krb5cc_nfs_%U meets
 that requirement.
 .PP
-This module implements only session start (and a no-op session end).
+From auth, this module implements a no-op authenticate. The code is in setcred.
+From session, it implements session start. Session end is a no-op. It does not 
+make sense to use it for both auth and session, though it's normally harmless
 .PP
 If this module is being used in a system with renewd, you may want to warn users if the
 credentials forwarded to them have too short a lifetime to be renewed. To warn if there

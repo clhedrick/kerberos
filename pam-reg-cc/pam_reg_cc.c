@@ -1,4 +1,6 @@
 #define PAM_SM_SESSION
+#define PAM_SM_AUTH
+
 #include <sys/types.h>
 #include <sys/errno.h>
 #include <fcntl.h>
@@ -245,6 +247,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   int ret;
   krb5_context context = NULL;
   int usecollection = 0;
+  int fakename = 0;
   char *default_realm = NULL;
   krb5_data realm_data;
   char *credcopy = NULL;
@@ -266,27 +269,62 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   pam_syslog(pamh, LOG_INFO, "registering ccname %s", ccname);
 
-  if (!ccname) 
-    return PAM_SUCCESS;  // nothing to do
-
   for (i = 0; i < argc; i++) {
     if (strcmp(argv[i], "usecollection") == 0)
       usecollection = 1;
+    if (strcmp(argv[i], "usedefaultname") == 0)
+      fakename = 1;
   }
+
+  if (!fakename && !ccname) 
+    // KRB5CCNAME not specified and we haven't been asked to fake it
+    return PAM_SUCCESS;  // nothing to do
 
   // get basic user and kerberos info
 
   ret = krb5_init_context(&context);
   if (ret) goto err1;
 
-  ret = krb5_get_default_realm(context, &default_realm);
-  if (ret) goto err;
-
   if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) 
     return PAM_AUTHINFO_UNAVAIL;
-      // switch uid and gid to get access to credentials
+
   pwd = getpwnam(username);
   if (!pwd) goto err;
+
+  if (fakename && !ccname) {
+    // KRB5CCNAME not specified, but we've been told to fake it.
+    // Generate the user's default ccname.
+    // Need to change to the user, since the Kerberos libraries get %{uid}
+    // from the current uid.
+
+    uid_t olduid;
+    gid_t oldgid;
+    
+    olduid = getuid();
+    oldgid = getgid();
+
+    setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+    setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+
+    ccname =  krb5_cc_default_name(context);
+
+    // now put back our real uid
+    setresuid(olduid, olduid, -1);
+    setresgid(oldgid, oldgid, -1);
+
+    if (!ccname) {
+      // no name, nothing to do
+      krb5_free_context(context);
+      pam_syslog(pamh, LOG_INFO, "krb5_cc_default_name returns null");
+      return PAM_SUCCESS;  // nothing to do      
+    }
+
+    pam_syslog(pamh, LOG_INFO, "registering default ccname for this user %s", ccname);    
+
+  }
+
+  ret = krb5_get_default_realm(context, &default_realm);
+  if (ret) goto err;
 
   ret = krb5_build_principal(context, &userprinc, strlen(default_realm), default_realm, username, NULL);
   if (ret) goto err1;
@@ -568,4 +606,13 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 PAM_EXTERN int pam_sm_close_session(pam_handle_t *pamh, int flags, int argc, const char **argv) {
   return PAM_SUCCESS;
 } 
+
+PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char **argv) {
+  return PAM_SUCCESS;
+}
+
+PAM_EXTERN int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const char **argv) {
+  pam_sm_open_session(pamh, flags, argc, argv);
+  return PAM_SUCCESS; // optional so always ok
+}
 

@@ -10,10 +10,14 @@ kmkhomedir: pam_kmkhomedir.c
 
 pam_kmkhomedir.so: pam_kmkhomedir.c
 	gcc -fPIC -fno-stack-protector -DPAM -DHAVE_CONFIG_H  -I/usr/include/krb5  -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wparentheses -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -pthread -c pam_kmkhomedir.c -o pam_kmkhomedir.o
-	ld -x --shared -o pam_kmkhomedir.so pam_kmkhomedir.o -lkrb5 -lk5crypto -lcom_err -lkrb5support  -lkeyutils -lresolv  -ldl
+	ld -x --shared -o pam_kmkhomedir.so pam_kmkhomedir.o -lkrb5 -lk5crypto -lcom_err -lkrb5support  -lkeyutils -lresolv  -ldl -lpam
 
 clean::
 	rm mkhomedird.o mkhomedird 
+
+installans:: all
+	install --owner=root --group=root --mode=0755 pam_kmkhomedir.so /config/kerberos-ansible/kerberos-files/copy/usr/lib64/security/pam_kmkhomedir.so
+	install --owner=root --group=root --mode=0644 pam_kmkhomedir.8 /config/kerberos-ansible/kerberos-files/copy/usr/share/man/man8/pam_kmkhomedir.8
 
 install:: all
 	cp pam_kmkhomedir.so /lib64/security
