@@ -24,12 +24,20 @@ $(document).ready(function(){
 </head>
 <div id="masthead"></div>
 <div id="main">
-<p class="messages" th:if="${activatefailed}">
+<p class="messages message" th:if="${username == null}">
+Your username is already in use for system purposes. Please contact
+<a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>. We
+will assign you a different username for use within computer science.
+</p>
+
+<p class="messages message" th:if="${activatefailed}">
 Unable to activate your account. Please contact 
 <a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>.
 </p>
 
 <a href="..">Account Management</a>
+
+<div th:if="${username != null}">
 
 <h1> Activate Account on Computer Science Dept systems </h1>
 
@@ -94,6 +102,7 @@ using the accounts, please contact
 accounts. Please contact
 <a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>.
 Make sure to mention your netid in your email and any computer science courses you are taking.</p>
+</div>
 </div>
 </div>
 </html>
