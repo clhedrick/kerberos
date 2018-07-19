@@ -533,11 +533,12 @@ public class User {
     //   requested cluster - activation for that cluster - the activation screen of the web app
     //   cleanup - batch account cleanup
     //   isweb - is it called from web or command line. currently not used
+    // username is the CS username, normally netid, but there's a mapping table for exceptions
     public static boolean doUser (String username, List<String>activatableClusters, List<String>currentClusters, List<String>ineligibleClusters, String requestedCluster, boolean cleanup, boolean test, boolean isWeb) {
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
-
+	
 	User user = new User();
 
 	Config config = new Config();
@@ -547,6 +548,8 @@ public class User {
 	    logger.error("error loading config file " + e);
 	    return false;
 	}
+
+	Map<String,String> local2Univ = Uid.local2Univ(config);
 
 	Ldap ldap = new Ldap();
 
@@ -621,7 +624,10 @@ public class User {
 
 		    // get data from University for this user
 
-		    List<Map<String,List<String>>> universityDataList = ldap.lookup("(uid=" + username + ")", config);
+		    String univuid = username;
+		    univuid = local2Univ.getOrDefault(username, username);
+
+		    List<Map<String,List<String>>> universityDataList = ldap.lookup("(uid=" + univuid + ")", config);
 		    Map<String,List<String>> universityData = null;
 
 		    // can't create an account without university data, but in cleanup need to deal
@@ -635,7 +641,7 @@ public class User {
 
 		    // now add in data from CS database. It becomes an attribute in the LDAP
 		    // data structure, so filters can check it along with University data
-		    List<String>csroles = db.getRoles(username, config);
+		    List<String>csroles = db.getRoles(univuid, config);
 		    if (config.csroleattr != null)
 			universityData.put(config.csroleattr, csroles);
 

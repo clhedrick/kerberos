@@ -85,6 +85,9 @@ h3 {
   background-color: #fdd;
   margin-bottom: 1em;
 }
+.message {
+  padding:1em 1.5em 1em 1.5em;
+}
 .grid-left {
   display:flex; align-items:center;
   margin-bottom:0.5em;

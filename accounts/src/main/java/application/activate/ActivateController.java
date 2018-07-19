@@ -34,6 +34,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import Activator.User;
+import Activator.Uid;
 import common.utils;
 
 
@@ -55,14 +56,17 @@ public class ActivateController {
 	List<String> currentClusters = new ArrayList<String>();	    
 	List<String> ineligibleClusters = new ArrayList<String>();	    
 	String username = request.getRemoteUser();
-	if (username.equals("hedrick"))
-	    username = "clh";
+	username = Uid.localUid(username, Activator.Config.getConfig());
 
 	// set up model for JSTL
 	// User.doUser calls the actual activator code to find out which clusters the user
 	// is on and can activate on
 	
-	model.addAttribute("ok", User.doUser(username, clusters, currentClusters, ineligibleClusters, null, false, false, true));
+	model.addAttribute("username", username);
+	if (username != null)
+	    model.addAttribute("ok", User.doUser(username, clusters, currentClusters, ineligibleClusters, null, false, false, true));
+	else 
+	    model.addAttribute("ok", false);
 	model.addAttribute("clusters", clusters);
 	model.addAttribute("currentClusters", currentClusters);
 	model.addAttribute("ineligibleClusters", ineligibleClusters);
@@ -78,8 +82,7 @@ public class ActivateController {
 	cluster = filtername(cluster);
 	
 	String username = request.getRemoteUser();
-	if (username.equals("hedrick"))
-	    username = "clh";
+	username = Uid.localUid(username, Activator.Config.getConfig());
 	
 	boolean ok = User.doUser(username, null, null, null, cluster, false, false, true);
 	if (ok && utils.needsPassword(username)) {

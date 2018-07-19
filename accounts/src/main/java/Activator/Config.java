@@ -49,6 +49,7 @@ public class Config {
     public String csrolequery = null;
     public String csroleattr = null;
     public String uidtable =  null;
+    public String baduidtable =  null;
     public Map<String,String> log = new HashMap<String,String>();
     public String warningdir = "/var/lib/activator";
     public String warningtemplate = "/etc/activator.template";
@@ -152,6 +153,8 @@ public class Config {
 			csroleattr = atoms[1];
 		    if (atoms[0].equals("uidtable"))
 			uidtable = atoms[1];
+		    if (atoms[0].equals("baduidtable"))
+			baduidtable = atoms[1];
 		    if (atoms[0].equals("warningdir"))
 			warningdir = atoms[1];
 		    if (atoms[0].equals("warningtemplate"))

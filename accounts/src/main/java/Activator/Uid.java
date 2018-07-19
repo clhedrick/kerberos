@@ -19,6 +19,11 @@
 
 package Activator;
 import java.io.*;
+import java.nio.charset.Charset;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.util.Map;
+import java.util.HashMap;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 
@@ -64,6 +69,51 @@ public class Uid {
 	         throw new java.lang.IllegalArgumentException("problem reading uidtable " + e);
 	    }
     }	       
+
+    // maps university netids like mysql to a local equivalent, e.g. cs-mysql
+    public static String localUid(String netid, Config config) {
+	// if no mapping table, just return the netid
+	if (config.baduidtable == null)
+	    return netid;
+	// else read the file and map it
+	Charset charset = Charset.forName("US-ASCII");
+	try (BufferedReader reader = Files.newBufferedReader(Paths.get(config.baduidtable), charset)) {
+		String line = null;
+		while ((line = reader.readLine()) != null) {
+		    int i = line.indexOf(":");
+		    if (i < 1) {
+			// no colon, prohibited uid without replacement
+			if (netid.equals(line.trim()))
+			    return null;
+		    } else if (netid.equals(line.substring(0,i).trim())) {
+			// prohibited uid with replacement, use replacement
+			return line.substring(i+1).trim();
+		    }
+		}
+	    } catch (IOException x) {}
+	return netid;
+    }
+
+    
+    // returns map from CS username to university netid, just where they are different
+    public static Map<String,String> local2Univ(Config config) {
+        Map<String,String> retMap = new HashMap<String,String>();
+	// if no mapping table, just return the netid
+	if (config.baduidtable == null)
+	    return retMap;
+	// else read the file and map it
+	Charset charset = Charset.forName("US-ASCII");
+	try (BufferedReader reader = Files.newBufferedReader(Paths.get(config.baduidtable), charset)) {
+		String line = null;
+		while ((line = reader.readLine()) != null) {
+		    int i = line.indexOf(":");
+		    if (i < 1)
+			continue;
+		    retMap.put(line.substring(i+1).trim(), line.substring(0,i).trim());
+		}
+	    } catch (IOException x) {}
+	return retMap;
+    }
 
     public static void main( String[] args) {
 	Config config = new Config();

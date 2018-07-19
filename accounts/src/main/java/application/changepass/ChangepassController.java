@@ -38,6 +38,7 @@ import common.utils;
 import common.genpassword;
 import common.dict;
 import common.lu;
+import Activator.Uid;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -102,13 +103,17 @@ public class ChangepassController {
 
 	String user = request.getRemoteUser();
 	int retval = -1;
-	if ("hedrick".equals(user))
-	    user = "clh";
+	user = Uid.localUid(user, Activator.Config.getConfig());
 
 	List<String> messages = new ArrayList<String>();
 
 	// stupid. to simulate goto
 	while (true) {
+
+	    if (user == null) {
+		messages.add("Username is prohibited");
+		break;
+	    }
 
 	    if (!utils.allowChangePassword(user)) {
 		messages.add("You have requested that we disable automatic password changes for your account. Please come in person to our help desk or systems staff to change your password.");
@@ -142,13 +147,6 @@ public class ChangepassController {
 //	   out.println("<p>Password must have at least 6 different characters<p>");
 //	   break;
 //       }
-
-	    if ("hedrick".equals(user))
-		user = "clh";
-	    else if ("makmur".equals(user))
-		user = "hmakmur";
-	    else if ("watrous".equals(user))
-		user = "daw";
 
 	    String [] cmd = {"/bin/ipa", "passwd", user};
 	    
