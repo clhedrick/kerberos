@@ -125,9 +125,9 @@ net_read(int fd, char *buf, int len)
 
 
 #ifdef PAM
-char *pam_kmkhomedir(char *dirname, struct passwd * pwd);
+char *pam_kmkhomedir(char *dirname, struct passwd * pwd, char* serverhost);
 
-char *pam_kmkhomedir(char *dirname, struct passwd * pwd)
+char *pam_kmkhomedir(char *dirname, struct passwd * pwd, char* serverhost)
 {
 #else
 int main(int argc, char *argv[])
@@ -135,6 +135,7 @@ int main(int argc, char *argv[])
     char ch;
     char *dirname = NULL;
     struct passwd * pwd;
+    char *serverhost = NULL;
 #endif
 
     struct addrinfo *ap, aihints, *apstart = NULL;
@@ -163,7 +164,6 @@ int main(int argc, char *argv[])
     int have_cred = 0;
     char *username = NULL;
     long written;
-    char *serverhost = NULL;
     char *default_realm = NULL;
     unsigned debug = 0;
     char *message = NULL;
@@ -179,13 +179,13 @@ int main(int argc, char *argv[])
       */
      opterr = 0;
 #ifndef PAM
-     while ((ch = getopt(argc, argv, "dalruPU:F:H:")) != -1) {
+     while ((ch = getopt(argc, argv, "d")) != -1) {
          switch (ch) {
          case 'd':
              debug++;
              break;
          default:
-             mylog(LOG_ERR, "[-d debug] username dirname");
+             mylog(LOG_ERR, "[-d] username dirname [server]");
              exit(1);
              break;
          }
@@ -194,17 +194,18 @@ int main(int argc, char *argv[])
      argc -= optind;
      argv += optind;
 
-     if (argc != 2) {
-         mylog(LOG_ERR, "[-d debug] username dirname");
+     if (argc < 2) {
+         mylog(LOG_ERR, "[-d] username dirname [server]");
          exit(1);
      }
 
      username = argv[0];
      dirname = argv[1];
+     if (argc > 2)
+         serverhost = argv[2];
 
 #else
     username = pwd->pw_name;
-    dirname = pwd->pw_dir;
 #endif
 
 #ifdef MAC
@@ -232,7 +233,8 @@ int main(int argc, char *argv[])
     realm_data.data = default_realm;
     realm_data.length = strlen(default_realm);
 
-    krb5_appdefault_string(context, "pam_kmkhomedir", &realm_data, "server", "", &serverhost);
+    if (!serverhost)
+        krb5_appdefault_string(context, "pam_kmkhomedir", &realm_data, "server", "", &serverhost);
 
     if (strlen(serverhost) == 0) {
         message = "Please define server in the [appdefaults] section, e.g. \npam_kmkhomedir = {\n     server=hostname\n}";
@@ -510,6 +512,18 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   struct passwd * pwd;
   struct stat statbuf;
   char *message;
+  char *serverhost = NULL;
+  const char *pattern = NULL;
+  char *dir = NULL;
+  int freedir = 0;
+  int i;
+
+  for (i = 0; i < argc; i++) {
+      if (strncmp(argv[i],"host=", strlen("host=")) == 0) 
+          serverhost = (char *)argv[i] + strlen("host=");
+      if (strncmp(argv[i],"dir=", strlen("dir=")) == 0) 
+          pattern = argv[i] + strlen("dir=");
+  }
 
   if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) {
       pam_syslog(pamh, LOG_ERR, "unable to determine username");
@@ -524,8 +538,23 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       return PAM_SUCCESS; // go ahead and do the login anyway
   }
 
-  if (stat(pwd->pw_dir, &statbuf) == 0) {
+  dir = pwd->pw_dir;
+  if (pattern) {
+      char *cp = strstr(pattern, "%u");
+      if (cp) {
+          freedir = 1;  // need to free this
+          dir = malloc(strlen(pattern) + strlen(username));
+          strncpy(dir, pattern, cp - pattern);
+          dir[cp-pattern] = '\0';
+          strcat(dir, username);
+          strcat(dir, cp + 2);
+      }
+  }
+
+  if (stat(dir, &statbuf) == 0) {
       // directory already exists
+      if (freedir)
+          free(dir);
       return PAM_SUCCESS;
   }
 
@@ -533,11 +562,13 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       pam_syslog(pamh, LOG_ERR, "Error tryibg to look up directory %m");
       pam_error(pamh, "Error tryibg to look up directory %m");
       // not really success, but we probably don't want to stop login
+      if (freedir)
+          free(dir);
       return PAM_SUCCESS;
   }
 
   // at this point directory doesn't exist. no other error
-  message = pam_kmkhomedir(pwd->pw_dir, pwd);
+  message = pam_kmkhomedir(dir, pwd, serverhost);
 
   if (strlen(message) > 0) {
       pam_syslog(pamh, LOG_ERR, "%s", message);
@@ -545,6 +576,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   }
 
   free(message);
+  if (freedir)
+      free(dir);
 
   return PAM_SUCCESS;
 

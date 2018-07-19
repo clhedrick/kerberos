@@ -420,6 +420,8 @@ main(int argc, char *argv[])
     }
     directory[xmitlen] = '\0';
 
+    mylog(LOG_DEBUG, "username %s dirname %s", username, directory);
+
     cp = strrchr(directory, '/');
     if (!cp) {
         message = "Invalid directory name";
