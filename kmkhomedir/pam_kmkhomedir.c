@@ -517,6 +517,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *dir = NULL;
   int freedir = 0;
   int i;
+  FILE *pwfile = NULL;
 
   for (i = 0; i < argc; i++) {
       if (strncmp(argv[i],"host=", strlen("host=")) == 0) 
@@ -531,6 +532,21 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       return PAM_SUCCESS; // go ahead and do the login anyway
   }
 
+  // only do this for users that come from ldap/sss. Local users are root and things
+  // like that. Even if they're real users, we assume that when we put someone
+  // in passwd we create their directory.
+
+  pwfile = fopen("/etc/passwd", "r");
+  if (pwfile) {
+      while ((pwd = fgetpwent(pwfile))) {
+          if (strcmp(pwd->pw_name, username) == 0) {
+              fclose(pwfile);
+              return PAM_SUCCESS; // local user; nothing to do
+          }
+      }
+      fclose(pwfile);      
+  }
+  
   pwd = getpwnam(username);
   if (!pwd) {
       pam_syslog(pamh, LOG_ERR, "Can't find current user");

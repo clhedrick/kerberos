@@ -11,11 +11,14 @@ file system, e.g. the file server. pam_kmkhomedir then talks to
 mkhomedird to request home directories to me created.
 .PP
 pam_kmkhomedir sends mkhomedird the username and directory to be
-created. The user must exist. The directory is the user's home directory,
+created. The user must exist. By default, the directory is the user's home directory,
 from the passwd entry. Currently the server only supports directories
 ending in the user's directory name, e.g. /home/USER
 .PP
-mkhomedird will be called only if the directory doesn't exist.
+mkhomedird will be called only if the directory doesn't exist. It will not
+be called if the user is in /etc/passwd. This is avoid creating home directories
+on NFS file systems for root, ssh, etc. My assumption is that if you manually
+put users in /etc/password, you'll also create their home directories.
 .PP
 The server hostname may be configured in krb5.conf, e.g.
 .PP
@@ -26,11 +29,13 @@ pam_kmkhomedir = {
 }
 .fi
 .PP
-Alternatives, the hostname may be passed as an argument in the pam file. In addition,
+Alternatively, the hostname may be passed as an argument in the pam file. In addition,
 an argument such as "dir=/home/%u" may be used to define the directory name to be
 created. Normally the user's home directory is used, but there are times when additional
 directories need to be created. In that situation, pam_kmkhomedir can appear more than
-once, to create several directories.
+once, to create several directories. E.g. we have a file system with a lot more disk
+space available, but we don't back it up as much. We want to create directories on
+that file system as well as home directories.
 .PP
 Where NFS mounts aren't reliable, sometimes a user will login when the file system isn't
 mounted. To avoid making lots of bogus calls on the server asking to create home directories
