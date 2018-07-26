@@ -28,9 +28,16 @@ background-color: #eeeeee;
 
 <h1> Account Management Tools for<br>Computer Science Systems</h1>
 
-<p>
-These tools work with an account management system put in place in August, 2017.
-For details on the new system see <a href="kerberos.html">Computer Science Department user administration tools</a>
+<p> <b>Note:</b> Your computer science user ID is your <b>University
+NetID</b>. You must have a University NetID before you can
+activate a computer science account. Here's
+the Univeristy's tool for activating your
+NetID: <a href="https://netid.rutgers.edu">https://netid.rutgers.edu</a>
+
+<p> Computer science systems use passwords that are separate from 
+your University password. You can make them the same, but it is
+somewhat better from a security point of view if you use different
+passwords.
 
 <ul>
 <li> <a href="activate/activate">Activate an account on a Computer Science system</a>
@@ -44,21 +51,22 @@ are eligible for accounts.
 This will show you a University login screen. So as long as you remember
 your University password, you set or reset your CS password. If you need more security than a simple password
 can afford, please see <a href="two-factor.html"> two factor authentication</a>.
-<li> <a href="groups/login">Group management.</a> This will let authorized users (typically faculty) create user groups for computer science systems. This will let you share files with other people and authorize guest users.
+<li> <a href="groups/login">Group and Guest management.</a> This will let authorized users (typically faculty) create user groups for computer science systems. This will let you share files with other people and authorize guest users.
 <p>
 This will show you a Computer Science login screen.
 <li>  Consider giving us contact information, in case we need to reach you for support reasons. 
-<p>You can set additional information using "ipa user-mod", e.g. "ipa user-mod YOURNETID --phone=8484452001". "ipa user-mod --help" will give a list of what can be set. "ipa user-show YOURNETID" will show your current information. This command will work only on systems that have been fully converted. For faculty, please use richelieu.cs.rutgers.edu. For research, use tall3.rutgers.edu. All grad and ilab systems have been converted. You only need to do this once. The same information applies to all of our systems. Note that changing first name, lastname, and GECOS won't do anything useful, since we reset them to the official University names nightly.
-<li> By default, everyone uses the bash shell. To change to tcsh use "ipa user-mod YOURNETID --shell=/bin/tcsh" on one of the systems that is fully converted. (See previous item.)
+<p>You can set additional information using "ipa user-mod" on any of our systems, e.g. "ipa user-mod YOURNETID --phone=8484452001". "ipa user-mod --help" will give a list of what can be set. "ipa user-show YOURNETID" will show your current information. You only need to do this once. The same information applies to all of our systems. Note that changing first name, lastname, and GECOS won't do anything useful, since we reset them to the official University names nightly.
+<li> By default, everyone uses the bash shell. To change to tcsh use "ipa user-mod YOURNETID --shell=/bin/tcsh" any of our systems.
 <p>
 <li>  <a href="two-factor.html"> Two-factor authentication</a>. In case you need more security than a simple password can provide.
 <p>
-<li> <a href="hosts/showhosts"> Host Registration </a>. 
-<p>If you wnat to set up Kerberos on your system, you will need to register it here before you can use the kerberize script. See <a href="/kerberize.html"> Integrating your computer into Kerberos </a> for instructions before using this page.
-<p>
-<li> <a href="/kerberize.html"> Integrating your computer into Kerberos </a>. How to set up your computer to use Kerberos.
+<li> <a href="/kerberize.html"> Integrating your computer into Kerberos </a>. How to set up your computer to use Kerberos. (This is for computers located in
+computer science department areas. For systems at home, see <a href="https://www.cs.rutgers.edu/resources/working-at-home"> Working at Home</a>.)
 <p>
 <li> <a href="/sharing.html"> Sharing files between systems</a>
+<p>
+<li> <a href="kerberos.html"> Technical information on our security and
+account setup.
 </ul>
 <div class="textblock" style="margin-top:3em">
 <p>NOTE on <b>cron jobs</b>: For systems that use these accounts, 

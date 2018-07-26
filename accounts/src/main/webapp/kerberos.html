@@ -54,7 +54,7 @@ but because it wasn't integrated with the system, there were ways to bypass it. 
 two-factor authentication into the Kerberos server with a pre-authentication plugin.)
 </ul>
 
-<p> The new system should be largely invisible to users, except for the need to create
+<p> The use of Kerberos should be largely invisible to users, except for the need to create
 a separate password for it. However this is a fairly aggressive implementaton of
 new technologies, and failures are possible.
 
@@ -98,18 +98,6 @@ unless you've authorized it. Root can create a cron job for anyone. If cron jobs
 could access files without authorization, then root could get to your files just
 be creating a cron job to do it. So we need you to verify that root is allowed
 to start cron jobs for you on that system.
-
-<p> If you are using a one-time password, kgetcred doesn't work. Allowing root
-to issue a ticket on your behalf would obviously subvert the intention of using
-two-factor authentication. In this case you have two choices:
-<ul>
-<li> Use Google authenticator. It is checked at login, but not by cron jobs.
-This is slightly less secure than the builtin Kerberos support for two-factor
-authentication.
-<li> Write your cron job to use only files stored on the computer itself. Our
-systems generally have substantial local file systems which you can use for this.
-<li> Ask us for a second user ID that won't use two-factor authentication.
-</ul>
 
 <h2> Using Kerberos at Home </h2>
 

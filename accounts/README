@@ -110,7 +110,7 @@ immediately. The host principal needs to be authorized to do large
 LDAP questions. The wiki page for IPA gives instructions for setting
 those things.
   krb5.keytab.services:  http/services.cs.rutgers.edu
-  has roles helpdesk and User Administrator
+  has roles helpdesk, User Administrator, Rutgers add host
   User Administrator has   permission: System: Read User Kerberos Login Attributes, 
      modify read kerberos login config  to add ipatokenreadusconfiglink and ipatokenradiiususername
   add permission Rutgers Write Radius Link
@@ -125,6 +125,15 @@ those things.
      type user
      attribute businesscategoryc
   add them to User Administrators
+  Create role Rutgers add host
+  privilege Host Enrollment
+  I don't think it changed, but has permissions
+  System: Add Hosts, System: Add krbPrincipalName to a Host
+  System: Enroll a Host, System: Manage Hold Certificates
+  Systerm: Manage Host Enrollment Password, System: Manage Host Keytab
+  System: Mange Host Principals, System: Manage Host SSH Public Keys
+  System: Add Services, System: Manage Servicr Keytab,
+  System: Change User password
 
 Also, to update the firewall on the kerberos servers, the host running
 this must be allowed to ssh to the firewall. The user syncipt on each
