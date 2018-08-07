@@ -502,6 +502,7 @@ void getccs() {
 
   for (i = 0; i < numdirs; i++) {
     int first = namelist[i]->d_name[0];
+    printf("entry %s\n", namelist[i]->d_name);/*xx*/
     // only look at entries for procs
     if (first >= '0' && first <= '9') {
       char *fname;
@@ -593,6 +594,8 @@ void getccs() {
 	continue;
       }
 
+      printf("environ %s\n", ptr); /*xx*/
+
       // need value;
       ptr += strlen("KRB5CCNAME=");
 
@@ -636,11 +639,17 @@ void getccs() {
 	  continue;
 	}
 	path = ptr;
-      }
+      } else {
+	// not keyring and doesn't start with /. Seems like junk
+	free(line);
+	free(namelist[i]);
+	continue;
+      }      
 	
       // looks valid, save it
 
       entry.key = path;
+      printf("about to find %s\n", entry.key);/*xx*/
       if (hsearch(entry, FIND) == NULL) {
 	// didn't find it, add
 	struct cc_entry *nentry = malloc(sizeof(struct cc_entry));
