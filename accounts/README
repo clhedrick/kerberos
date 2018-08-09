@@ -31,6 +31,7 @@ To install:
      note that you don't want the version number (1.0) in the copy you install
 -- or use ./build and ./install
 * tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS
+  and also -DcasServer=cas.cs.rutgers.edu or test-cas.cs.rutgers.edu
 
 You can debug .JSP files by editing them directly in tomcat/webapps/ROOT
 However once they work, you must copy them to src/main/webapp/ here, or
