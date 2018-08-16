@@ -187,5 +187,5 @@ DEPLOYMENT. I did a deploy from scratch on a new system as follows:
 * copy activator.config and activator.warning to /etc. For production, make 
   sure uid.table points the right place, and make sure testaddress isn't set
 * get apache set up to send /accounts through to tomcat
-* tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS
+* tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS and -DcasServer=cas.rutgers.edu or test-cas
 * install activate in /usr/local/bin
