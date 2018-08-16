@@ -636,7 +636,12 @@ void getccs() {
 	  continue;
 	}
 	path = ptr;
-      }
+      } else {
+	// not keyring and doesn't start with /. Seems like junk
+	free(line);
+	free(namelist[i]);
+	continue;
+      }      
 	
       // looks valid, save it
 

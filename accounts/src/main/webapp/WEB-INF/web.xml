@@ -33,7 +33,7 @@
     <filter-class>org.jasig.cas.client.authentication.AuthenticationFilter</filter-class>
     <init-param>
       <param-name>casServerLoginUrl</param-name>
-      <param-value>https://cas.rutgers.edu/login</param-value>
+      <param-value>https://${casServer}/login</param-value>
     </init-param>
 
     <init-param>
@@ -48,7 +48,7 @@
 
     <init-param>
       <param-name>casServerUrlPrefix</param-name>
-      <param-value>https://cas.rutgers.edu</param-value>
+      <param-value>https://${casServer}</param-value>
     </init-param>
 
     <init-param>
@@ -83,7 +83,7 @@
     <filter-class>org.jasig.cas.client.authentication.AuthenticationFilter</filter-class>
     <init-param>
       <param-name>casServerLoginUrl</param-name>
-      <param-value>https://cas.rutgers.edu/login</param-value>
+      <param-value>https://${casServer}/login</param-value>
     </init-param>
 
     <init-param>
@@ -98,7 +98,7 @@
 
     <init-param>
       <param-name>casServerUrlPrefix</param-name>
-      <param-value>https://cas.rutgers.edu</param-value>
+      <param-value>https://${casServer}</param-value>
     </init-param>
 
     <init-param>
