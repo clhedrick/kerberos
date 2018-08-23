@@ -40,11 +40,17 @@ function deleteOwnerKeyPress(event) {
   }
 }
 
+function confirmMembers(event) {
+  event.preventDefault();
+  $("#confirmSubmit").click();
+}
+
 $(document).ready(function(){
     $(".deleteMemberButton").click(deleteMember);
     $(".deleteMemberButton").keypress(deleteMemberKeyPress);
     $(".deleteOwnerButton").click(deleteOwner);
     $(".deleteOwnerButton").keypress(deleteOwnerKeyPress);
+    $(".confirmButton").click(confirmMembers);
     });
 
 /*]]>*/
@@ -71,20 +77,23 @@ $(document).ready(function(){
 <input type="hidden" name="groupname" th:value="${gname}"/>
 <input type="submit" id="deleteOwnerSubmit" value="Delete Owner"/>
 </form>
+<form th:action="@{/groups/showgroup}" method="post" id="confirmForm" style="display:none">
+<input type="hidden" name="groupname" th:value="${gname}"/>
+<input type="hidden" name="confirmmembers" th:value="true"/>
+<input type="submit" id="confirmSubmit" value="Confirm Members"/>
+</form>
+
 
 <form th:action="@{/groups/showgroup}" method="post">
 <input type="hidden" name="groupname" th:value="${gname}"/>
 <p> Group: <span th:text="${gname}"/><span th:if="${group['gidnumber'] != null}" th:text="${', ' + group.gidnumber[0]}"/></p>
 <ul>
-<li class="inset" th:if="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"> <b> Guest group</b> &middot; Members of this group can login to the clusters specified in the "Clusters" section of this page. E.g. a group of students can be authorized to login to the research cluster, or a group of faculty from other departments can be authorized to login to a specific cluster </li>
+<li class="inset" th:if="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"> <b> Login group</b> &middot; Members of this group can login to the clusters specified in the "Clusters" section of this page, or to a system that you control. E.g. a group of students can be authorized to login to the research cluster, or a group of faculty from other departments can be authorized to login to a specific cluster. If this is being used for a cluster that you own, the first box in the "Clusters" section should be checked, but clusters that we run won't necessarily be checked. </li>
 <li class="inset" th:if="${group['gidnumber']?.get(0)}"> <b> File sharing Group</b> &middot; This is a Group for sharing files between users. It is a normal Unix group. You can use "chgrp" to change a directory or file to this group, so that other group members can access it.
 </li>
 </ul>
 
-<div class="messages" th:if="${group['host'] == null and group['businesscategory'] != null and group['businesscategory'].contains('login') or group['member'] == null}">
-<p th:if="${group['host'] == null and group['businesscategory'] != null and group['businesscategory'].contains('login') and not #strings.startsWith(gname,'login-')}">
-Make sure you add at least one cluster that you want these users to be able to login on. Use the checklist in the "Clusters" section of this page.
-</p>
+<div class="messages" th:if="${group['member'] == null}">
 <p th:if="${group['member'] == null}">
 Make sure you add at least one member to the group.
 </p>
@@ -96,6 +105,12 @@ Make sure you add at least one member to the group.
 <div th:each="m: ${group['member']}">
 <span th:text="${membernames.get(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
 </div>
+</div>
+<div th:if="${needsreview}" class="warning" style="margin-top:1em">
+<p> We ask group owners to review the list of members annually. Please remove any members
+that should no longer be in the group, and then click on the "Confirm membership" button.
+</p>
+<button class="confirmButton"> Confirm membership </button>
 </div>
 
 <h3>Add members</h3>

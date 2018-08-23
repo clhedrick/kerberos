@@ -101,3 +101,9 @@ h3 {
   background-color: #ffd;
   margin-left: 0.5em;
 }
+.warning {
+  padding:0em 0.5em 0em 0.5em;
+  border: solid #b00 1px;
+  background-color: #fbb;
+  margin-left: 0.5em;
+}

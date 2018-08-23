@@ -23,6 +23,9 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Calendar;
+import java.text.SimpleDateFormat;
 import javax.security.auth.*;
 import javax.security.auth.callback.*;
 import javax.security.auth.login.*;
@@ -233,6 +236,39 @@ public class utils {
 	if (csrf.equals(token))
 	    return;
 	throw new java.lang.IllegalArgumentException("no permission");
+    }
+
+    public static boolean needsReview(Map<String, List<String>>attrs) {
+	// silly to ask for a review if there are no members
+	// yeah, but the logic gets complex. what if they create a group and add
+	// a member a year - a day later. they'll get an immediate review
+	//if (!lu.hasVal(attrs.get("member")))
+	//	    return false;
+
+	// only review login groups
+	if (! lu.valList(attrs.get("businesscategory")).contains("login"))
+	    return false;
+
+	SimpleDateFormat format = new SimpleDateFormat("yyyyMMddHHmmss");
+	format.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+	String created = null;
+	if (attrs.get("dateofcreate") != null)
+	    created = attrs.get("dateofcreate").get(0);
+	else
+	    created = attrs.get("createtimestamp").get(0);
+
+	try {
+	    Date createdDate = format.parse(created);
+	    Calendar reviewdate = Calendar. getInstance();
+	    reviewdate.setTime(createdDate);
+	    reviewdate.add(Calendar.YEAR, 1);
+	    Calendar now = Calendar. getInstance();
+	    if (now.after(reviewdate))
+		return true;
+	} catch (Exception ignore) {}
+
+	return false;
     }
 
     public static void main( String[] argarray) {

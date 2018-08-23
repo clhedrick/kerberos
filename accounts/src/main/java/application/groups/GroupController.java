@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.Calendar;
 import java.text.SimpleDateFormat;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -147,7 +148,7 @@ public class GroupController {
 	    logger.error("failed to find " + userDn + " count " + action.val.size());
 	    return lu.dn2user(userDn); // no gecos info, just return uid
 	}
-	HashMap<String, ArrayList<String>> attrs = action.val.get(0);
+	Map<String, List<String>> attrs = action.data.get(0);
 	if (attrs.get("gecos") != null) {
 	    String gecos = attrs.get("gecos").get(0);
 	    // gecos is name, other stuff, so drop anything after ,
@@ -207,8 +208,9 @@ public class GroupController {
 	    return groupsController.groupsGet(request, response, model); 
 	}
 
-	HashMap<String, ArrayList<String>> attrs = null;
+	Map<String, List<String>> attrs = null;
 	Map<String,String> memberNames = new HashMap<String,String>();
+	boolean needsReview = false;
 
 	// want to use the same context for a number of operations
 	// try - finally to make sure it's always closed
@@ -220,7 +222,7 @@ public class GroupController {
 	try {
 
 	    // This acton isn't done until it's called by doAs
-	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + gname + "))", "", "cn", "member", "host", "businessCategory", "dn", "gidNumber", "owner", "creatorsName"});
+	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + gname + "))", "", "cn", "member", "host", "businessCategory", "dn", "gidNumber", "owner", "creatorsName", "dateofcreate", "createTimestamp"});
 	    action.noclose = true; // hold context for reuse
 
 	    // this is part of the Kerberos support. Subject is the internal data structure representing a Kerberos ticket.
@@ -236,7 +238,7 @@ public class GroupController {
 		return groupsController.groupsGet(request, response, model); 
 	    }
 
-	    attrs = action.val.get(0);
+	    attrs = action.data.get(0);
 
 	    // we want to show the name of each user, so we have to look them up
 	    // pass the front end a map from member dn to display
@@ -275,6 +277,9 @@ public class GroupController {
 		memberNames.put(member, display);
 	    }
 
+	    // see if needs review. don't bother if no members
+	    needsReview = utils.needsReview(attrs);
+
 	} finally {
 	    // we used noclose for all JndiActions, so we wouldn't get new connections for each user lookup
 	    // so we have to close it explicitly
@@ -292,8 +297,8 @@ public class GroupController {
 	model.addAttribute("clusters", aconfig.clusters);
 	model.addAttribute("group", attrs);
 	model.addAttribute("membernames", memberNames);
+	model.addAttribute("needsreview", needsReview);
 	model.addAttribute("lu", new Util());
-
         return "groups/showgroup";
     }
 
@@ -305,6 +310,7 @@ public class GroupController {
 			       @RequestParam(value="newowner", required=false) String newowner,
 			       @RequestParam(value="login", required=false) String loginSt,
 			       @RequestParam(value="hosts", required=false) List<String>hosts,
+			       @RequestParam(value="confirmmembers", required=false) String confirmMembers,
 			       HttpServletRequest request, HttpServletResponse response,
 			       Model model) {
 
@@ -341,7 +347,7 @@ public class GroupController {
 	    return groupsController.groupsGet(request, response, model); 
 	}
 
-	HashMap<String, ArrayList<String>> attrs = action.val.get(0);
+	Map<String, List<String>> attrs = action.data.get(0);
 
 	boolean oldislogin = (attrs.get("businesscategory") != null && attrs.get("businesscategory").contains("login"));
 	List<String> oldhosts = attrs.get("host");
@@ -477,6 +483,17 @@ public class GroupController {
 		    }
 		}
 	    }
+	}
+
+	if (confirmMembers != null && confirmMembers.equals("true")) {
+	    SimpleDateFormat format = new SimpleDateFormat("yyyyMMddHHmmss");
+	    format.setTimeZone(TimeZone.getTimeZone("UTC"));
+	    String dateString = format.format(new Date());
+
+	    logger.info("ipa group-mod " + name + " --setattr=dateOfCreate=" + dateString + "Z");
+	    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--setattr=dateOfCreate=" + dateString + "Z"}, env) != 0) 
+		messages.add("Unable to update information to show that group has been validated");
+	    return groupGet(name, request, response, model);	
 	}
 
 	boolean login = "on".equals(loginSt);
