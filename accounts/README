@@ -31,6 +31,7 @@ To install:
      note that you don't want the version number (1.0) in the copy you install
 -- or use ./build and ./install
 * tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS
+  and also -DcasServer=cas.cs.rutgers.edu or test-cas.cs.rutgers.edu
 
 You can debug .JSP files by editing them directly in tomcat/webapps/ROOT
 However once they work, you must copy them to src/main/webapp/ here, or
@@ -110,7 +111,7 @@ immediately. The host principal needs to be authorized to do large
 LDAP questions. The wiki page for IPA gives instructions for setting
 those things.
   krb5.keytab.services:  http/services.cs.rutgers.edu
-  has roles helpdesk, User Administrator, Rutgers add host
+  has roles helpdesk, User Administrator, Rutgers add host, Rutgers read group creator
   User Administrator has   permission: System: Read User Kerberos Login Attributes, 
      modify read kerberos login config  to add ipatokenreadusconfiglink and ipatokenradiiususername
   add permission Rutgers Write Radius Link
@@ -134,6 +135,10 @@ those things.
   System: Mange Host Principals, System: Manage Host SSH Public Keys
   System: Add Services, System: Manage Servicr Keytab,
   System: Change User password
+  Create role Rutgers read group creator
+  privilege Rutgers read group creator
+  permission Rutgers read group creator
+  read, search, compare for group, attr creatorsname
 
 Also, to update the firewall on the kerberos servers, the host running
 this must be allowed to ssh to the firewall. The user syncipt on each
@@ -186,5 +191,5 @@ DEPLOYMENT. I did a deploy from scratch on a new system as follows:
 * copy activator.config and activator.warning to /etc. For production, make 
   sure uid.table points the right place, and make sure testaddress isn't set
 * get apache set up to send /accounts through to tomcat
-* tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS
+* tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS and -DcasServer=cas.rutgers.edu or test-cas
 * install activate in /usr/local/bin

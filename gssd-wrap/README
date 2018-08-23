@@ -1,0 +1,36 @@
+This is a wrapper for rpc.gssd.
+
+Normally when a user makes an NFS request, rpc.gssd will do a GSSAPI
+call to get a Kerberos credential for the user. They call GSSAPI
+asking for the default credential. Suppose you login as hedrick, but
+kinit as hedrick.admin. Your default credential is now
+hedrick.admin. But that can't work for NFS.
+
+gssd is actually smart enough to realize tht it's not going to work,
+and fails. But a better approach is to call GSSAPI requesting the
+user's main principal. GSSAPI will then look through your credential
+collection trying to find the right principal. So if you have a
+collection, e.g. KEYRING:persistent:UID, with both hedrick and
+hedrick.admin, it will us hedrick even if hedrick.admin is currently
+selected.
+
+This library wraps the call to gss_acquire_cred, and if no specific
+credential is requested, it requests the user's primary credential.
+
+It is designed to be used with LD_PRELOAD. We create
+/etc/systemd/system/rpc-gssd.service.d/interposer.conf containing
+
+[Service]
+Environment=LD_PRELOAD=/usr/libexec/gssd-wrap.so
+
+This module is only useful if /etc/krb5.conf sets up the default
+credential as a collection. If you use the traditional
+/tmp/krb5cc_UID, this won't work, because kinit as another user
+will overwrite your initial credentials. 
+
+The same thing will happen if KRB5CCNAME is set to the specific cache
+rather than the collection. sshd likes to do that. We use a pam
+library that fixes up KRB5CCNAME. This could also be done via a
+script in /etc/profile.d.
+
+
