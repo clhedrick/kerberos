@@ -53,6 +53,7 @@ import java.sql.Blob;
 import common.JndiAction;
 import common.docommand;
 import common.lu;
+import common.utils;
 
 public class Cleanup {
 
@@ -151,11 +152,13 @@ public class Cleanup {
 	
 	Subject subj = getSubject();  
 
-	JndiAction action = new JndiAction(new String[]{"(businessCategory=login)", "", "host", "cn", "member", "owner", "creatorsName", "dateofcreate", "createTimestamp"});
+	JndiAction action = new JndiAction(new String[]{"(businessCategory=login)", "", "host", "cn", "member", "owner", "creatorsName", "dateofcreate", "createTimestamp", "businesscategory"});
 	Subject.doAs(subj, action);
 	if (action.data != null && action.data.size() > 0) {
 	    grouploop:
 	    for (Map<String,List<String>> group: action.data) {
+
+		// don't expire groups that are automatically managed
 		String name = lu.oneVal(group.get("cn"));
 		if (managedGroups.contains(name))
 		    continue;
@@ -163,27 +166,37 @@ public class Cleanup {
 		    if (name.matches(pattern))
 			continue grouploop;
 		}
-		logger.info("group " + name);
-		if (lu.oneVal(group.get("dateofcreate")) != null)
-		    logger.info("  created " + lu.oneVal(group.get("dateofcreate")));
-		else
-		    logger.info("  created " + lu.oneVal(group.get("createtimestamp")));
 
-		Set<String>owners = Stream.concat(lu.valList(group.get("creatorsname")).stream(),
-						  lu.valList(group.get("owner")).stream())
+		List<String>ownerDns = lu.valList(group.get("owner"));
+		if (ownerDns.size() == 0) 
+		    ownerDns = lu.valList(group.get("creatorsname"));
+
+		Set<String>owners = ownerDns.stream()
 		    .filter(p -> p.startsWith("uid="))
 		    .map(p -> lu.dn2user(p))
 		    .filter(p -> p.matches("[0-9a-z]*"))
 		    .collect(Collectors.toSet());
 
-		logger.info("  owner " + owners);
+		// forget it if we can't find an owner
+		if (owners.size() == 0) {
+		    logger.info("no usable owner " + name);
+		    continue;
+		}
+			
+		if (! lu.valList(group.get("businesscategory")).contains("login"))
+		    continue;
+
+		    //		if (!utils.needsReview(group)) {
+		    //		    logger.info("not yet ready for review " + name);
+		    //		    continue;
+		    //		}
 
 		Set<String>members = lu.valList(group.get("member")).stream()
 		    .filter(p -> p.startsWith("uid="))
 		    .map(p -> lu.dn2user(p))
 		    .collect(Collectors.toSet());
 
-		logger.info("  members " + members);
+		logger.info(name + " " + owners + " " + members + " " + lu.valList(group.get("host")));
 
 	    }
 	}

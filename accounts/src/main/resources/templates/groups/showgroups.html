@@ -25,7 +25,7 @@ function deleteKeyPress(event) {
 
 function validateSubmit(event) {
   if (! ($("#sharing").prop("checked") || $("#guests").prop("checked"))) {
-    alert("Sharing and/or guests must be checked");
+    alert("Sharing and/or login must be checked");
     event.preventDefault();
     return;
   }
@@ -75,8 +75,7 @@ $(document).ready(function(){
 <div th:each="g : ${groups}">
 <a th:href="@{showgroup(name=${g.cn[0]})}"><span th:text="${g.cn[0]}"/></a>
 <span th:text="${g['gidnumber']?.get(0)}"/>
-<img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete group ' + g.cn[0]}" class="deleteButton"/> <input type="hidden" name="deleteName" th:value="${g.cn[0]}"/> <span class="label" th:if="${g['businesscategory'] != null and g['businesscategory'].contains('login')}"> Guests </span> <span class="label"  th:if="${g['gidnumber']?.get(0)}"> File sharing </span>
-
+<img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete group ' + g.cn[0]}" class="deleteButton"/> <input type="hidden" name="deleteName" th:value="${g.cn[0]}"/> <span class="label" th:if="${g['businesscategory'] != null and g['businesscategory'].contains('login')}"> Login </span> <span class="label"  th:if="${g['gidnumber']?.get(0)}"> File sharing </span> <span th:if="${g['needsreview'] != null}" class="warning">Needs review</span>
 
 </div>
 </div>
@@ -101,7 +100,7 @@ $(document).ready(function(){
 <div class="grid-left">
 <input type="checkbox" name="guests" id="guests"/> 
 <div>
-<label for="guests"><b>Guests.</b></label> This is a list of users that you are authorizing to login. The most common use is to let grad students login to the research cluster, but it can also be used to allow members of other departments to login to a cluster.
+<label for="guests"><b>Login.</b></label> This is a list of users that you are authorizing to login. The most common use is to let grad students login to the research cluster, but it can also be used to allow members of other departments to login to a cluster or to control who can login to a system that you manage.
 </div>
 </div>
 <input type="submit" id="submit" value="Add Group"/>

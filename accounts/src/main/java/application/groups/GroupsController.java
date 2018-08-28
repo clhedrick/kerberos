@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.Calendar;
 import java.text.SimpleDateFormat;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -103,7 +104,7 @@ public class GroupsController {
 	String query = Activator.Config.getConfig().groupsownedfilter.replaceAll("%u", user);
 
 	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
-	common.JndiAction action = new common.JndiAction(new String[]{query, "", "cn","dn", "gidNumber", "businessCategory"});
+	common.JndiAction action = new common.JndiAction(new String[]{query, "", "cn", "member", "dn", "gidNumber", "businessCategory", "dateofcreate", "createTimestamp"});
 
 	Subject.doAs(subject, action);
 
@@ -115,8 +116,18 @@ public class GroupsController {
 	}
 
 	// look at the results of the LDAP query
-	ArrayList<HashMap<String, ArrayList<String>>> groups = action.val;
+	List<Map<String, List<String>>> groups = action.data;
 	Collections.sort(groups, (g1, g2) -> g1.get("cn").get(0).compareTo(g2.get("cn").get(0)));
+
+	SimpleDateFormat format = new SimpleDateFormat("yyyyMMddHHmmss");
+	format.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+	// reviewdate for group is a year after creation
+	// if now is after the review date, set needsreview
+	for (Map<String, List<String>>group: groups) {
+	    if (utils.needsReview(group))
+		group.put("needsreview", new ArrayList<String>());
+	}
 
 	// set up model for JSTL to output
 	model.addAttribute("groups", groups);
