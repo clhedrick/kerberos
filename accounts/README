@@ -140,6 +140,15 @@ those things.
   permission Rutgers read group creator
   read, search, compare for group, attr creatorsname
 
+  add permission Rutgers write group businesscategory
+     type group
+     attribute businesscategoryc
+  privilege Rutgers group businesscategory
+     permission Rutgers write group businesscategory
+  role Rutgers group businesscategory
+     service http/services.cs.rutgers.edu
+
+
 Also, to update the firewall on the kerberos servers, the host running
 this must be allowed to ssh to the firewall. The user syncipt on each
 Kerberos server must list http/services.cs.rutgers.edu in .k5login.

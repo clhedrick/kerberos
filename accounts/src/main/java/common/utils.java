@@ -245,6 +245,13 @@ public class utils {
 	//if (!lu.hasVal(attrs.get("member")))
 	//	    return false;
 
+	String reviewtime = Config.getConfig().reviewtime;
+	// default is no review
+	if (reviewtime == null)
+	    return false;
+
+	Integer reviewDays = new Integer(reviewtime);
+
 	// only review login groups
 	if (! lu.valList(attrs.get("businesscategory")).contains("login"))
 	    return false;
@@ -262,7 +269,7 @@ public class utils {
 	    Date createdDate = format.parse(created);
 	    Calendar reviewdate = Calendar. getInstance();
 	    reviewdate.setTime(createdDate);
-	    reviewdate.add(Calendar.YEAR, 1);
+	    reviewdate.add(Calendar.DATE, reviewDays);
 	    Calendar now = Calendar. getInstance();
 	    if (now.after(reviewdate))
 		return true;

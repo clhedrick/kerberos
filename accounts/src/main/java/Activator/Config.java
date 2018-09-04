@@ -74,6 +74,14 @@ public class Config {
     public String systemname = null;
     public String universityradius =  null;
     public String servicesprincipal =  null;
+    public String reviewdir =  null;
+    public String reviewtime = null;
+    public String review2ndwarning = "15";
+    public String reviewclose = "15";
+    public String reviewemail = null;
+    public String reviewnoclose = null;
+    public String reviewurl = null;
+
 
     final static String CONFIGFILE = "/etc/activator.config";
 
@@ -206,6 +214,22 @@ public class Config {
 			universityradius = atoms[1];
 		    if (atoms[0].equals("servicesprincipal"))
 			servicesprincipal = atoms[1];
+		    if (atoms[0].equals("reviewdir"))
+			reviewdir = atoms[1];
+		    if (atoms[0].equals("reviewtime"))
+			reviewtime = atoms[1];
+		    if (atoms[0].equals("review2ndwarning"))
+			review2ndwarning = atoms[1];
+		    if (atoms[0].equals("reviewclose"))
+			reviewclose = atoms[1];
+		    if (atoms[0].equals("reviewemail"))
+			reviewemail = atoms[1];
+		    if (atoms[0].equals("reviewnoclose"))
+			reviewnoclose = atoms[1];
+		    if (atoms[0].equals("reviewurl"))
+			reviewurl = atoms[1];
+
+
 		}
 
 
