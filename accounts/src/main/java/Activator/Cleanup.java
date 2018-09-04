@@ -81,7 +81,7 @@ public class Cleanup {
 	    try {
 		options.put("principal", config.servicesprincipal);
 	    } catch (Exception e){
-		System.out.println("Can't find our hostname " + e);
+		logger.error("Can't find our hostname " + e);
 	    }
             options.put("refreshKrb5Config", "true"); 
 	    options.put("keyTab", "/etc/krb5.keytab.services");
@@ -117,9 +117,9 @@ public class Cleanup {
     }
 
     static void setupLog(boolean verbose) {
-	String logname = "log4j-trace.xml";
+	String logname = "log4j-syslog.xml";
 	if (verbose)
-	    logname = "log4j-trace-verbose.xml";
+	    logname = "log4j-interactive.xml";
 	System.setProperty("log4j.configurationFile", logname);
 
 	logger = LogManager.getLogger();
