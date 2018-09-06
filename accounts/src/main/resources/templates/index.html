@@ -1,4 +1,5 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+            "http://www.w3.org/TR/html4/loose.dtd">
 <html lang="en">
 <script>
 if (!location.pathname.endsWith("/") && !location.pathname.endsWith("index.html") || !location.protocol=='https') {
@@ -50,7 +51,7 @@ are eligible for accounts.
 <p>
 This will show you a University login screen. So as long as you remember
 your University password, you set or reset your CS password. If you need more security than a simple password
-can afford, please see <a href="two-factor.html"> two factor authentication</a>.
+can afford, please see <a href="https://services.cs.rutgers.edu/two-factor.html"> two factor authentication</a>.
 <li> <a href="groups/login">Group and Guest management.</a> This will let authorized users (typically faculty) create user groups for computer science systems. This will let you share files with other people and authorize guest users.
 <p>
 This will show you a Computer Science login screen.
@@ -58,14 +59,14 @@ This will show you a Computer Science login screen.
 <p>You can set additional information using "ipa user-mod" on any of our systems, e.g. "ipa user-mod YOURNETID --phone=8484452001". "ipa user-mod --help" will give a list of what can be set. "ipa user-show YOURNETID" will show your current information. You only need to do this once. The same information applies to all of our systems. Note that changing first name, lastname, and GECOS won't do anything useful, since we reset them to the official University names nightly.
 <li> By default, everyone uses the bash shell. To change to tcsh use "ipa user-mod YOURNETID --shell=/bin/tcsh" any of our systems.
 <p>
-<li>  <a href="two-factor.html"> Two-factor authentication</a>. In case you need more security than a simple password can provide.
+<li>  <a href="https://services.cs.rutgers.edu/two-factor.html"> Two-factor authentication</a>. In case you need more security than a simple password can provide.
 <p>
-<li> <a href="/kerberize.html"> Integrating your computer into Kerberos </a>. How to set up your computer to use Kerberos. (This is for computers located in
+<li> <a href="https://services.cs.rutgers.edu/kerberize.html"> Integrating your computer into Kerberos </a>. How to set up your computer to use Kerberos. (This is for computers located in
 computer science department areas. For systems at home, see <a href="https://www.cs.rutgers.edu/resources/working-at-home"> Working at Home</a>.)
 <p>
-<li> <a href="/sharing.html"> Sharing files between systems</a>
+<li> <a href="https://services.cs.rutgers.edu/sharing.html"> Sharing files between systems</a>
 <p>
-<li> <a href="kerberos.html"> Technical information on our security and
+<li> <a href="https://services.cs.rutgers.edu/kerberos.html"> Technical information on our security and
 account setup.</a>
 </ul>
 <div class="textblock" style="margin-top:3em">
@@ -75,3 +76,4 @@ your jobs to access files in your home directory, you must use
 "kgetcred -r" on each host where you're going to use cron. See "man kgetcred"
 for more information. 
 </div>
+<div th:insert="~{accessibility :: footer}"></div>
