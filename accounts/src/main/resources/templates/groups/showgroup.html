@@ -107,6 +107,8 @@ Make sure you add at least one member to the group.
 </div>
 </div>
 <div th:if="${needsreview}" class="warning" style="margin-top:1em">
+<!-- h3 only visible to screen readers, because color labels it for others -->
+<h3 class="hidden">Confirm membership</h3>
 <p> We ask group owners to review the list of members annually. Please remove any members
 that should no longer be in the group, and then click on the "Confirm membership" button.
 </p>
@@ -164,5 +166,6 @@ This is a login group for the <span th:text="${#strings.substringAfter(gname,'lo
 </p>
 </div>
 </form>
+<div th:insert="~{accessibility :: footer}"></div>
 </div>
 </html>
