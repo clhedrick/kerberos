@@ -94,6 +94,8 @@ struct cc_entry {
 };
 
 struct cc_entry *cclist = NULL;
+// keep tickets this long even if no process for user
+int grace = 120;
 
 void mylog (int level, const char *format, ...)  __attribute__ ((format (printf, 2, 3)));
 void mylog (int level, const char *format, ...) {
@@ -820,10 +822,10 @@ void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_de
     if (*ccname == '/') {
       // if it's a GSSproxy ticket, we only ask that the user stil
       // has a process, so look up the uid, not the ccname
-      if (strncmp(ccname, gssproxy_prefix,
+      if (gssproxy_prefix && strncmp(ccname, gssproxy_prefix,
 		  strlen(gssproxy_prefix)) == 0)
         key += strlen(gssproxy_prefix);
-      else if (strncmp(ccname, gssproxy_prefix2,
+      else if (gssproxy_prefix2 && strncmp(ccname, gssproxy_prefix2,
 		  strlen(gssproxy_prefix2)) == 0)
         key += strlen(gssproxy_prefix2);
     } else if (strncmp(ccname, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
@@ -859,7 +861,7 @@ void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_de
 	asprintf(&statfile, "/run/renewdccs/%s", filename);
 	if (stat(statfile, &statbuf) == 0) {
 	  // 2 min should be enough even for X2go
-	  if ((now - statbuf.st_mtime) < 120) {
+	  if ((now - statbuf.st_mtime) < grace) {
 	    skipdel = 1;
 	  }
 	}
@@ -899,12 +901,13 @@ int main(int argc, char *argv[])
   char *min_str = NULL;
   char *rwait_str = NULL;
   char *default_str = NULL;
-  char *delete_mode = NULL;
+  char *delete_mode = "";
   time_t nextrenew = 0;
   krb5_context context;
   char *default_realm = NULL;
   int err = 0;
   krb5_data realm_data;
+  char *grace_text = NULL;
 
   progname = *argv;
 
@@ -992,18 +995,27 @@ int main(int argc, char *argv[])
   krb5_appdefault_string(context, "renewd", &realm_data, "delete", "all", &delete_mode);
   krb5_appdefault_string(context, "renewd", &realm_data, "wait", "5", &default_str);
   // allow ours to be different than register-cc for a weird special case with Zeppelin
-  krb5_appdefault_string(context, "renewd", &realm_data, "credcopy", NULL, &gssproxy_prefix2);
-  krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", NULL, &gssproxy_prefix);
+  krb5_appdefault_string(context, "renewd", &realm_data, "credcopy", "", &gssproxy_prefix2);
+  krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", "", &gssproxy_prefix);
+  krb5_appdefault_string(context, "renewd", &realm_data, "grace", "120", &grace_text);
+
   // we want the prefix, i.e. the ccache name before the %
-  if (gssproxy_prefix) {
+  if (*gssproxy_prefix) {
     char *cp = strchr(gssproxy_prefix, '%');
     if (cp)
       *cp = '\0';
-  }
-  if (gssproxy_prefix2) {
+  } else
+    gssproxy_prefix = NULL;
+
+  if (*gssproxy_prefix2) {
     char *cp = strchr(gssproxy_prefix2, '%');
     if (cp)
       *cp = '\0';
+  } else
+    gssproxy_prefix2 = NULL;
+
+  if (grace_text) {
+    grace = atoi(grace_text);
   }
 
   if (wait_str) // overridden by arg
