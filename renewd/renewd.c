@@ -81,6 +81,7 @@ automatically renew tickets.
 int debug = 0;
 int test = 0;
 char * gssproxy_prefix = NULL;
+char * gssproxy_prefix2 = NULL;
 
 // hash used to collect uids of all credential caches registered with session keyrings
 
@@ -822,6 +823,9 @@ void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_de
       if (strncmp(ccname, gssproxy_prefix,
 		  strlen(gssproxy_prefix)) == 0)
         key += strlen(gssproxy_prefix);
+      else if (strncmp(ccname, gssproxy_prefix2,
+		  strlen(gssproxy_prefix2)) == 0)
+        key += strlen(gssproxy_prefix2);
     } else if (strncmp(ccname, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
       cp2 = ccname + strlen(KEYRING_PREFIX);
       cp = strchr(cp2, ':');
@@ -987,10 +991,17 @@ int main(int argc, char *argv[])
 
   krb5_appdefault_string(context, "renewd", &realm_data, "delete", "all", &delete_mode);
   krb5_appdefault_string(context, "renewd", &realm_data, "wait", "5", &default_str);
+  // allow ours to be different than register-cc for a weird special case with Zeppelin
+  krb5_appdefault_string(context, "renewd", &realm_data, "credcopy", NULL, &gssproxy_prefix2);
   krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", NULL, &gssproxy_prefix);
   // we want the prefix, i.e. the ccache name before the %
   if (gssproxy_prefix) {
     char *cp = strchr(gssproxy_prefix, '%');
+    if (cp)
+      *cp = '\0';
+  }
+  if (gssproxy_prefix2) {
+    char *cp = strchr(gssproxy_prefix2, '%');
     if (cp)
       *cp = '\0';
   }
