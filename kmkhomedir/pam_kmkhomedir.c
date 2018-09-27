@@ -519,6 +519,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *serverhost = NULL;
   const char *pattern = NULL;
   char *dir = NULL;
+  int is_homedir = 1;
   int freedir = 0;
   int i;
   FILE *pwfile = NULL;
@@ -583,6 +584,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
           dir[cp-pattern] = '\0';
           strcat(dir, username);
           strcat(dir, cp + 2);
+          is_homedir = 0;
       }
   }
 
@@ -608,9 +610,11 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   if (strlen(message) > 0) {
       pam_syslog(pamh, LOG_ERR, "%s", message);
       pam_error(pamh, "Unable to create home directory: %s", message);
-  } else if (geteuid() == 0 && skeldir && skeldir[0]) {
+  } else if (is_homedir && geteuid() == 0 && skeldir && skeldir[0]) {
       // can't setuid unless it's root
+      // only want to copy from /etc/skel for homedir
       seteuid(pwd->pw_uid);
+      printf("create %s %s\n", skeldir, dir);
       create_homedir(pwd, u_mask, skeldir, dir);
       seteuid(0);
   }
