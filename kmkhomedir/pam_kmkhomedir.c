@@ -124,6 +124,10 @@ net_read(int fd, char *buf, int len)
 */
 
 
+int
+create_homedir(const struct passwd *pwd, const unsigned long u_mask,
+	       const char *source, const char *dest);
+
 #ifdef PAM
 char *pam_kmkhomedir(char *dirname, struct passwd * pwd, char* serverhost);
 
@@ -518,12 +522,27 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   int freedir = 0;
   int i;
   FILE *pwfile = NULL;
+  unsigned long u_mask = 0022;
+  const char *skeldir = "/etc/skel";
 
   for (i = 0; i < argc; i++) {
       if (strncmp(argv[i],"host=", strlen("host=")) == 0) 
           serverhost = (char *)argv[i] + strlen("host=");
       if (strncmp(argv[i],"dir=", strlen("dir=")) == 0) 
           pattern = argv[i] + strlen("dir=");
+      if (strncmp(argv[i],"umask=", strlen("umask=")) == 0) {
+	char *eptr;
+	errno = 0;
+	u_mask = strtoul(argv[i] + strlen("umask="), &eptr, 0);
+	if (errno != 0 || *eptr != '\0') {
+            pam_syslog(pamh, LOG_ERR, "Bogus umask value %s", argv[i]);
+            pam_error(pamh, "Bogus umask value %s", argv[i]);
+            return PAM_SUCCESS; // go ahead and do the login anyway
+	}
+      }
+      if (strncmp(argv[i],"skel=", strlen("skel=")) == 0) {
+          skeldir = argv[i] + strlen("skel=");
+      }
   }
 
   if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) {
@@ -589,6 +608,11 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   if (strlen(message) > 0) {
       pam_syslog(pamh, LOG_ERR, "%s", message);
       pam_error(pamh, "Unable to create home directory: %s", message);
+  } else if (geteuid() == 0 && skeldir && skeldir[0]) {
+      // can't setuid unless it's root
+      seteuid(pwd->pw_uid);
+      create_homedir(pwd, u_mask, skeldir, dir);
+      seteuid(0);
   }
 
   free(message);
