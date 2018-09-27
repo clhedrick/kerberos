@@ -31,12 +31,23 @@ static char skeldir[BUFSIZ] = "/etc/skel";
 /* Do the actual work of creating a home dir */
 int
 create_homedir(const struct passwd *pwd, const unsigned long u_mask,
-	       const char *source, const char *dest)
+	       const char *source, const char *dest, int toplevel)
 {
    char remark[BUFSIZ];
    DIR *d;
    struct dirent *dent;
    int retval = PAM_SESSION_ERR;
+
+   if (!toplevel) {
+
+   /* Create the new directory */
+   if (mkdir(dest, 0700) && errno != EEXIST)
+   {
+      pam_syslog(NULL, LOG_ERR, "unable to create directory %s: %m", dest);
+      return PAM_PERM_DENIED;
+   }
+
+   }
 
    /* See if we need to copy the skel dir over. */
    if ((source == NULL) || (strlen(source) == 0))
@@ -132,7 +143,7 @@ create_homedir(const struct passwd *pwd, const unsigned long u_mask,
       /* If it's a directory, recurse. */
       if (S_ISDIR(st.st_mode))
       {
-	 retval = create_homedir(pwd, u_mask, newsource, newdest);
+  	 retval = create_homedir(pwd, u_mask, newsource, newdest, 0);
 
 #ifndef PATH_MAX
 	 free(newsource); newsource = NULL;

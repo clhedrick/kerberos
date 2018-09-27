@@ -55,7 +55,8 @@ The testfile shouldn't have a directory in front of it. It will be assumed to be
 present anywhere that has user home directories. This feature is present both
 here and in the server. It makes sense to configure it both places.
 .PP
-If a home directory is created, pam_kmkhomedir will copy files from the skelton
+If a home directory is created (i.e. dir= isn't specified),
+pam_kmkhomedir will copy files from the skelton
 directory into it. The same code is used as in pam_mkhomedir. Note that this copying
 occurs on the machine the user is logging into, not the server that actually creates
 the directory. As with pam_mkhomedir, there are options to specify the directory
@@ -65,13 +66,14 @@ file in /etc/skel. Turn on the write bits, 0222. Then turn off the bits specifie
 the umask. (This is
 what pam_mkhomedir does, although it isn't documented.)
 .PP
-Note that Redhat seems to be using a modified version of pam_mkhomedir. This one
-behaves like (and uses code from) the version from linux-pam.org. The difference
-is how the umask argument is used. In both versions it applies to the files
-copied from /etc/skel. In the linux-pam.org version the home directory itself
-is always created with permissions 0700. In the Redhat version it is created
-with 0755, but the umask is applied. This module uses the linux-pam.org version,
-so the home directory is always protected 0700.
+Be aware that this local file copy operation also changes the permissions
+for the home directory. While the daemon creates it with 0700, the copy
+operation leaves it set according to the umask. By default that will leave
+it 0755. If you want only users to be able to get to their own diretories, use the
+argument umask=077. That will leave the directory as 0700.
+(This behavior is the same as for the normal
+pam_mkhomedir.) For non-home directories (i.e. directories specified with dir=),
+the file copy operation isn't done, and the directory is left as 0700.
 .PP
 .SH "SEE ALSO"
 mkhomedird(8)

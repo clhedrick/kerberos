@@ -126,7 +126,7 @@ net_read(int fd, char *buf, int len)
 
 int
 create_homedir(const struct passwd *pwd, const unsigned long u_mask,
-	       const char *source, const char *dest);
+	       const char *source, const char *dest, int toplev);
 
 #ifdef PAM
 char *pam_kmkhomedir(char *dirname, struct passwd * pwd, char* serverhost);
@@ -615,7 +615,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       // only want to copy from /etc/skel for homedir
       seteuid(pwd->pw_uid);
       printf("create %s %s\n", skeldir, dir);
-      create_homedir(pwd, u_mask, skeldir, dir);
+      create_homedir(pwd, u_mask, skeldir, dir, 1);
       seteuid(0);
   }
 
