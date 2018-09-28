@@ -212,6 +212,9 @@ public class GroupController {
 	Map<String,String> memberNames = new HashMap<String,String>();
 	boolean needsReview = false;
 
+	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
+	boolean isLoginManager = privs.contains("loginmanager");
+
 	// want to use the same context for a number of operations
 	// try - finally to make sure it's always closed
 	// the point is that we're going to make a bunch of ldap queries. 
@@ -298,7 +301,9 @@ public class GroupController {
 	model.addAttribute("group", attrs);
 	model.addAttribute("membernames", memberNames);
 	model.addAttribute("needsreview", needsReview);
+	model.addAttribute("isloginmanager", isLoginManager);
 	model.addAttribute("lu", new Util());
+
         return "groups/showgroup";
     }
 
@@ -373,6 +378,10 @@ public class GroupController {
 	    creatorsNames.add(lu.dn2user(m));
 	}
 
+	// if they aren't login manager, don't change login settings
+	// ldap wouldn't let us do it, but don't want error messages
+	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
+	boolean isLoginManager = privs.contains("loginmanager");
 
 	boolean ok = true;
 
@@ -496,6 +505,8 @@ public class GroupController {
 	    return groupGet(name, request, response, model);	
 	}
 
+	if (isLoginManager) {
+
 	boolean login = "on".equals(loginSt);
 
 	if (login && !oldislogin) {
@@ -541,6 +552,8 @@ public class GroupController {
 		}
 	    }
 	}
+
+	} // isLoginManager
 
 	return groupGet(name, request, response, model);	
 

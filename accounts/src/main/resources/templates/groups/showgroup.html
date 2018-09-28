@@ -115,6 +115,7 @@ that should no longer be in the group, and then click on the "Confirm membership
 <button class="confirmButton"> Confirm membership </button>
 </div>
 
+
 <h3>Add members</h3>
 <div class="inset">
 <label>NetIds to add as members, one per line<br/>
@@ -145,22 +146,24 @@ delegate management of the group to someone else.</p>
 </div>
 </div>
 
+<div th:if="${isloginmanager}">
+
 <h2>Clusters</h2>
 
 <div class="inset">
 <fieldset style="border:none; margin: 0px; padding: 0px">
-<div th:if="${group['businesscategory'] != null and group['businesscategory'].contains('login')}">
 <p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></legend></p>
 <div th:each="c: ${clusters}">
 <div th:if="${c.usermanaged or group['host'] != null and group['host'].contains(c.name) }">
 <label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label>
 </div>
 </div>
-</div>
 </fieldset>
 <p>
 <input type="submit" value="Update Login Ability"/>
 </p>
+</div>
+</div>
 </div>
 </form>
 <div th:insert="~{accessibility :: footer}"></div>

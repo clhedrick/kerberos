@@ -4,7 +4,7 @@
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
 <title>Group Management</title>
 <script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
-<script type="text/javascript">
+<script th:inline="javascript" type="text/javascript">
 /*<![CDATA[*/
 function deletegroup(event) {
   var group = $(event.target).next().val();
@@ -24,13 +24,15 @@ function deleteKeyPress(event) {
 }
 
 function validateSubmit(event) {
-  if (! ($("#sharing").prop("checked") || $("#guests").prop("checked"))) {
-    alert("Sharing and/or login must be checked");
+  if ($("#name").val() == '') {
+    alert("Name for the new group must be supplied");
     event.preventDefault();
     return;
   }
-  if ($("#name").val() == '') {
-    alert("Name for the new group must be supplied");
+  if ("[[${isloginmanager}]]" == "false")
+    return;
+  if (! ($("#sharing").prop("checked") || $("#guests").prop("checked"))) {
+    alert("Sharing and/or login must be checked");
     event.preventDefault();
     return;
   }
@@ -87,6 +89,8 @@ $(document).ready(function(){
 
 <div class="inset" style="margin-top:1em">
 <label>Group Name: <input type="text" name="name" id="name"/></label>
+
+<div th:if="${isloginmanager}">
 <p> Type of group to create: There are two types of group. Normally you should <b>check only one</b> box.</p>
 
 
@@ -103,7 +107,10 @@ $(document).ready(function(){
 <label for="guests"><b>Login.</b></label> This is a list of users that you are authorizing to login. The most common use is to let grad students login to the research cluster, but it can also be used to allow members of other departments to login to a cluster or to control who can login to a system that you manage.
 </div>
 </div>
+</div>
+<p>
 <input type="submit" id="submit" value="Add Group"/>
+</p>
 </div>
 </div>
 </form>

@@ -132,6 +132,7 @@ public class GroupsController {
 	// set up model for JSTL to output
 	model.addAttribute("groups", groups);
 	model.addAttribute("canaddgroup", (privs.contains("addgroup")));
+	model.addAttribute("isloginmanager", (privs.contains("loginmanager")));
 
         return "groups/showgroups";
     }
@@ -173,6 +174,13 @@ public class GroupsController {
 
 	boolean sharing = "on".equals(sharingSt);
 	boolean guests = "on".equals(guestSt);
+
+	// if user isn't login manager, we didn't show them the options
+	// these people can only create sharing groups
+	if (!privs.contains("loginmanager")) {
+	    sharing = true;
+	    guests = false;
+	}
 
 	if (name != null && !sharing && !guests) {
 	    messages.add("Sharing or guests (or both) must be specified for the new group");

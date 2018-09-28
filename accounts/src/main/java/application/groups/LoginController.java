@@ -234,6 +234,13 @@ public class LoginController {
 	if (action.val.size() >= 1)
 	    privs.add("addgroup");
 
+	// now see if they are in login mangers. They can set login attribute
+	filter = conf.loginmanagerfilter.replaceAll("%u", username);
+	action = new common.JndiAction(new String[]{filter, "", "uid"});
+	Subject.doAs(subj, action);
+	if (action.val.size() >= 1)
+	    privs.add("loginmanager");
+
 	// now set up session and go to application
 	request.getSession().setAttribute("privs", privs);
 	request.getSession().setAttribute("krb5subject", subj);

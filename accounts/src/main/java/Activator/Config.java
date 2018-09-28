@@ -65,6 +65,7 @@ public class Config {
     public String base = null;
     public String kerbldapurl = null;
     public String groupmanagerfilter = null;
+    public String loginmanagerfilter = null;
     public String groupsownedfilter = null;
     public String helpmail = null;
     public String usersuffix = null;
@@ -196,6 +197,8 @@ public class Config {
 			kerbldapurl = atoms[1];
 		    if (atoms[0].equals("groupmanagerfilter"))
 			groupmanagerfilter = atoms[1];
+		    if (atoms[0].equals("loginmanagerfilter"))
+			loginmanagerfilter = atoms[1];
 		    if (atoms[0].equals("groupsownedfilter"))
 			groupsownedfilter = atoms[1];
 		    if (atoms[0].equals("helpmail"))
