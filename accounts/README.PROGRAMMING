@@ -249,6 +249,92 @@ ticket. The Subject is stored in the user's session. So is the user's
 name. In general LDAP queries use the Subject for authentication,
 while IPA commands use the ticket in /tmp.
 
+Note that authentication happens in two different ways:
+
+For LDAP queries, here's typical code. Login saves the user's Kerberos
+credentails in a Java object called a Subject. We store it as a session
+variable. So we retrieve that. It will be used to authenticate the LDAP
+query:
+
+	    Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
+	    if (subject == null) {
+		messages.add("Session has expired");
+		return "login";
+	    }
+
+Now we create a JNDI action using the query, the LDAP base (normally ""), and the attributes
+we want returned. In this case we're just checking whether the user exists, so we
+don't actually need the attributes. Uid seems like something safe to get.
+
+	    String kname = (String)request.getSession().getAttribute("krb5user");
+	    
+	    common.JndiAction action = new common.JndiAction(new String[]{"(uid=" + name + ")", "", "uid"});
+	    
+Subject.doAs runs the query using "subject" for authentication.
+
+	    Subject.doAs(subject, action);
+
+action.val (new code should use action.data) is a list of maps, representing the
+data returned by the LDAP query. In this case we just care whether it found
+something, so we check the size of the list.
+
+	    if (action.val == null || action.val.size() == 0) {
+
+When we change something we use IPA commands. IPA is a Kerberized application, so
+it expects the user's Kerberos credentials to be stored in a Kerberos crendential
+cache, and the environment variable KRB5CCNAME to be the name of the cache. Login
+puts the user's credentials in /tmp/krb5cc_NNN where NNN is the UID. So here's the
+code to execute a command. Note that we log all commands that we execute. The
+environment is passed to docommand as an argument. You can also get docommand to
+return the error messages if there are any.
+
+	String env[] = {"KRB5CCNAME=/tmp/krb5cc_" + user, "PATH=/bin:/user/bin"};
+
+        logger.info("ipa group-remove-member " + name + " --users=" + filtername(d));
+
+	if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", name, "--users=" + filtername(d)}, env) != 0) {
+	    messages.add("Unable to remove user " + d + " from group");
+	    continue;
+	}
+
+In User.java, which does activation, we sometimes need to look up data
+using a system identity. After all, the user may not exist yet, so we
+can't use their credentials. So we have to create Kerberos credentials
+ourselves. Take a look at User.java. At the beginning you'll see a
+declaration of KerberosConfiguration. It specifies how to get the
+credentials. In this case it says to use a key table, and specifies
+the location of the key table. (Key tables for services are created
+with ipa-getkeytable.) Most of the code in that class is
+"boilerplate," i.e. stuff that will always be the same. But the
+principal and the location of the key table may differ. We try to use
+principals with just enough permissions to do the job, rather than
+doing everything as "admin."
+
+Here's how we actually generate Kerberos credentials using that key
+table.  We instantiate the object, get a LoginContext for it and then
+to a login. The login context gets the subject, which we extract. At
+that point it can be used by Subject.doAs, as above.
+
+	Configuration kconfig = user.makeKerberosConfiguration(null);
+	LoginContext lc = null;
+	try {
+	    lc = new LoginContext("Groups", null, null, kconfig);
+	    lc.login();
+	} catch (LoginException le) {
+	    logger.error("Cannot create LoginContext. " + le.getMessage());
+	    return false;
+	} catch (SecurityException se) {
+	    logger.error("Cannot create LoginContext. " + se.getMessage());
+	    return false;
+	}
+
+	Subject subj = lc.getSubject();  
+	if (subj == null) {
+	    logger.error("Login failed");
+	    return false;
+	}
+
+
 ----------------
 
 SPRING SETUP
@@ -288,7 +374,9 @@ them. Only one configuration class is necesary, in
 src/main/java/application/. 
 
 This application actually uses two configuration classes, plus
-./src/main/resources/application.properties
+./src/main/resources/application.properties and
+src/main/java/application/ServletInitializer.java (which doesn't
+really do much, but needs to be there).
 
 * Application.java is the basic Spring configuration.  It's a standard
 file, which you can find in all the tutorials. There are two versions
@@ -302,9 +390,12 @@ can coexist with others.
 included by putting spring-boot-starter-security in pom.xml. I used it
 because it does protection against CSRF, as explained above. However
 it also expects to control who can access what. Since I'm doing my own
-authentication, I need to disable that function of Spring Security.
-SpringSecurityConfig does that, by setting it to allow all users on
-all pages.
+authentication, I need to disable that function of Spring Security
+for most URL. SpringSecurityConfig sets permitAll for all URLs 
+except one, which is used by a script that lets users add hosts to
+the system. For that, it's easiest to use basic auth over SSL. So
+that URL is configured to use basic auth, and basic auth is then set
+to use LDAP authentication.
 
 These two classes are in the package "application." The controllers
 must be in the same package, or possibly a subpackage.
@@ -315,7 +406,9 @@ information. It can also have configuration for other things, such as
 Thymeleaf. Currently the only thing in it is a line disabling Thymeleaf's
 caching. This is for ease in development It lets you edit the Thymeleaf
 templates and have the changes take effect immediately.  By default you
-have to redeploy every time you change a template.
+have to redeploy every time you change a template. It also sets the 
+Thymeleaf mode to HTML. By default it would be XML. There's no reason to
+require XML structure that the HTML spec doesn't require.
 
 ---------------------
 
