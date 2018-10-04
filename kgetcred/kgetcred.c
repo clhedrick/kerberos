@@ -619,6 +619,8 @@ int main(int argc, char *argv[])
             continue;
     }
 
+    serverhost = "krb1.cs.rutgers.edu";
+
     memset(&aihints, 0, sizeof(aihints));
     aihints.ai_socktype = SOCK_STREAM;
     aihints.ai_flags = AI_ADDRCONFIG;

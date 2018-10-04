@@ -1,31 +1,17 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 
 /* ldap using gssapi, and ldap utility code for credserv */
+/*                                                                                                            * Copyright 2017 by Rutgers, the State University of New Jersey                                              * All Rights Reserved.                                                                                       *                                                                                                            * Export of this software from the United States of America may                                              *   require a specific license from the United States Government.                                            *   It is the responsibility of any person or organization contemplating                                     *   export to obtain such a license before exporting.                                                        *                                                                                                            * WITHIN THAT CONSTRAINT, permission to use, copy, modify, and                                               * distribute this software and its documentation for any purpose and                                         * without fee is hereby granted, provided that the above copyright                                           * notice appear in all copies and that both that copyright notice and                                        * this permission notice appear in supporting documentation, and that                                        * the name of Rutgers not be used in advertising or publicity pertaining                                     * to distribution of the software without specific, written prior                                            * permission.  Furthermore if you modify this software you must label                                        * your software as modified software and not distribute it in such a                                         * fashion that it might be confused with the original Rutgers software.                                      * Rutgers makes no representations about the suitability of                                                  * this software for any purpose.  It is provided "as is" without express                                     * or implied warranty.                                                                                       */
 
-/*                                                                                                                                  
- * Copyright 2017 by Rutgers, the State University of New Jersey                                                                    
- * All Rights Reserved.                                                                                                             
- *                                                                                                                                  
- * Export of this software from the United States of America may                                                                    
- *   require a specific license from the United States Government.                                                                  
- *   It is the responsibility of any person or organization contemplating                                                           
- *   export to obtain such a license before exporting.                                                                              
- *                                                                                                                                  
- * WITHIN THAT CONSTRAINT, permission to use, copy, modify, and                                                                     
- * distribute this software and its documentation for any purpose and                                                               
- * without fee is hereby granted, provided that the above copyright                                                                 
- * notice appear in all copies and that both that copyright notice and                                                              
- * this permission notice appear in supporting documentation, and that                                                              
- * the name of Rutgers not be used in advertising or publicity pertaining                                                           
- * to distribution of the software without specific, written prior                                                                  
- * permission.  Furthermore if you modify this software you must label                                                              
- * your software as modified software and not distribute it in such a                                                               
- * fashion that it might be confused with the original Rutgers software.                                                            
- * Rutgers makes no representations about the suitability of                                                                        
- * this software for any purpose.  It is provided "as is" without express                                                           
- * or implied warranty.                                                                                                             
+
+/*
+ * If you use this code for another application, not that it is not currently
+ * thread-safe. It changes KRB5CCNAME, which is global, not per-thread.
+ * To make it threadsafe, KRB5CCNAME should be set globally to something like
+ * KEYRING:thread:ldap:ldap.  That way the same KRB5CCNAME will point to a different
+ * cc for each thread. They may be other issues, but I *think* both kerberos and ldap
+ * libraries are mostly thread-safe. I haven't checked to make sure all other code is.
  */
-
 
 #include "port-sockets.h"
 #include "krb5.h"
