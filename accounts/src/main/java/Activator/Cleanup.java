@@ -219,7 +219,20 @@ public class Cleanup {
 		boolean warnedDone = Files.exists(warningDonePath);
 
 		if (!utils.needsReview(group)) {
-		    // hasn't expired. If we warned them, rename the warning to done
+		    // hasn't expired.
+
+		    // if it is suspended, unsuspend it
+		    if (lu.valList(group.get("businesscategory")).contains("suspended")) {
+			logger.info("ipa group-mod " + name + " --delattr=businesscategory=suspended");
+			String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
+			if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--delattr=businesscategory=suspended"}, env) != 0) {
+			    logger.error("unable to remove businesscategory=suspended from " + name);
+			    // faied; don't clear status if it's still suspended
+			    continue;
+			}
+		    }
+
+		    //  If we warned them, rename the warning to done
 		    try {
 			if (warned)
 			    Files.move(warningPath, warningDonePath, StandardCopyOption.REPLACE_EXISTING);
@@ -232,6 +245,7 @@ public class Cleanup {
 		    } catch (Exception e) {
 			logger.error("unable to rename state file to done " + e);
 		    }
+
 		    // and don't do anything
 		    continue;
 		}
@@ -357,13 +371,16 @@ public class Cleanup {
 		// if there are multiple owners, only do this once, so don't put it
 		// in the loop over owner.
 		if (warningType == WarningType.CLOSE) {
-		    // user hasn't responded, make group not login and rename it
-		    // maintain its member and GID, so it can still be used for file sharing
-		    String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
-		    logger.info("ipa group-mod " + name + " --deladdr=businesscategory=login --rename=suspended-" + name);
-		    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--delattr=businesscategory=login", "--rename=suspended-" + name}, env) != 0) {
-			logger.error("unable to rename " + name + " to suspended-" + name);
-			continue;   // don't notify if it fails
+		    // shouldn't be possible that it's already suspended, but if so, nothing to do
+		    if (! lu.valList(group.get("businesscategory")).contains("suspended")) {
+			// user hasn't responded, make group not login and rename it
+			// maintain its member and GID, so it can still be used for file sharing
+			String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
+			logger.info("ipa group-mod " + name + " --addattr=businesscategory=suspended");
+			if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=businesscategory=suspended"}, env) != 0) {
+			    logger.error("unable to add businesscategory=suspended to " + name);
+			    continue;   // don't notify if it fails
+			}
 		    }
 		}
 

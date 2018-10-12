@@ -106,7 +106,7 @@ Make sure you add at least one member to the group.
 <span th:text="${membernames.get(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
 </div>
 </div>
-<div th:if="${needsreview}" class="warning" style="margin-top:1em">
+<div th:if="${needsreview or group['businesscategory'] != null and group['businesscategory'].contains('suspended')}" class="warning" style="margin-top:1em">
 <!-- h3 only visible to screen readers, because color labels it for others -->
 <h3 class="hidden">Confirm membership</h3>
 <p> We ask group owners to review the list of members annually. Please remove any members
@@ -152,13 +152,29 @@ delegate management of the group to someone else.</p>
 
 <div class="inset">
 <fieldset style="border:none; margin: 0px; padding: 0px">
-<p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to specified clusters</label></legend></p>
+<p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="login" th:checked="${group['businesscategory'] != null and group['businesscategory'].contains('login')}" th:disabled="${group['businesscategory'] != null and group['businesscategory'].contains('login')}"/> Members of group can login to the clusters specified below.</label></legend></p>
 <div th:each="c: ${clusters}">
 <div th:if="${c.usermanaged or group['host'] != null and group['host'].contains(c.name) }">
 <label><input type="checkbox" name="hosts" th:value="${c.name}" th:checked="${group['host'] != null and group['host'].contains(c.name)}"/> <span th:text="${c.name}"/></label>
 </div>
 </div>
 </fieldset>
+<p>
+If the box "members of group can login" is checked, it can't be 
+unchecked.
+<div class="explanation">
+<p>
+NOTE: This section is actually used for two different purposes:
+<ol>
+<li> Faculty can use it to authorize guests to use ilab, grad, or research.
+In that case the main box, "members of group can login" will be checked.
+The box for each cluster that members may use will also be checked.
+<li> Faculty can use it to control who can login for systems in faculty
+labs or cluster. In that case the main box, "members of group can login"
+will be checked. No other boxes will be checked, because we use other
+ways to associate the group with the specific set of machines it controls.
+</ol>
+</div>
 <p>
 <input type="submit" value="Update Login Ability"/>
 </p>

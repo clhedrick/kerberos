@@ -206,7 +206,7 @@ public class User {
 	}
 
 	// ldapsearch with the group dn as base and a test for whether it's login
-	JndiAction action = new JndiAction(new String[]{"(businessCategory=login)", dn, "host", "cn"});
+	JndiAction action = new JndiAction(new String[]{"(&(businessCategory=login)(!(businesscategory=suspended)))", dn, "host", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    // normal group, return set of clusters it's valid for
@@ -240,7 +240,7 @@ public class User {
 	}
 
 	// ldapsearch with the group dn as base and a test for whether it's login
-	JndiAction action = new JndiAction(new String[]{"(&(cn=" + groupName + ")(businessCategory=login))", "", "host", "cn"});
+	JndiAction action = new JndiAction(new String[]{"(&(cn=" + groupName + ")(businessCategory=login)(!(businesscategory=suspended)))", "", "host", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    // normal group, return set of clusters it's valid for

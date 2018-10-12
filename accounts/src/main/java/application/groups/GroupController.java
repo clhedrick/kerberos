@@ -502,6 +502,13 @@ public class GroupController {
 	    logger.info("ipa group-mod " + name + " --setattr=dateOfCreate=" + dateString + "Z");
 	    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--setattr=dateOfCreate=" + dateString + "Z"}, env) != 0) 
 		messages.add("Unable to update information to show that group has been validated");
+
+	    if (attrs.get("businesscategory") != null && attrs.get("businesscategory").contains("suspended")) {
+		logger.info("ipa group-mod " + name + " --delattr=businesscategory=suspended");
+		if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--delattr=businesscategory=suspended"}, env) != 0) 
+		    messages.add("Unable to update information to show that group has been validated");
+	    }
+
 	    return groupGet(name, request, response, model);	
 	}
 
