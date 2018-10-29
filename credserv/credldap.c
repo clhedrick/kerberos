@@ -11,6 +11,13 @@
  * KEYRING:thread:ldap:ldap.  That way the same KRB5CCNAME will point to a different
  * cc for each thread. They may be other issues, but I *think* both kerberos and ldap
  * libraries are mostly thread-safe. I haven't checked to make sure all other code is.
+ *
+ * In principal GSSAPI should be able to use a credential cache collection to handle
+ * more than one credential, and select the requested one. Unfortunately the ldap
+ * library uses the calls wrong, and will only use the primary key in the collection.
+ *
+ * the code below to use the key table is actually not needed. the ldap code will
+ * use the environment variable KRB5_CLIENT_KTNAME if it points to a key table.
  */
 
 #include "port-sockets.h"
