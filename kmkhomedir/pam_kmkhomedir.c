@@ -173,6 +173,8 @@ int main(int argc, char *argv[])
     char *message = NULL;
     char *testfile = NULL;
 
+    __asm__ (".symver memcpy,memcpy@GLIBC_2.2.5");
+
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME;
@@ -603,20 +605,26 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
           free(dir);
       return PAM_SUCCESS;
   }
+  pam_syslog(pamh, LOG_ERR, "point 1");
 
   // at this point directory doesn't exist. no other error
   message = pam_kmkhomedir(dir, pwd, serverhost);
 
+  pam_syslog(pamh, LOG_ERR, "point 2");
+
   if (strlen(message) > 0) {
       pam_syslog(pamh, LOG_ERR, "%s", message);
       pam_error(pamh, "Unable to create home directory: %s", message);
-  } else if (is_homedir && geteuid() == 0 && skeldir && skeldir[0]) {
+  } else if (is_homedir && (geteuid() == 0 || geteuid() == pwd->pw_uid) && skeldir && skeldir[0]) {
+      int errnum = 0;
       // can't setuid unless it's root
       // only want to copy from /etc/skel for homedir
       seteuid(pwd->pw_uid);
-      printf("create %s %s\n", skeldir, dir);
-      create_homedir(pwd, u_mask, skeldir, dir, 1);
+      errnum = create_homedir(pwd, u_mask, skeldir, dir, 1);
+      pam_syslog(pamh, LOG_INFO, "copy files for %d %d", pwd->pw_uid, errnum);
       seteuid(0);
+  } else {
+      pam_syslog(pamh, LOG_ERR, "wrong uid %d", geteuid());
   }
 
   free(message);

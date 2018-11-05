@@ -3,6 +3,8 @@ all: pam_reg_cc.so
 pam_reg_cc.so: pam_reg_cc.c
 	gcc -fPIC -fno-stack-protector -c pam_reg_cc.c
 	ld -x --shared -o pam_reg_cc.so  pam_reg_cc.o -lkeyutils -lkrb5 -lk5crypto -lcom_err -lkrb5support -lc -lpam
+	echo no version newer than 2.2.5 should show, failure OK
+	-readelf -a pam_kmkhomedir.so | grep GLIBC_ | grep -v 2.2.5
 
 installans: all
 	install --owner=root --group=root --mode=0755 pam_reg_cc.so /config/kerberos-ansible/kerberos-files/copy/usr/lib64/security/pam_reg_cc.so

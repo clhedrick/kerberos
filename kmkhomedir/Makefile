@@ -17,6 +17,8 @@ pam_kmkhomedir.so: pam_kmkhomedir.c mkhomedir_helper.c
 	gcc -c -fPIC -fno-stack-protector -DPAM mkhomedir_helper.c
 # need the -lc to get fstat
 	ld -x --shared -o pam_kmkhomedir.so pam_kmkhomedir.o mkhomedir_helper.o -lkrb5 -lk5crypto -lcom_err -lkrb5support  -lkeyutils -lresolv  -ldl -lpam -lc
+	echo no version newer than 2.2.5 should show, failure OK
+	-readelf -a pam_kmkhomedir.so | grep GLIBC_ | grep -v 2.2.5
 
 clean::
 	rm mkhomedird.o mkhomedird 
