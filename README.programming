@@ -1,0 +1,20 @@
+I build all of the code under Centos 7. But I want to support Centos 7
+and Ubuntu 14.  Generally code can be used in older releases. But
+sometimes a newer version of a libray function is used. The loader
+annotates dependencies as to what version they are. That way Centos 6
+can tell that the code depends upon a newer version than it has.
+
+We can check for this when we're building. The following line in the
+Makefile does it for pam_kmkhomedir.so. 
+
+	-readelf -a pam_kmkhomedir.so | grep GLIBC_ | grep -v 2.2.5
+
+If everything is version 2.2.5, the second grep wil return fail.
+That's why we have to ignore failures.
+
+Most functions show version 2.2.5 of GLIBC. If we inadvertently get a
+more recent version of a function, it will show in this grep. To fix
+it, add the following to the C source. This example says to use
+version 2.2.5 of memcpy.
+
+__asm__(".symver memcpy,memcpy@GLIBC_2.2.5");
