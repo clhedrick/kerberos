@@ -591,11 +591,14 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // if so, we're done
   if (donefile) {
       if (asprintf(&donepath, "%s/%s", dir, donefile) > 0) {
+          seteuid(pwd->pw_uid);
           if (stat(donepath, &statbuf) == 0) {
+              seteuid(0);
               // done file exists, nothing to do
               free(donepath);
               return PAM_SUCCESS;
           }
+          seteuid(0);
       } else {
           // creation of donepath failed; probably didn't malloc a string
           // but if so, return it
@@ -627,11 +630,14 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
           free(dir);
       // note that we've done it
       if (donepath) {
-          int fd = open(donepath, O_WRONLY | O_CREAT, 0600);
+          int fd;
+          seteuid(pwd->pw_uid);
+          fd = open(donepath, O_WRONLY | O_CREAT, 0600);
           if (fd >= 0) {
               fchown(fd, pwd->pw_uid, pwd->pw_gid);
               close(fd);
           }
+          seteuid(0);
           free(donepath);
       }
           
