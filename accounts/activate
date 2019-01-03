@@ -12,6 +12,10 @@
 # file from WEB-INF. That's the only real difference between the
 # two contexts.
 
+export XDG_CACHE_HOME="$HOME/$$"
+
+trap 'rm -rf "$XDG_CACHE_HOME"' 2
+
 cd /var/lib/activator
 
 A=/var/www/tomcat/webapps/accounts
@@ -20,3 +24,4 @@ C="$A/WEB-INF/classes"
 
 /etc/alternatives/java_sdk_11/bin/java -cp $C:"$L" Activator.User "$@"
 
+rm -rf "$XDG_CACHE_HOME"
