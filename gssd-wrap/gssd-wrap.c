@@ -89,7 +89,7 @@ gss_acquire_cred(
     OM_uint32 *time_rec) {       /* time_rec */
 
   OM_uint32 retval;
-  gss_name_t target_name;
+  gss_name_t target_name = NULL;
   int target_alloc = 0;
   OM_uint32 minor, major;
 
@@ -98,20 +98,27 @@ gss_acquire_cred(
 
   if (geteuid() != 0 && desired_name == GSS_C_NO_NAME) {
     gss_buffer_desc name;
-    struct passwd *pwd = getpwuid(geteuid());
+    char pwbuf[1024]; // for strings in the pwd struct
+    struct passwd passwd;  // for the pwd struct
+    struct passwd *pwd;  // the actual return value, pointer to passwd or NULL
 
-    name.value = (void *)pwd->pw_name;
-    name.length = strlen(pwd->pw_name);
-    major = gss_import_name(&minor, &name,
+    // ignore return value, because checking pwd NULL will also work
+    getpwuid_r(geteuid(), &passwd, pwbuf, sizeof(pwbuf), &pwd);
+
+    if (pwd && pwd->pw_name) {
+      name.value = (void *)pwd->pw_name;
+      name.length = strlen(pwd->pw_name);
+      major = gss_import_name(&minor, &name,
 			       ((const gss_OID)GSS_C_NT_USER_NAME),
 			       &target_name);
-    if (major == GSS_S_COMPLETE) {
-      desired_name = target_name;
-      target_alloc = 1;
-    } else {
+      if (major == GSS_S_COMPLETE && target_name) {
+	desired_name = target_name;
+	target_alloc = 1;
+      } else {
 #ifdef debug
-      printf("import name failed\n");
+	printf("import name failed\n");
 #endif
+      }
     }
 
   }

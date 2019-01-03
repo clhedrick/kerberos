@@ -42,6 +42,9 @@
 #include <wait.h>
 #include <pwd.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <signal.h>
 
@@ -172,6 +175,8 @@ int main(int argc, char *argv[])
     unsigned debug = 0;
     char *message = NULL;
     char *testfile = NULL;
+
+    __asm__ (".symver memcpy,memcpy@GLIBC_2.2.5");
 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
@@ -525,6 +530,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   FILE *pwfile = NULL;
   unsigned long u_mask = 0022;
   const char *skeldir = "/etc/skel";
+  const char *donefile = NULL;
+  char *donepath = NULL;
 
   for (i = 0; i < argc; i++) {
       if (strncmp(argv[i],"host=", strlen("host=")) == 0) 
@@ -543,6 +550,9 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       }
       if (strncmp(argv[i],"skel=", strlen("skel=")) == 0) {
           skeldir = argv[i] + strlen("skel=");
+      }
+      if (strncmp(argv[i],"donefile=", strlen("donefile=")) == 0) {
+          donefile = argv[i] + strlen("donefile=");
       }
   }
 
@@ -574,7 +584,33 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       return PAM_SUCCESS; // go ahead and do the login anyway
   }
 
+  // get homedir
   dir = pwd->pw_dir;
+
+  // if donefile specified, check to see if it exists in homedir
+  // if so, we're done
+  if (donefile) {
+      if (asprintf(&donepath, "%s/%s", dir, donefile) > 0) {
+          seteuid(pwd->pw_uid);
+          if (stat(donepath, &statbuf) == 0) {
+              seteuid(0);
+              // done file exists, nothing to do
+              free(donepath);
+              return PAM_SUCCESS;
+          }
+          seteuid(0);
+      } else {
+          // creation of donepath failed; probably didn't malloc a string
+          // but if so, return it
+          if (donepath)
+              free(donepath);
+          donepath = NULL;
+      }
+  }
+
+  // if pattern specified, we're creating something other than
+  // home directory. Generate the right directory name for this
+  // user and put it in "dir"
   if (pattern) {
       char *cp = strstr(pattern, "%u");
       if (cp) {
@@ -592,6 +628,19 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       // directory already exists
       if (freedir)
           free(dir);
+      // note that we've done it
+      if (donepath) {
+          int fd;
+          seteuid(pwd->pw_uid);
+          fd = open(donepath, O_WRONLY | O_CREAT, 0600);
+          if (fd >= 0) {
+              fchown(fd, pwd->pw_uid, pwd->pw_gid);
+              close(fd);
+          }
+          seteuid(0);
+          free(donepath);
+      }
+          
       return PAM_SUCCESS;
   }
 
@@ -601,27 +650,46 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       // not really success, but we probably don't want to stop login
       if (freedir)
           free(dir);
+      if (donepath) {
+          free(donepath);
+      }
       return PAM_SUCCESS;
   }
+  pam_syslog(pamh, LOG_ERR, "point 1");
 
   // at this point directory doesn't exist. no other error
   message = pam_kmkhomedir(dir, pwd, serverhost);
 
+  pam_syslog(pamh, LOG_ERR, "point 2");
+
   if (strlen(message) > 0) {
       pam_syslog(pamh, LOG_ERR, "%s", message);
       pam_error(pamh, "Unable to create home directory: %s", message);
-  } else if (is_homedir && geteuid() == 0 && skeldir && skeldir[0]) {
+  } else if (is_homedir && (geteuid() == 0 || geteuid() == pwd->pw_uid) && skeldir && skeldir[0]) {
+      int errnum = 0;
       // can't setuid unless it's root
       // only want to copy from /etc/skel for homedir
       seteuid(pwd->pw_uid);
-      printf("create %s %s\n", skeldir, dir);
-      create_homedir(pwd, u_mask, skeldir, dir, 1);
+      errnum = create_homedir(pwd, u_mask, skeldir, dir, 1);
+      pam_syslog(pamh, LOG_INFO, "copy files for %d %d", pwd->pw_uid, errnum);
       seteuid(0);
+  } else {
+      pam_syslog(pamh, LOG_ERR, "wrong uid %d", geteuid());
   }
 
+  // if the create succeeded, note that we've done it
+  if (donepath && (strlen(message) == 0)) {
+      int fd = open(donepath, O_WRONLY | O_CREAT, 0600);
+      if (fd >= 0) {
+          fchown(fd, pwd->pw_uid, pwd->pw_gid);
+          close(fd);
+      }
+  }
   free(message);
   if (freedir)
       free(dir);
+  if (donepath)
+      free(donepath);
 
   return PAM_SUCCESS;
 

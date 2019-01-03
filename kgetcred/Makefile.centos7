@@ -8,6 +8,8 @@ all: kgetcred.c
 	gcc -fPIC -fno-stack-protector -DPAM -DHAVE_CONFIG_H  -I/usr/include/krb5  -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wparentheses -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -pthread -c kgetcred.c -o pam_kgetcred.o
 	gcc -c -fPIC -fno-stack-protector -g  getsrv.c
 	ld -x --shared -o pam_kgetcred.so pam_kgetcred.o getsrv.o -lkrb5 -lk5crypto -lcom_err -lkrb5support  -lkeyutils -lresolv  -ldl
+	echo no version newer than 2.2.5 should show; failure OK
+	-readelf -a pam_kgetcred.so | grep GLIBC_ | grep -v 2.2.5
 
 install: all
 	cp kgetcred /usr/bin/kgetcred

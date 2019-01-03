@@ -52,9 +52,14 @@ are eligible for accounts.
 This will show you a University login screen. So as long as you remember
 your University password, you set or reset your CS password. If you need more security than a simple password
 can afford, please see <a href="https://services.cs.rutgers.edu/two-factor.html"> two factor authentication</a>.
-<li> <a href="groups/login">Group and Guest management.</a> This will let authorized users (typically faculty) create user groups for computer science systems. This will let you share files with other people and authorize guest users.
+<li> <a href="groups/login">Group and Guest management.</a> This will you create and manage groups. This is useful for three purposes:
 <p>
-This will show you a Computer Science login screen.
+<ul>
+<li> If you want to share files with a group of people, you can create a group that lists the people and then change the permissions of the file so they can access it. For more help with this, see <a href="https://www.cs.rutgers.edu/resources/making-a-directory-you-can-share-with-members-of-your-project">Sharing files</a>. </li>
+<li> If you are authorized (normally faculty) and want to allow grad students or collaborators to access reseearch or instructional systems, you can create a guest group. For help with this, see <a href="https://www.cs.rutgers.edu/resources/managing-your-guest-users-on-cs-computer-systems"> Managing your guest users</a>.</li>
+<li> If you are runniing your own computer cluster, you can use groups to control what users are allowed to login.</li>
+</ul>
+<p>
 <li>  Consider giving us contact information, in case we need to reach you for support reasons. 
 <p>You can set additional information using "ipa user-mod" on any of our systems, e.g. "ipa user-mod YOURNETID --phone=8484452001". "ipa user-mod --help" will give a list of what can be set. "ipa user-show YOURNETID" will show your current information. You only need to do this once. The same information applies to all of our systems. Note that changing first name, lastname, and GECOS won't do anything useful, since we reset them to the official University names nightly.
 <li> By default, everyone uses the bash shell. To change to tcsh use "ipa user-mod YOURNETID --shell=/bin/tcsh" any of our systems.

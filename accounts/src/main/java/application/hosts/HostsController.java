@@ -277,6 +277,20 @@ public class HostsController {
 	}
 	
 
+	logger.info("ipa service-add nfs/" + hostname);
+	messages = new ArrayList<String>();
+	if (docommand.docommand (new String[]{"/bin/ipa", "service-add", "nfs/" + hostname}, env, messages) != 0) {
+	    boolean exists = false;
+	    String errmsg = "Error: ";
+	    for (String m:messages) {
+		errmsg += " " + m;
+		if (m.contains("already exists"))
+		    exists = true;
+	    }
+	    if (!exists)
+		return errmsg.getBytes();
+	}
+
 	logger.info("ipa-getkeytab -p nfs/" + hostname + " -k /tmp/" + hostname + ".kt");
 	messages = new ArrayList<String>();
 	if (docommand.docommand (new String[]{"/sbin/ipa-getkeytab", "-p", "nfs/" + hostname, "-k", "/tmp/" + hostname + ".kt"}, env, messages) != 0) {
