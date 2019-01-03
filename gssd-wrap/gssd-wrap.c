@@ -98,10 +98,14 @@ gss_acquire_cred(
 
   if (geteuid() != 0 && desired_name == GSS_C_NO_NAME) {
     gss_buffer_desc name;
-    struct passwd *pwd = getpwuid(geteuid());
+    char pwbuf[1024]; // for strings in the pwd struct
+    struct passwd passwd;  // for the pwd struct
+    struct passwd *pwd;  // the actual return value, pointer to passwd or NULL
+
+    // ignore return value, because checking pwd NULL will also work
+    getpwuid_r(geteuid(), &passwd, pwbuf, sizeof(pwbuf), &pwd);
 
     if (pwd && pwd->pw_name) {
-
       name.value = (void *)pwd->pw_name;
       name.length = strlen(pwd->pw_name);
       major = gss_import_name(&minor, &name,

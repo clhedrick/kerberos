@@ -2,7 +2,7 @@
 .SH NAME
 pam_kmkhomedir \- module to create home directories
 .SH DESCRIPTION
-.I  pam_kmkhomedir [host=HOSTNAME] [dir=DIR PATTERN] [umask=nnn] [skel=dir]
+.I  pam_kmkhomedir [host=HOSTNAME] [dir=DIR PATTERN] [umask=nnn] [skel=dir] [donefile=filename]
 works with service mkhomedird to create home directories in Kerberized
 environments. With Kerberized NFS, no one can create home directories on 
 clients, since root has no special access to the file system.
@@ -54,6 +54,14 @@ pam_kmkhomedir = {
 The testfile shouldn't have a directory in front of it. It will be assumed to be
 present anywhere that has user home directories. This feature is present both
 here and in the server. It makes sense to configure it both places.
+.PP
+Sometimes directories are automounted. In this case simply checking whether a
+directory exists can require the file system to be automounted. For home directories
+that's OK, since the user is going to need the home directory. But for other directories
+(usually specified with dir=) you may not want all those automounts. If you specify
+donefile=name, it will create a zero-length file "name" in the user's home directory
+to indicate that the directory has already been done. If that file exists, no
+further check will be done, and thus the automount won't happen.
 .PP
 If a home directory is created (i.e. dir= isn't specified),
 pam_kmkhomedir will copy files from the skelton

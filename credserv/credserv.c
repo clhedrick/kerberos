@@ -349,12 +349,6 @@ main(int argc, char *argv[])
 
     progname = *argv;
 
-    retval = krb5_init_context(&context);
-    if (retval) {
-        com_err(argv[0], retval, "while initializing krb5");
-        exit(1);
-    }
-
     /* open a log connection */
     openlog("credserv", 0, LOG_DAEMON);
 
@@ -440,39 +434,6 @@ main(int argc, char *argv[])
     strcpy(myhostname, addrs->ai_canonname);
     freeaddrinfo(addrs);
 
-    // Mutual authentication, so we need credentials.
-    // Ours comes from /etc/krb5.conf
-
-    if (keytab == NULL) {
-        if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
-            com_err(progname, retval, "while resolving keytab file /etc/krb5.keytab");
-            exit(2);
-        }
-    }
-
-    if ((retval = krb5_get_default_realm(context, &default_realm))) {
-        mylog(LOG_ERR, "unable to get default realm %s", error_message(retval));
-        exit(1);
-    }
-
-    // Get options from /etc/krb5.conf
-
-    realm_data.data = default_realm;
-    realm_data.length = strlen(default_realm);
-
-    krb5_appdefault_string(context, "credserv", &realm_data, "admingroup", "", &admingroup);
-    if (strlen(admingroup) == 0)
-        admingroup = NULL;
-
-
-    retval = krb5_sname_to_principal(context, NULL, service,
-                                     KRB5_NT_SRV_HST, &server);
-    if (retval) {
-        mylog(LOG_ERR, "while generating service name (%s): %s",
-               service, error_message(retval));
-        exit(1);
-    }
-
     /*
      * If user specified a port, then listen on that port; otherwise,
      * assume we've been started out of inetd.
@@ -539,6 +500,45 @@ main(int argc, char *argv[])
         sock = 0;
     }
 
+
+    retval = krb5_init_context(&context);
+    if (retval) {
+        com_err(argv[0], retval, "while initializing krb5");
+        exit(1);
+    }
+
+    // Mutual authentication, so we need credentials.
+    // Ours comes from /etc/krb5.conf
+
+    if (keytab == NULL) {
+        if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
+            com_err(progname, retval, "while resolving keytab file /etc/krb5.keytab");
+            exit(2);
+        }
+    }
+
+    if ((retval = krb5_get_default_realm(context, &default_realm))) {
+        mylog(LOG_ERR, "unable to get default realm %s", error_message(retval));
+        exit(1);
+    }
+
+    // Get options from /etc/krb5.conf
+
+    realm_data.data = default_realm;
+    realm_data.length = strlen(default_realm);
+
+    krb5_appdefault_string(context, "credserv", &realm_data, "admingroup", "", &admingroup);
+    if (strlen(admingroup) == 0)
+        admingroup = NULL;
+
+
+    retval = krb5_sname_to_principal(context, NULL, service,
+                                     KRB5_NT_SRV_HST, &server);
+    if (retval) {
+        mylog(LOG_ERR, "while generating service name (%s): %s",
+               service, error_message(retval));
+        exit(1);
+    }
 
     if (peername->sa_family != AF_INET && peername->sa_family != AF_INET6) {
         mylog(LOG_ERR, "request not IPv4 or 6 %d", peername->sa_family);
