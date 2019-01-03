@@ -117,10 +117,10 @@ public class User {
     // based on results of ldap query to Rutgers ldap, get the list of groups they are in
     // that we manage. based on [managed] section of config file
     public Set<String> makeUserMaintainedGroups(Config config, Map<String,List<String>> universityData) {
-	Set<String>retGroups = new HashSet<String>();
+	var retGroups = new HashSet<String>();
 
 	// non-course groups. these are defined by ldap filters, so we run the filters on each group
-	for (Config.Rule rule: config.managed.rules) {
+	for (var rule: config.managed.rules) {
 	    if (!"course".equals(rule.groupName) && Match.matchLdap(universityData, rule.filter)) {
 		retGroups.add(rule.groupName);
 	    }
@@ -128,15 +128,15 @@ public class User {
 
 	// add the groups for courses we manage
 	// have to check the courses the user is in one by one, and then apply the regexp's
-	List<String>courses = universityData.get(config.courseattribute);
+	var courses = universityData.get(config.courseattribute);
 	if (courses != null)
 	    // for each course the user is in, run the course rules. Last match wins
-	    for (String course: courses) {
+	    for (var course: courses) {
 		// the rules are on group name, not course id, so make group name
 		// convert from 2016:9:16:198:510:01 to cs510-f16
-		String courseGroup = Match.makeclass(course, config);
-		boolean ok = false;
-		for (Config.Rule rule: config.managed.rules) {
+		var courseGroup = Match.makeclass(course, config);
+		var ok = false;
+		for (var rule: config.managed.rules) {
 		    // only use the rules that are for courses, obviously
 		    if ("course".equals(rule.groupName)) {
 			// see if it's an exception rule
@@ -160,8 +160,8 @@ public class User {
 			
     // check config file to see if this course gets accounts on this cluster
     private static boolean isCourseOkForCluster(String group, Config.Cluster cluster) {
-	boolean ok = false;
-	for (Config.Rule rule: cluster.rules) {
+	var ok = false;
+	for (var rule: cluster.rules) {
 	    if ("course".equals(rule.groupName)) {
 		if (rule.filter.charAt(0) == '!') {
 		    if (group.matches(rule.filter.substring(1)))
@@ -187,7 +187,7 @@ public class User {
     // Only for manually maintained groups
     // cache the data, because when we're reviewing accounts this could be done a lot
     public Set<String> getLoginClustersDn(String dn, Subject subj, Config config) {
-	String groupName = dn2group(dn);
+	var groupName = dn2group(dn);
 
 	// if it's an illegal dn
 	if (groupName == null) {
@@ -206,16 +206,13 @@ public class User {
 	}
 
 	// ldapsearch with the group dn as base and a test for whether it's login
-	JndiAction action = new JndiAction(new String[]{"(&(businessCategory=login)(!(businesscategory=suspended)))", dn, "host", "cn"});
+	var action = new JndiAction(new String[]{"(&(businessCategory=login)(!(businesscategory=suspended)))", dn, "host", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    // normal group, return set of clusters it's valid for
 	    // make a set out of the values of the host attribute
-	    Set<String> clusters;
-	    if (action.val.get(0).get("host") != null)
-		clusters = new HashSet<String>(action.val.get(0).get("host"));
-	    else 
-		clusters = new HashSet<String>();
+	    var host = action.val.get(0).get("host");
+	    var clusters = (host == null) ? new HashSet<String>() : new HashSet<String>(host);
 	    loginClusterCache.put(groupName, clusters);
 	    return clusters;
 	}
@@ -240,12 +237,12 @@ public class User {
 	}
 
 	// ldapsearch with the group dn as base and a test for whether it's login
-	JndiAction action = new JndiAction(new String[]{"(&(cn=" + groupName + ")(businessCategory=login)(!(businesscategory=suspended)))", "", "host", "cn"});
+	var action = new JndiAction(new String[]{"(&(cn=" + groupName + ")(businessCategory=login)(!(businesscategory=suspended)))", "", "host", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    // normal group, return set of clusters it's valid for
 	    // make a set out of the values of the host attribute
-	    Set<String> clusters = new HashSet<String>(action.val.get(0).get("host"));
+	    var clusters = new HashSet<String>(action.val.get(0).get("host"));
 	    loginClusterCache.put(groupName, clusters);
 	    return clusters;
 	}
@@ -258,7 +255,7 @@ public class User {
     public boolean groupExists(String groupName, Subject subj, Config config) {
 
 	// ldapsearch with the group dn as base and a test for whether it's login
-	JndiAction action = new JndiAction(new String[]{"(cn=" + groupName + ")", "", "cn"});
+	var action = new JndiAction(new String[]{"(cn=" + groupName + ")", "", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    return true;
@@ -268,7 +265,7 @@ public class User {
 
 
     public static String dn2group(String s) {
-	int i = s.indexOf(",");
+	var i = s.indexOf(",");
 	if (s.startsWith("cn="))
 	    return s.substring(3, i);
 	return null;
@@ -277,27 +274,23 @@ public class User {
     // the real intent here is to return user's membership in manually maintained groups
     // either for one cluster or all clusters if cluster is null
     public List<String> makeManualLoginGroups(Config config, ArrayList<HashMap<String,ArrayList<String>>>val, Subject subj, String cluster) {
-	List<String>loginGroups = new ArrayList<String>();
+	var loginGroups = new ArrayList<String>();
 
 	// ourData is data from our ldap server. may be missing if it's a new user. use empty list for that
-	HashMap<String, ArrayList<String>> ourData = null;
-	if (val == null || val.size() == 0)
-	    ourData = new HashMap<String, ArrayList<String>>();
-	else
-	    ourData = val.get(0);
+	var ourData = (val == null || val.size() == 0) ? new HashMap<String, ArrayList<String>>() : val.get(0);
 
 	// now look at the groups the user is in, and pick out those that are login groups
 	// but not course groups or managed groups (since we only want manually maintained groups)
 	// This is a list of DNs, not group names.
-	ArrayList<String>groupDns = ourData.get("memberof");
+	var groupDns = ourData.get("memberof");
 	if (groupDns == null)
 	    groupDns = new ArrayList<String>();
 	// this is dns, not names, but that's what we need to do queries
-	for (String dn: groupDns) {
+	for (var dn: groupDns) {
 	    // grtLoginClusters returns clusters this group is a login group for
 	    // null if it's not a login group
-	    Set<String>clusters = getLoginClustersDn(dn, subj, config);
-	    String name = dn2group(dn);
+	    var clusters = getLoginClustersDn(dn, subj, config);
+	    var name = dn2group(dn);
 	    // invalid group dn
 	    if (name == null)
 		continue;
@@ -317,24 +310,20 @@ public class User {
 
     // set of groups that are automatically maintained that the user is currently in. Based on CS LDAP.
     public Set<String> makeExistingAutomaticGroups(Config config, ArrayList<HashMap<String,ArrayList<String>>>val) {
-	Set<String>loginGroups = new HashSet<String>();
+	var loginGroups = new HashSet<String>();
 
 	// ourData is data from our ldap server. may be missing if it's a new user. use empty list for that
-	HashMap<String, ArrayList<String>> ourData = null;
-	if (val == null || val.size() == 0)
-	    ourData = new HashMap<String, ArrayList<String>>();
-	else
-	    ourData = val.get(0);
+	var ourData = (val == null || val.size() == 0) ? new HashMap<String, ArrayList<String>>() : val.get(0);
 
 	// now look at the groups the user is in, and pick out those that are not automatically maintained, i.e.
 	// not course groups or managed groups
-	ArrayList<String>groupDns = ourData.get("memberof");
+	var groupDns = ourData.get("memberof");
 	if (groupDns == null)
 	    groupDns = new ArrayList<String>();
 	// this is dns, not names, but that's what we need to do queries
-	for (String dn: groupDns) {
+	for (var dn: groupDns) {
 	    // get name of group
-	    String name = dn2group(dn);
+	    var name = dn2group(dn);
 	    // invalid group dn
 	    if (name == null)
 		continue;
@@ -349,14 +338,14 @@ public class User {
 	if (val == null || val.size() == 0)
 	    return false;
 
-	String match = "cn=" + group + ",";
+	var match = "cn=" + group + ",";
 
-	ArrayList<String>groupDns = val.get(0).get("memberof");
+	var groupDns = val.get(0).get("memberof");
 	if (groupDns == null)
 	    return false;
 
 	// this is dns, not names, so have to match with cn=NNN,...
-	for (String dn: groupDns) {
+	for (var dn: groupDns) {
 	    // get name of group
 	    if (dn.startsWith(match))
 		return true;
@@ -366,25 +355,16 @@ public class User {
     }
 
     public static boolean createUser(String username, Config config, Map<String,List<String>> universityData, boolean test, Logger logger, String[] env) {
-	long uid = Uid.allocateUid(username, config);
-	List<String> firstl = universityData.get("givenname");
-	String first;
-	if (firstl == null)
-	    first = "-";
-	else 
-	    first = firstl.get(0);
-	List<String> lastl = universityData.get("sn");
-	String last;
-	if (lastl == null)
-	    last = "-";
-	else 
-	    last = lastl.get(0);
-	List<String> gecosl = universityData.get("cn");
-	String gecos;
-	if (gecosl == null)
-	    gecos = "-";
-	else
-	    gecos = gecosl.get(0);
+	var uid = Uid.allocateUid(username, config);
+
+	var firstl = universityData.get("givenname");
+	var first = (firstl == null) ? "-" : firstl.get(0);
+
+	var lastl = universityData.get("sn");
+	var last = (lastl == null) ? "-" : lastl.get(0);
+
+	var gecosl = universityData.get("cn");
+	var gecos = (gecosl == null) ? "-" : gecosl.get(0);
 	
 	logger.info("ipa user-add " + username + " --uid=" + uid + " --gidnumber=" + config.defaultgid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
 	if (!test) {
@@ -397,23 +377,23 @@ public class User {
     // user exists in both sets of update. Update our info if it's different
     // don't bother returning a value because we'll continue with other stuff even if this fails
     static void syncUser(String username, Config config, Map<String,List<String>> universityData, HashMap<String,ArrayList<String>> ourData, boolean test, Logger logger, String[] env) {
-	List<String> mods = new ArrayList<String>();
+	var mods = new ArrayList<String>();
 
-	boolean needmod = false;
-	String first = lu.oneVal(universityData.get("givenname"),"-");
-	String ofirst = lu.oneVal(ourData.get("givenname"));
+	var needmod = false;
+	var first = lu.oneVal(universityData.get("givenname"),"-");
+	var ofirst = lu.oneVal(ourData.get("givenname"));
 	if (!first.equalsIgnoreCase(ofirst)) {
 	    mods.add("--first=" + first);
 	}
 
-	String last = lu.oneVal(universityData.get("sn"),"-");
-	String olast = lu.oneVal(ourData.get("sn"));
+	var last = lu.oneVal(universityData.get("sn"),"-");
+	var olast = lu.oneVal(ourData.get("sn"));
 	if (!last.equalsIgnoreCase(olast)) {
 	    mods.add("--last=" + last);
 	}
 
-	String cn = lu.oneVal(universityData.get("cn"),"-");
-	String ocn = lu.oneVal(ourData.get("gecos"));
+	var cn = lu.oneVal(universityData.get("cn"),"-");
+	var ocn = lu.oneVal(ourData.get("gecos"));
 	if (!cn.equals(ocn)) {
 	    mods.add("--gecos=" + cn);
 	}
@@ -433,11 +413,11 @@ public class User {
 
     public static void main( String[] argarray) {
 
-	ArrayList<String> args = new ArrayList<String>(Arrays.asList(argarray));
+	var args = new ArrayList<String>(Arrays.asList(argarray));
 
-	boolean verbose = false;
-	boolean cleanup = false;
-	boolean test = false;
+	var verbose = false;
+	var cleanup = false;
+	var test = false;
 
 	if (args.contains("-v")) {
 	    verbose = true;
@@ -466,9 +446,7 @@ public class User {
 	    System.out.println("");
 	    System.exit(1);
 	}
-	String username = null;
-	if (args.size() > 0)
-	    username = args.get(0);
+	var username = (args.size() > 0) ? args.get(0) : null;
 	List<String> clusters = null;
 	List<String> currentClusters = null;
 	List<String> ineligibleClusters = null;
@@ -496,7 +474,7 @@ public class User {
 	// For verbose debug level to console, info to syslog (if not test)
 
 	// log info to console and syslog
-	String logname = "log4j-interactive.xml";
+	var logname = "log4j-interactive.xml";
 	// log debug to console
 	if (verbose && test)
 	    logname = "log4j-trace-verbose.xml";
@@ -536,12 +514,11 @@ public class User {
     // username is the CS username, normally netid, but there's a mapping table for exceptions
     public static boolean doUser (String username, List<String>activatableClusters, List<String>currentClusters, List<String>ineligibleClusters, String requestedCluster, boolean cleanup, boolean test, boolean isWeb) {
 
-	Logger logger = null;
-	logger = LogManager.getLogger();
+	var logger = LogManager.getLogger();
 	
-	User user = new User();
+	var user = new User();
 
-	Config config = new Config();
+	var config = new Config();
 	try {
 	    config.loadConfig();
 	} catch (Exception e) {
@@ -549,14 +526,14 @@ public class User {
 	    return false;
 	}
 
-	Map<String,String> local2Univ = Uid.local2Univ(config);
+	var local2Univ = Uid.local2Univ(config);
 
-	Ldap ldap = new Ldap();
+	var ldap = new Ldap();
 
 	// begin boilerplate for talking to the LCSR ldap server
 	// need credentials for our host to authenticate the LDAP query
 
-	Configuration kconfig = user.makeKerberosConfiguration(null);
+	var kconfig = user.makeKerberosConfiguration(null);
 	LoginContext lc = null;
 	try {
 	    lc = new LoginContext("Groups", null, null, kconfig);
@@ -569,13 +546,13 @@ public class User {
 	    return false;
 	}
 
-	Subject subj = lc.getSubject();  
+	var subj = lc.getSubject();  
 	if (subj == null) {
 	    logger.error("Login failed");
 	    return false;
 	}
 
-	Db db = new Db();
+	var db = new Db();
 	if (config.csroleattr != null)
 	    db.openDb(config);
 
@@ -588,28 +565,28 @@ public class User {
 	    // for real cleanup check all currently active users
 	    //   otherwise just specified user
 	    if (cleanup && username == null) {
-		JndiAction action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(memberof=cn=login-*,*))", "", "uid"});
+		var action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(memberof=cn=login-*,*))", "", "uid"});
 		Subject.doAs(subj, action);
 
 		users = action.val;
 		System.out.println("users " + users.size());
 	    } else {
 		users = new ArrayList<HashMap<String,ArrayList<String>>>();
-		HashMap<String,ArrayList<String>> userMap = new HashMap<String,ArrayList<String>>();
-		ArrayList<String> uidList = new ArrayList<String>();
+		var userMap = new HashMap<String,ArrayList<String>>();
+		var uidList = new ArrayList<String>();
 		uidList.add(username);
 		userMap.put("uid", uidList);
 		users.add(userMap);
 	    }
 
-	    for (HashMap<String,ArrayList<String>> userMap: users) {
-		ArrayList<String> usernames = userMap.get("uid");
+	    for (var userMap: users) {
+		var usernames = userMap.get("uid");
 		if (usernames == null || usernames.size() == 0)
 		    continue;
 		username = usernames.get(0);
 
-		List<String> addtoCluster = new ArrayList<String>();
-		List<String> removefromCluster = new ArrayList<String>();
+		var addtoCluster = new ArrayList<String>();
+		var removefromCluster = new ArrayList<String>();
 
 		if (activatableClusters != null)
 		    logger.debug("Requesting clusters user " + username);		    
@@ -627,7 +604,7 @@ public class User {
 		    String univuid = username;
 		    univuid = local2Univ.getOrDefault(username, username);
 
-		    List<Map<String,List<String>>> universityDataList = ldap.lookup("(uid=" + univuid + ")", config);
+		    var universityDataList = ldap.lookup("(uid=" + univuid + ")", config);
 		    Map<String,List<String>> universityData = null;
 
 		    // can't create an account without university data, but in cleanup need to deal
@@ -641,28 +618,28 @@ public class User {
 
 		    // now add in data from CS database. It becomes an attribute in the LDAP
 		    // data structure, so filters can check it along with University data
-		    List<String>csroles = db.getRoles(univuid, config);
+		    var csroles = db.getRoles(univuid, config);
 		    if (config.csroleattr != null)
 			universityData.put(config.csroleattr, csroles);
 
 		    // get group memberships from our data; result is action.val
 		    // will be filtered below to find manually maintained groups this user is in for a specific cluster
-		    JndiAction action = new JndiAction(new String[]{"(uid=" + username + ")", "", "memberOf", "givenname", "sn", "gecos"});
+		    var action = new JndiAction(new String[]{"(uid=" + username + ")", "", "memberOf", "givenname", "sn", "gecos"});
 		    Subject.doAs(subj, action);
 
 		    // for -v, print the basic data, to help debugging user issues
 		    if (logger.isDebugEnabled()) {
 			logger.debug("Dept roles:");
-			for (String role:csroles)
+			for (var role:csroles)
 			    logger.debug("   " + role);
 			List<String> univroles = universityData.get("employeetype");
 			logger.debug("University roles:");
 			if (univroles != null) {
-			    for (String role:univroles)
+			    for (var role:univroles)
 				logger.debug("   " + role);
 			}
 			logger.debug("Manually maintained login groups:");
-			for (String group: user.makeManualLoginGroups(config, action.val, subj, null))
+			for (var group: user.makeManualLoginGroups(config, action.val, subj, null))
 			    logger.debug("   " + group);
 		    }
 
@@ -677,14 +654,14 @@ public class User {
 	
 
 		    // get automaticallly maintained groups from University data. will have to filters to see if they fit the cluster
-		    Set<String> userMaintainedGroups = user.makeUserMaintainedGroups(config, universityData);
+		    var userMaintainedGroups = user.makeUserMaintainedGroups(config, universityData);
 		    // list of login groups for all clusters - just for logging
-		    Set<String> userManualLoginGroups = new HashSet<String>();
+		    var userManualLoginGroups = new HashSet<String>();
 		    // list clusters user is allowed on
-		    Set<String> userAllowedClusters = new HashSet<String>();
+		    var userAllowedClusters = new HashSet<String>();
 
 		    // print the clusters they can login on.
-		    for (Config.Cluster cluster: config.clusters) {
+		    for (var cluster: config.clusters) {
 			// if config says not to cleanup this cluster, don't
 			if (cleanup && !cluster.docleanup)
 			    continue;
@@ -694,9 +671,9 @@ public class User {
 			//      filter with cluster's course list
 			//   no,
 			//      filter with cluster's group list
-			boolean ok = false;
+			var ok = false;
 			logger.debug("  Automatic groups:");
-			for (String group: userMaintainedGroups) {
+			for (var group: userMaintainedGroups) {
 			    if (user.isCourseGroup(group, config)) {
 				if (user.isCourseOkForCluster(group, cluster)) {
 				    ok = true;
@@ -712,16 +689,16 @@ public class User {
 			// for each manually maintained group user is from our data
 			// we get only manually maintained login groups for this user for this cluster
 			logger.debug("  Manual groups:");
-			List<String> manualLoginForCluster = user.makeManualLoginGroups(config, action.val, subj, cluster.name);
+			var manualLoginForCluster = user.makeManualLoginGroups(config, action.val, subj, cluster.name);
 			// merge into full list for log info
 			userManualLoginGroups.addAll(manualLoginForCluster);
 			
-			for (String group: manualLoginForCluster) {
+			for (var group: manualLoginForCluster) {
 			    logger.debug("    " + group);
 			    ok = true;
 			}			
 
-			boolean current = user.isCurrentlyInGroup(config, action.val, "login-" + cluster.name);
+			var current = user.isCurrentlyInGroup(config, action.val, "login-" + cluster.name);
 
 			logger.debug("  User should be able to login for " + cluster.name + ": " + ok);
 			if (ok && ! current) {
@@ -760,15 +737,15 @@ public class User {
 
 		    // if we're here we're doing activation or cleanup
 
-		    Set<String> existingAutomaticGroups = user.makeExistingAutomaticGroups(config, action.val);
+		    var existingAutomaticGroups = user.makeExistingAutomaticGroups(config, action.val);
 
 		    // add to groups that they should be in but aren't
-		    Set<String> addGroups = new HashSet<String>();
+		    var addGroups = new HashSet<String>();
 		    addGroups.addAll(userMaintainedGroups);
 		    addGroups.removeAll(existingAutomaticGroups);
 
 		    // remove from groups that they are in but shouldn't be
-		    Set<String> removeGroups = new HashSet<String>();
+		    var removeGroups = new HashSet<String>();
 		    removeGroups.addAll(existingAutomaticGroups);
 		    removeGroups.removeAll(userMaintainedGroups);
 
@@ -785,7 +762,7 @@ public class User {
 		    // we shouldn't get called otherwise. We don't deactivate
 		    // except as background job.
 	
-		    boolean ok = true;
+		    var ok = true;
 	
 		    // create user if necessary
 		    // create groups if necessary
@@ -813,7 +790,7 @@ public class User {
 			//   so we just check whether they're supposed to exist
 
 			// create groups if needed
-			for (String addgroup: addGroups) {
+			for (var addgroup: addGroups) {
 			    if (!user.groupExists(addgroup, subj, config)) {
 				logger.info("ipa group-add " + addgroup + " --nonposix");
 				if (!test) {
@@ -823,7 +800,7 @@ public class User {
 			    }
 			}		
 			// add to groups if needed
-			for (String addgroup: addGroups) {
+			for (var addgroup: addGroups) {
 			    logger.info("ipa group-add-member " + addgroup + " --users=" + username);
 			    if (!test) {
 				if (docommand.docommand (new String[]{"/bin/ipa", "group-add-member", addgroup, "--users=" + username}, env) != 0)
@@ -833,7 +810,7 @@ public class User {
 			}
 
 			// remove from groups if needed
-			for (String removegroup: removeGroups) {
+			for (var removegroup: removeGroups) {
 			    logger.info("ipa group-remove-member " + removegroup + " --users=" + username);
 			    if (!test) {
 				if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", removegroup, "--users=" + username}, env) != 0)
@@ -862,27 +839,27 @@ public class User {
 
 		    // remove from login groups for cleanup, including notification email
 		    if (cleanup) {
-			for (Config.Cluster clusterObj: config.clusters) {
-			    String cluster = clusterObj.name;
+			for (var clusterObj: config.clusters) {
+			    var cluster = clusterObj.name;
 			    // file named user@cluster is used to remember we gave the warning
 			    // we can remove the user when it's more than 60 days (or whatever) old
 			    // name of file
-			    String warningname = config.warningdir + "/" + username + "@" + cluster;
+			    var warningname = config.warningdir + "/" + username + "@" + cluster;
 			    // nio Path for the file
-			    Path warningPath = Paths.get(warningname);
-			    boolean warned = Files.exists(warningPath);
-			    boolean remove = removefromCluster.contains(cluster);
+			    var warningPath = Paths.get(warningname);
+			    var warned = Files.exists(warningPath);
+			    var remove = removefromCluster.contains(cluster);
 			    if (remove && config.warningdays > 0 && ! warned) {
 				// if it doesn't exist, he wasn't warned, so we warn him and then create the file
 				// cache the warning template
 				if (user.warningtemplate == null)
 				    user.warningtemplate = new String(Files.readAllBytes(Paths.get(config.warningtemplate)));
 				// replace %c with cluster
-				String message = user.warningtemplate.replaceAll("%c", cluster);
+				var message = user.warningtemplate.replaceAll("%c", cluster);
 				// first line is subject, so separate into subject and message
-				String [] parts = message.split("\n", 2);
+				var parts = message.split("\n", 2);
 				// default address. we hope to get a better one from ldap
-				String toaddress = username + "@" + config.defaultmaildomain;
+				var toaddress = username + "@" + config.defaultmaildomain;
 				if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
 				    toaddress = universityData.get("mail").get(0);
 				// if email worked, create the file. The File.write call writers a zero length file
@@ -896,7 +873,7 @@ public class User {
 				}
 			    } else if (remove) {
 				// files exists, so they were warned. See if it's time to delete
-				long now = System.currentTimeMillis();
+				var now = System.currentTimeMillis();
 				FileTime testtime = null;
 				BasicFileAttributes attr = null;
 				if (warned) {
@@ -924,11 +901,11 @@ public class User {
 				    if (user.unwarntemplate == null)
 					user.unwarntemplate = new String(Files.readAllBytes(Paths.get(config.unwarntemplate)));
 				    // replace %c with cluster
-				    String message = user.unwarntemplate.replaceAll("%c", cluster);
+				    var message = user.unwarntemplate.replaceAll("%c", cluster);
 				    // first line is subject, so separate into subject and message
-				    String [] parts = message.split("\n", 2);
+				    var parts = message.split("\n", 2);
 				    // default address. we hope to get a better one from ldap
-				    String toaddress = username + "@" + config.defaultmaildomain;
+				    var toaddress = username + "@" + config.defaultmaildomain;
 				    if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
 					toaddress = universityData.get("mail").get(0);
 				    logger.info("Sending notification that remove is no longer happening for " + username + " to " + toaddress + " for " + cluster);

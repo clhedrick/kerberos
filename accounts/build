@@ -1,4 +1,5 @@
 #!/bin/sh
 
-JAVA_HOME=
+export PATH=/usr/jdk-11/bin:"$PATH"
+export JAVA_HOME=/usr/jdk-11
 mvn clean package
