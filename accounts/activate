@@ -18,5 +18,5 @@ A=/var/www/tomcat/webapps/accounts
 L="$A/WEB-INF/lib/*"
 C="$A/WEB-INF/classes"
 
-java -cp $C:"$L" Activator.User "$@"
+/etc/alternatives/java_sdk_11/bin/java -cp $C:"$L" Activator.User "$@"
 
