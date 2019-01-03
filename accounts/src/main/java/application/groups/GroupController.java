@@ -521,12 +521,18 @@ public class GroupController {
 	    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=businessCategory=login"}, env) != 0) {
 		messages.add("Unable to set login for group");
 	    }
-	} else if (!login && oldislogin) {
+	}
+	/*
+	  currently the field is disabled if on. That means no value shows for submit
+	  since we don't allow it to be cleared, don't do this code
+
+	  else if (!login && oldislogin) {
 	    logger.info("ipa group-mod " + name + " --delattr=businessCategory=login");
 	    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--delattr=businessCategory=login"}, env) != 0) {
 		messages.add("Unable to remove login for group");
 	    }
 	}
+	*/
 
 	ArrayList<String> clusters = new ArrayList<String>();
 
