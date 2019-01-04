@@ -8,9 +8,12 @@
 
 var clicked = false;
 $(document).ready(function(){
+
   $('.link').click(function(event){
      if (!clicked) {
        clicked = true;
+       $('#main').prepend('<p class="messages message">Please wait. This can take a while</p>');
+       $(this).next().submit();
      } else {
        event.preventDefault();
        alert('Please wait. This can take up to a minute.')
@@ -77,7 +80,7 @@ on the following clusters of systems. Select the link to create
 an account there:</p>
 <ul>
 <li th:each="cluster: ${clusters}">
-<a class="link" href="#" th:onclick="'document.getElementById(\'form-' + ${cluster} + '\').submit();'" th:text="${cluster}"/>
+<a class="link" href="#"  th:text="${cluster}"/>
 <form style="display:none" th:id="'form-' + ${cluster}" th:action="@{/activate/activate}" method="post">
 <input type="hidden" name="cluster" th:value="${cluster}"/>
 <input type="submit" value="submit"/></form>
