@@ -421,19 +421,6 @@ main(int argc, char *argv[])
     chdir("/tmp"); // should be irrelevant. but just in case
     umask(027); // just to get something known, we shouldn't actually create any files
 
-    // get our hostname, normalized
-    // We're generating the local host principal needed for the forward call
-    hostbuf[sizeof(hostbuf)-1] = '\0';
-    gethostname(hostbuf, sizeof(hostbuf)-1);
-    i = getaddrinfo(hostbuf, NULL, &hints, &addrs);
-    if (i || !addrs->ai_canonname) {
-        mylog(LOG_ERR, "hostname %s not found", hostbuf);
-        goto cleanup;
-    }
-    myhostname = malloc(strlen(addrs->ai_canonname) + 1);
-    strcpy(myhostname, addrs->ai_canonname);
-    freeaddrinfo(addrs);
-
     /*
      * If user specified a port, then listen on that port; otherwise,
      * assume we've been started out of inetd.
@@ -500,6 +487,18 @@ main(int argc, char *argv[])
         sock = 0;
     }
 
+    // get our hostname, normalized
+    // We're generating the local host principal needed for the forward call
+    hostbuf[sizeof(hostbuf)-1] = '\0';
+    gethostname(hostbuf, sizeof(hostbuf)-1);
+    i = getaddrinfo(hostbuf, NULL, &hints, &addrs);
+    if (i || !addrs->ai_canonname) {
+        mylog(LOG_ERR, "hostname %s not found", hostbuf);
+        goto cleanup;
+    }
+    myhostname = malloc(strlen(addrs->ai_canonname) + 1);
+    strcpy(myhostname, addrs->ai_canonname);
+    freeaddrinfo(addrs);
 
     retval = krb5_init_context(&context);
     if (retval) {
