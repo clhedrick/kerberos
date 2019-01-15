@@ -38,10 +38,15 @@ function validateSubmit(event) {
   }
 }
 
+function dolookup(event) {
+  window.location.href = "showgroup?name=" + $("#lookup").val();
+}
+
 $(document).ready(function(){
     $(".deleteButton").click(deletegroup);
     $(".deleteButton").keypress(deleteKeyPress);
     $("#submit").click(validateSubmit);
+    $("#dolookup").click(dolookup);
     });
 
 /*]]>*/
@@ -65,6 +70,12 @@ $(document).ready(function(){
 <label>item <input type="text" name="del" id="deleteInput"/></label>
 <input type="submit" id="deleteSubmit" value="Delete Item"/>
 </form>
+
+<div th:if="${superuser}">
+<label>Group to edit: <input type="text" name="lookup" id="lookup"/></label>
+<br/>
+<input type="submit" id="dolookup" value="Edit Specified Group"/>
+</div>
 
 <form th:action="@{/groups/showgroups}" method="post">
 

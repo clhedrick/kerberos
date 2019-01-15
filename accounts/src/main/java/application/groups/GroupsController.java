@@ -133,6 +133,7 @@ public class GroupsController {
 	model.addAttribute("groups", groups);
 	model.addAttribute("canaddgroup", (privs.contains("addgroup")));
 	model.addAttribute("isloginmanager", (privs.contains("loginmanager")));
+	model.addAttribute("superuser", (privs.contains("superuser")));
 
         return "groups/showgroups";
     }
