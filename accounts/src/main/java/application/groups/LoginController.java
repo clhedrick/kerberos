@@ -49,6 +49,7 @@ import java.util.Hashtable;
 import common.JndiAction;
 import common.utils;
 import Activator.Config;
+import Activator.Match;
 
 @Controller
 public class LoginController {
@@ -221,25 +222,36 @@ public class LoginController {
 
 	// check group privs
    
-	Config conf = Config.getConfig();
-	String filter = conf.groupmanagerfilter.replaceAll("%u", username);
 
-	// first, see if they are in group managers. They can create groups
-	common.JndiAction action = new common.JndiAction(new String[]{filter, "", "uid"});
+	String filter = "(uid=" + username + ")";
+
+	// get data on the user who is logging in
+	common.JndiAction action = new common.JndiAction(new String[]{filter, ""});
 
 	Subject.doAs(subj, action);
+	// has to have data in our LDAP or login can't have worked
+	if (action.val.size() == 0) {
+	    messages.add("Login failed");
+	    return loginGet(app, request, response, model);
+	}
 
+	var ourData = action.data.get(0);
+
+	// now check privs
+	Config conf = Config.getConfig();
 	Set<String>privs = new HashSet<String>();
 
-	if (action.val.size() >= 1)
+	// Can add group?
+	if (Match.matchLdap(ourData, conf.groupmanagerfilter))
 	    privs.add("addgroup");
 
 	// now see if they are in login mangers. They can set login attribute
-	filter = conf.loginmanagerfilter.replaceAll("%u", username);
-	action = new common.JndiAction(new String[]{filter, "", "uid"});
-	Subject.doAs(subj, action);
-	if (action.val.size() >= 1)
+	if (Match.matchLdap(ourData, conf.loginmanagerfilter)) 
 	    privs.add("loginmanager");
+
+	// see if they are superusr
+	if (Match.matchLdap(ourData, conf.superuserfilter)) 
+	    privs.add("superuser");
 
 	// now set up session and go to application
 	request.getSession().setAttribute("privs", privs);

@@ -90,7 +90,10 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		}
 
 		SearchControls ctls = new SearchControls();
-		ctls.setReturningAttributes(attrIDs);
+		// if user asked for specific attributes, do so
+		// otherwise he'll get them all
+		if (args.length > 2)
+		    ctls.setReturningAttributes(attrIDs);
 		ctls.setSearchScope(SearchControls.SUBTREE_SCOPE);
 
 		NamingEnumeration answer =

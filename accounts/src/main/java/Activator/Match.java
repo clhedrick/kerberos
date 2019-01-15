@@ -65,7 +65,7 @@ public class Match {
 	return pattern;
     }
 
-    static boolean matchLdap(Map<String, List<String>> attributes, String filter) {
+    static public boolean matchLdap(Map<String, List<String>> attributes, String filter) {
 	return matchLdap(attributes, filter, filter);
     }
 

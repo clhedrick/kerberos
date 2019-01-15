@@ -82,7 +82,7 @@ public class Config {
     public String reviewemail = null;
     public String reviewnoclose = null;
     public String reviewurl = null;
-
+    public String superuserfilter = null;
 
     final static String CONFIGFILE = "/etc/activator.config";
 
@@ -231,7 +231,8 @@ public class Config {
 			reviewnoclose = atoms[1];
 		    if (atoms[0].equals("reviewurl"))
 			reviewurl = atoms[1];
-
+		    if (atoms[0].equals("superuserfilter"))
+			superuserfilter = atoms[1];
 
 		}
 
