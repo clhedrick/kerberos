@@ -22,6 +22,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Level;
 import java.util.HashMap;
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.Paths;
@@ -849,7 +850,21 @@ public class User {
 			    var warningPath = Paths.get(warningname);
 			    var warned = Files.exists(warningPath);
 			    var remove = removefromCluster.contains(cluster);
-			    if (remove && config.warningdays > 0 && ! warned) {
+
+			    // see if user has never logged in. If home file system is mounted
+			    // but user doesn't have directory on it, we assume they haven't logged in
+			    // in that case we delete immediately without warning
+			    var immediate = false;
+			    // if warningdays == 0 will be removed immediately anyway.
+			    // if warned we'd be breaking our promise to remove immediately
+			    if (remove && clusterObj.homedir != null && config.warningdays > 0 && !warned) {
+				var base = clusterObj.homedir;
+				if ((new File(base + "/MOUNTED")).exists() &&
+				    !(new File(base + "/" + username)).exists())
+				    immediate = true;
+			    }
+
+			    if (remove && !immediate && config.warningdays > 0 && ! warned) {
 				// if it doesn't exist, he wasn't warned, so we warn him and then create the file
 				// cache the warning template
 				if (user.warningtemplate == null)
@@ -881,11 +896,15 @@ public class User {
 
 				    attr = Files.readAttributes(warningPath, BasicFileAttributes.class);
 				}
-				if (config.warningdays == 0 || testtime.compareTo(attr.creationTime()) > 0) {
+				if (immediate || config.warningdays == 0 || testtime.compareTo(attr.creationTime()) > 0) {
 				    logger.info("ipa group-remove-member login-" + cluster + " --users=" + username);
 				    if (!test) {
-					if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", "login-" + cluster, "--users=" + username}, env) == 0 && warned) {
-					    Files.move(warningPath, Paths.get(warningname + ".done"), StandardCopyOption.REPLACE_EXISTING);
+					if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", "login-" + cluster, "--users=" + username}, env) == 0) {
+					    if (warned)
+						Files.move(warningPath, Paths.get(warningname + ".done"), StandardCopyOption.REPLACE_EXISTING);
+					    else {
+						Files.write(Paths.get(warningname + ".nowarn"), new byte[]{});
+					    }
 					}
 				    }
 				} else {

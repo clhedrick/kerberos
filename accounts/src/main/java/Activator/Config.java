@@ -97,6 +97,7 @@ public class Config {
 	Set<String> groups;
 	boolean docleanup;
 	public boolean usermanaged;
+	public String homedir;
 	public String getName(){return name;}
     }
     
@@ -258,6 +259,7 @@ public class Config {
 			cluster.name = atoms[0].substring(1, atoms[0].length()-1);
 			cluster.docleanup = true;
 			cluster.usermanaged = true;
+			cluster.homedir = null;
 			if ("managed".equals(cluster.name))
 			    managed = cluster;
 			else if ("departments".equals(cluster.name))
@@ -274,6 +276,11 @@ public class Config {
 			cluster.docleanup = false;
 		    if (atoms[0].equals("-nousermanaged"))
 			cluster.usermanaged = false;
+		    if (atoms[0].equals("-nousermanaged"))
+			cluster.usermanaged = false;
+		    if (atoms[0].equals("-homedir"))
+			cluster.homedir = atoms[1];
+
 		    Rule rule = new Rule();
 		    rule.groupName = atoms[0];
 		    cluster.groups.add(atoms[0]);
