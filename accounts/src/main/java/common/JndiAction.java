@@ -129,7 +129,7 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		}
 
 	    } catch (NamingException e) {
-		e.printStackTrace();
+		throw new java.lang.IllegalArgumentException("Can't get ldap data " + e);
 	    } finally {
 		try {
 		    if (!noclose)
