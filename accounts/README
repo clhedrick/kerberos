@@ -202,3 +202,7 @@ DEPLOYMENT. I did a deploy from scratch on a new system as follows:
 * get apache set up to send /accounts through to tomcat
 * tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS and -DcasServer=cas.rutgers.edu or test-cas
 * install activate in /usr/local/bin
++ ipa host-mod xxx.cs.rutgers.edu --addattr=nsLookThroughLimit=-1; ipa host-mod xxx.cs.rutgers.edu --addattr=nssizeLimit=-1
+  To look at the values ldapsearch -Y GSSAPI fqdn=services.cs.rutgers.edu +    They are classified as operational attributes, so
+  they only show with +
+  
