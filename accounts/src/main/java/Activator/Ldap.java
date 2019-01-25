@@ -80,7 +80,7 @@ public class Ldap {
 		}
 
 	    } catch (NamingException e) {
-		e.printStackTrace();
+		throw new java.lang.IllegalArgumentException("Can't get ldap data " + e);
 	    } finally {
 		try {
 		    ctx.close();	    
