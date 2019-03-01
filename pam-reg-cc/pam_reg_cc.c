@@ -1,5 +1,6 @@
 #define PAM_SM_SESSION
 #define PAM_SM_AUTH
+#define _GNU_SOURCE 
 
 #include <sys/types.h>
 #include <sys/errno.h>
@@ -11,11 +12,13 @@
 #include <security/pam_appl.h>
 #include <security/pam_modules.h>
 #include <security/pam_ext.h>
-#include <keyutils.h>
 #include <syslog.h>
 #include "krb5.h"
 #include "com_err.h"
 #include <pwd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
 
 /*
  * Copyright 2017 by Rutgers, the State University of New Jersey
@@ -239,7 +242,6 @@ build_cache_name(char *arg, uid_t uid, const char *username)
 
 PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, const char **argv) {
   const char *ccname = pam_getenv(pamh, "KRB5CCNAME");
-  key_serial_t serial;
   int i;
   const char *username;
   char *fullname = NULL;
@@ -249,8 +251,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   int usecollection = 0;
   int fakename = 0;
   char *default_realm = NULL;
+  const char *default_name = NULL;
   krb5_data realm_data;
-  char *credcopy = NULL;
   char *finalcred = NULL;
   char *tempcred = NULL;
   krb5_ccache cachecopy = NULL;
@@ -266,6 +268,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   const void *getcred;
   int iscron = 0;
   char *key;
+  uid_t olduid;
+  gid_t oldgid;
 
   pam_syslog(pamh, LOG_INFO, "registering ccname %s", ccname);
 
@@ -291,17 +295,20 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   pwd = getpwnam(username);
   if (!pwd) goto err;
 
+  olduid = getuid();
+  oldgid = getgid();
+
+  //
+  // 1. If for some reason KRB5CCNAME isn't set, and config asks for it,
+  // set KRB5CCNAME to the default ccache name. Renewd works better if
+  // KRB5CCNAME is always set.
+  //
+
   if (fakename && !ccname) {
     // KRB5CCNAME not specified, but we've been told to fake it.
     // Generate the user's default ccname.
     // Need to change to the user, since the Kerberos libraries get %{uid}
     // from the current uid.
-
-    uid_t olduid;
-    gid_t oldgid;
-    
-    olduid = getuid();
-    oldgid = getgid();
 
     setresgid(pwd->pw_gid, pwd->pw_gid, -1);
     setresuid(pwd->pw_uid, pwd->pw_uid, -1);
@@ -323,11 +330,112 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   }
 
+  //
+  // 2. If ccache is /tmp and default is KEYRING, move the cache into the KEYRING.
+  // sshd in some versions ignores krb5.conf and puts the cache into /tmp. First, we
+  // want a consistent user experience. Second, gssd seems to work better with the
+  // keyring. ccache names for keyring always have to start KEYRING, so we don't need
+  // fancy normalization code for the check.
+  //
+
+  setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+  setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+  default_name =  krb5_cc_default_name(context);  
+  setresuid(olduid, olduid, -1);
+  setresgid(oldgid, oldgid, -1);
+
   ret = krb5_get_default_realm(context, &default_realm);
   if (ret) goto err;
-
   ret = krb5_build_principal(context, &userprinc, strlen(default_realm), default_realm, username, NULL);
   if (ret) goto err1;
+
+  if (default_name && strncasecmp(default_name, "KEYRING:", strlen("KEYRING:")) == 0 &&
+      strncasecmp(ccname, "KEYRING:", strlen("KEYRING:")) != 0) {
+
+    const char *cp;
+    int numcolon = 0; 
+    char *prop = NULL;
+    
+
+    ret = krb5_cc_resolve(context, ccname, &firstcache);
+    if (ret) goto err;
+
+    // find cache that matches principal
+    // there is no API call that lets us look only for KEYRING caches. The best we
+    // can do is this, and verify that it's keyring. If there's a KCM or DIR that
+    // will take precedence. It's unlikely that they'll be used if they aren't
+    // the default, so in practice this should work. Have to check type because
+    // there may be something in MEMORY. We certainly don't want that. If by
+    // chance there is a DIR or KCM, the normalization code won't change it,
+    // because we don't kow the semantics. However it won't be able to find DIR collections
+    // unless krb5.conf has that as default, so that's safe. Not sure about KCM:
+    ret = krb5_cc_cache_match(context, userprinc, &cachecopy);
+    if (ret == 0 && strcmp(krb5_cc_get_type(context, cachecopy), "MEMORY") == 0)
+      ret = 1;
+
+    // if none, create one
+    if (ret) {
+      // need to change to user's id, or ccname will have 0 in it
+      char *xx;
+      setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+      setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+
+      ret = krb5_cc_new_unique(context, "KEYRING", NULL, &cachecopy);
+      krb5_cc_get_full_name(context, cachecopy, &xx);
+      pam_syslog(pamh, LOG_INFO, "xx %s", xx);
+
+
+      // now put back our real uid
+      setresuid(olduid, olduid, -1);
+      setresgid(oldgid, oldgid, -1);
+
+      // it's not clear whether this is a good idea, but it's probably more
+      //   likely to be right than wrong. If there is an existing cache and
+      //   it's not primary, we leave things to avoid conflicting with something
+      //   the user has done explicitly. But if there isn't one and we have to
+      //   create it, it's probably best to make it primary
+      // make it primary. ignore failure
+      if (!ret)
+	krb5_cc_switch(context, cachecopy); 
+
+    }
+
+    if (ret) goto err;
+    ret = krb5_cc_initialize(context, cachecopy, userprinc);
+    if (ret) goto err;
+    ret = krb5_cc_copy_creds(context, firstcache, cachecopy);
+    if (ret) goto err;
+
+    ret = krb5_cc_get_full_name(context, cachecopy, &tempcred);
+    if (ret) goto err;
+    ccname = tempcred;  // tempcred will be freed at exit
+
+    krb5_cc_close(context, cachecopy);
+    cachecopy = NULL;
+    krb5_cc_destroy(context, firstcache);
+    firstcache = NULL;
+
+    // reset environment to collection
+    if (asprintf(&prop, "%s=%s", "KRB5CCNAME", ccname) > 0) {
+	pam_putenv(pamh, prop);
+	if (prop)
+	  free(prop);
+    }
+
+    pam_syslog(pamh, LOG_INFO, "moving to %s", tempcred);
+
+  }    
+
+  //
+  // 3. Normalize cache name. For /tmp, there's no issue as there are no
+  // collections. For KEYRING, we do two things (1) if KRB5CCNAME was set
+  // to the collection, find the actual ccache and put it in ccname. Leave
+  // KRB5CCNAME to the collection, but we need the actual ccache for some
+  // later codr. (2) if KRB5CCNAME is set to an actual ccache, reset it
+  // to the collection. We want users to get a consistent experience, and to
+  // be able to use kswitch.
+  //
+
 
   // for sss, we need to find the cache for the current principal. it's not necesarily the primary
   //   if another process did kswitch
@@ -352,11 +460,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     if (numcolon == 2) {
       // have collection
       krb5_ccache ccache = NULL;
-      uid_t olduid;
-      gid_t oldgid;
-
-      olduid = getuid();
-      oldgid = getgid();
 
       setresgid(pwd->pw_gid, pwd->pw_gid, -1);
       setresuid(pwd->pw_uid, pwd->pw_uid, -1);
@@ -388,7 +491,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       char *prop = NULL;
 
       // reset environment to collection
-      if (asprintf(&prop, "%s=%.*s", "KRB5CCNAME", cp-ccname, ccname) > 0) {
+      if (asprintf(&prop, "%s=%.*s", "KRB5CCNAME", (int)(cp-ccname), ccname) > 0) {
 	// ccname will no longer be valid after the putenv
 	cccopy = malloc(strlen(ccname) + 1);
 	strcpy(cccopy, ccname);
@@ -408,28 +511,21 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   } else if (cccopy) {
     ccname = cccopy;
   }
-  // now register the cache for renewd
+
+
+  //
+  // 4. register the cache for renewal
+  //
 
   if (pam_get_data(pamh, "kgetcred_test", &getcred) == PAM_SUCCESS)
     iscron = 1;
 
-  if (iscron)
-    key = "kgetcred:ccname";
-  else
-    key = "krbrenewd:ccname";
-
-  serial = add_key("user", key, ccname, strlen(ccname), KEY_SPEC_SESSION_KEYRING);
-  if (serial == -1)
-    pam_syslog(pamh, LOG_ERR, "Problem registering your Kerberos credentials 1 %s. They may expire during your session. %m\n", ccname);
-  // we are presumably root at this point, but have to change permission to allow
-  // it to be read by a different root session
-  
-  if (keyctl_setperm(serial, 0x3f3f0000))
-    pam_syslog(pamh, LOG_ERR, "Problem registering your Kerberos credentials 2 %s. They may expire during your session. %m\n", ccname);
-  // and register for deletion
   register_for_delete(pamh, ccname);
 
-  // don't need warning or second copy for cron
+  //
+  // 5. except for cron, see if the ticket lifetime is too small, and warn user.
+  // Doesn't make sense for cron because there's no user terminal for warning.
+  //
 
   if (!iscron) {
   // now make a copy in FILE:/var/lib/gssproxy/clients/krb5cc_%U if asked.
@@ -515,72 +611,13 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     }
   }
 
-  krb5_appdefault_string(context, "register-cc", &realm_data, "credcopy", "", &credcopy);
-
-  if (strlen(credcopy) > 0) {
-    ret = krb5_cc_resolve(context, ccname, &firstcache);
-    if (ret) goto err;
-    finalcred = build_cache_name(credcopy, pwd->pw_uid, username);
-    pam_syslog(pamh, LOG_INFO, "registering copy %s", finalcred);
-
-    if ((strncmp(finalcred, "FILE:", 5) == 0 ||
-    	 strncmp(finalcred, "/", 1) == 0) &&
-    	asprintf(&tempcred, "%s.%ul", finalcred, (long)getpid()) > 0) {
-      char *tempname = tempcred;
-      char *finalname = finalcred;
-      if (strncmp(finalcred, "FILE:", 5) == 0) {
-	tempname = tempname + 5;
-	finalname = finalname + 5;
-      }
-
-      // make dir if necessary
-      // no error if it fails, as we have no way to return
-      // a message. following code will eventually catch it
-      assure_dir(credcopy, finalname, pwd);
-
-      ret = krb5_cc_resolve(context, tempcred, &cachecopy);
-      if (ret) goto err;
-      ret = krb5_cc_initialize(context, cachecopy, userprinc);
-      if (ret) goto err;
-      ret = krb5_cc_copy_creds(context, firstcache, cachecopy);
-      if (ret) goto err;
-      krb5_cc_close(context, cachecopy);
-      cachecopy = NULL;
-      krb5_cc_close(context, firstcache);
-      firstcache = NULL;
-      chown(tempname, pwd->pw_uid, pwd->pw_gid);
-      rename(tempname, finalname);
-    } else {
-      // not in temp. have to put copy in final location
-      ret = krb5_cc_resolve(context, finalcred, &cachecopy);
-      if (ret) goto err;
-      ret = krb5_cc_initialize(context, cachecopy, userprinc);
-      if (ret) goto err;
-      ret = krb5_cc_copy_creds(context, firstcache, cachecopy);
-      if (ret) goto err;
-    }      
-    
-    // have copy. register it
-    serial = add_key("user", "krbrenewd:ccname:2", finalcred, strlen(finalcred), KEY_SPEC_SESSION_KEYRING);
-    if (serial == -1)
-      pam_syslog(pamh, LOG_ERR, "Problem registering copy of your Kerberos credentials 1 %s. They may expire during your session %m", finalcred);
-
-    // we are presumably root at this point, but have to change permission to allow
-    // it to be read by a different root session
-    if (keyctl_setperm(serial, 0x3f3f0000))
-      pam_syslog(pamh, LOG_ERR, "Problem registering copy of your Kerberos credentials 2 %s. They may expire during your session %m", finalcred);
-    // and register for deletion
-    register_for_delete(pamh, finalcred);
-
-  } // end of copy cred
-
   } // end if iscron
 
  err:
   if (ret)
     pam_syslog(pamh, LOG_ERR, "%s", error_message(ret));
   if (ret)
-    printf(error_message(ret));
+    printf("%s\n", error_message(ret));
   if (userprinc)
     krb5_free_principal(context, userprinc);
   if (cachecopy)

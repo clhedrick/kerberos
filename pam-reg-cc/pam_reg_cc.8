@@ -6,20 +6,21 @@ pam_reg_cc \- register credential caches for renewd
 .PP
 Pam_reg_cc registers Kerberos credentials so that renewd will
 renew them. Depending upon the configuration in /etc/krb5.conf,
-it may also copy the credentials cache into a new cache in /tmp,
-to make sure that Kerberized NFS can always find a credential
-cache.
+it may also normalize the name to work around issues with various
+versions of sshd.
 .PP
 Pam_reg_cc checks the current value of KRB5CCNAME in the environment that
 PAM is preparing for the user process. If it is defined, 
 pam_reg_cc registers the cache that was just created for
-renewd to renew automatically, and may also copy it.
+renewd to renew automatically.
 .PP
 pam_reg_cc implements both auth and session. Logically it should be
 used in the auth stack after whatever module does Kerberos authentication.
 However sshd sets up Kerberos credentially internally, and doesn't
 call PAM's auth code. So the normal configuration is to put
-it in session fairly near the end. Auth will be used primarily when the
+it in session fairly near the beginning, before anything that
+tries to access the user's home directory (particular on Ubuntu).
+Auth will be used primarily when the
 application doesn't call session, or when it doesn't have KRB5CCNAME
 set for the session.
 .PP
@@ -45,36 +46,26 @@ allow kinit, klist, and kdestroy to work as intended with collections.
 In general we recommend setting default_ccache_name in krb5.conf to
 KEYRING:persistent:%{uid}, and setting usecollection. 
 .PP
-When used with NFS, there can be issues if the user kinits as another
-principal. Kinit changes the primary cache to the one just set up.
-However NFS expects the primary cache to be set to one with the user's
-default principal. If someone is working with a different cache (e.g. one
-with an administrative credential) this can result in NFS accesses failing,
-should NFS choose to recheck credentials at that time.
+Sshd has two known problems: (1) On Centos it tends to set KRB5CCNAME
+to the actual cache name. If the user does kinit as a different
+principal, it will overwrite the cache. This can cause the user to
+lose access to NFS. To fix this, set the default cc in /etc/krb5.conf
+to KEYRING:persistent:%{uid}, and set "usecollection." As explained
+above, that will fix up KRB5CCNAME to point to the collection. Kinit
+is smart enough that it will create a new cache if the user kinits
+as a different principal. If used with the gssd wrapper, gssd will
+pick the right credential in the cache.
 .PP
-For that reason, you may request this module to copy the credential to
-a second location. That way changes to the primary cache won't affect
-NFS access. The obvious place to copy it is a file in /tmp or /run/user/%U.
-There are the places where rpc.gssd looks for credentials for NFS. However
-you can put it in other locations, and use the -d option to rpc.gssd.
-There are two reasonable locations: a file in /tmp,
-To make this happen,
-configure krb5.conf with credcopy, e.g.
-.PP
-.nf
-[appdefaults]
-register-cc = {
-    credcopy = /tmp/krb5cc_nfs_%U
-}
-.fi
-.PP
-Like gssproxy, this module will replace %U with the user's numeric userid, and %u with the username. 
-.PP
-The path should end in %U. It shouldn't be the same as any paths used
-for other purposes. E.g. if
-you're using krb5cc_%U for normal user credentials, you need to use a 
-path with something other than kr5cc_ before the %U. krb5cc_nfs_%U meets
-that requirement.
+Sshd (2) On Ubuntu, it uses /tmp/krb5...., even if krb5.conf
+sets the default credential cache to something else.
+Because /tmp/krb5... isn't a collection, That causes the same
+issue as above, but in addition, rpc.gssd doesn't seem to work as
+well with credentials in /tmp as in KEYRING. So there's a special
+check in pam_reg_cc. If the default in krb5.conf is in KEYRING,
+and KRB5CCNAME is in /tmp, it copies the credentials into a new
+KEYRING credential and fixes up KRB5CCNAME to point to it. So on
+Ubuntu we still recommend setting the default in krb5.conf to
+KEYRING:persistent:%{uid}, and setting "usecollection".
 .PP
 From auth, this module implements a no-op authenticate. The code is in setcred.
 From session, it implements session start. Session end is a no-op. It does not 
@@ -94,3 +85,5 @@ register-cc = {
 }
 .fi
 .PP
+NOTE: There used to be additional functionality to make a second copy of the
+credential cache. This turned out not to be useful, and has been removed.
