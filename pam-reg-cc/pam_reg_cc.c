@@ -53,23 +53,11 @@ We know of three cases:
 
 sshd: uses the primary, even if it's wrong principal
   sets KRB5CCMAME to cache
+Ubuntu sshd: always uses /tmp/...
+  copy to KEYRING if that's the default, and change KRB5CCNAME
 sssd: uses a cache with matching principal, doesn't change primary
   set KRB5CCNAME to collection
-cache in /tmp: sets KRB5CCNAME to the file
-
-So code here:
-
-if KRB5CCNAME is cache, it's primary {
-  record it for renewal
-  set KRB5CCNAME to collection
-} else {
-  find cache that matches prinicpal
-  record it for renewal
-  KRB5CCNAME will alredy be collection
-}
-for /tmp, just register the name}
-
-if requested put a copy of the cache into /var/lib//var/lib/gssproxy/clients/
+cache in /tmp: sets KRB5CCNAME to the file if not cron
 
 */
 
@@ -270,6 +258,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *key;
   uid_t olduid;
   gid_t oldgid;
+  const char *servicename;
 
   pam_syslog(pamh, LOG_INFO, "registering ccname %s", ccname);
 
@@ -283,6 +272,11 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   if (!fakename && !ccname) 
     // KRB5CCNAME not specified and we haven't been asked to fake it
     return PAM_SUCCESS;  // nothing to do
+
+  servicename = pam_getenv(pamh, "PAM_SERVICE");
+  // centos - crond, ubuntu - cron
+  if (servicename && (strcmp(servicename, "crond") == 0 || strcmp(servicename, "cron")))
+    iscron = 1;
 
   // get basic user and kerberos info
 
@@ -349,7 +343,10 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   ret = krb5_build_principal(context, &userprinc, strlen(default_realm), default_realm, username, NULL);
   if (ret) goto err1;
 
-  if (default_name && strncasecmp(default_name, "KEYRING:", strlen("KEYRING:")) == 0 &&
+  // kgetcred puts credentials in /tmp files. For the moment I think it's best to leave them there
+  // there might be other services like that, but for the moment I can't think of any other than
+  // Jupyterhub and Zeppelin. But the default ccache is /tmp for those systems.
+  if (!iscron && default_name && strncasecmp(default_name, "KEYRING:", strlen("KEYRING:")) == 0 &&
       strncasecmp(ccname, "KEYRING:", strlen("KEYRING:")) != 0) {
 
     const char *cp;
@@ -376,14 +373,10 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     // if none, create one
     if (ret) {
       // need to change to user's id, or ccname will have 0 in it
-      char *xx;
       setresgid(pwd->pw_gid, pwd->pw_gid, -1);
       setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
       ret = krb5_cc_new_unique(context, "KEYRING", NULL, &cachecopy);
-      krb5_cc_get_full_name(context, cachecopy, &xx);
-      pam_syslog(pamh, LOG_INFO, "xx %s", xx);
-
 
       // now put back our real uid
       setresuid(olduid, olduid, -1);
@@ -517,9 +510,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // 4. register the cache for renewal
   //
 
-  if (pam_get_data(pamh, "kgetcred_test", &getcred) == PAM_SUCCESS)
-    iscron = 1;
-
   register_for_delete(pamh, ccname);
 
   //
@@ -528,8 +518,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   //
 
   if (!iscron) {
-  // now make a copy in FILE:/var/lib/gssproxy/clients/krb5cc_%U if asked.
-  // That makes sure it's always available for NFS even if the user changes the primary cache
 
   realm_data.data = default_realm;
   realm_data.length = strlen(default_realm);
