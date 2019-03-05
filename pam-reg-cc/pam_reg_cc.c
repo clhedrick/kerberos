@@ -273,9 +273,11 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     // KRB5CCNAME not specified and we haven't been asked to fake it
     return PAM_SUCCESS;  // nothing to do
 
-  servicename = pam_getenv(pamh, "PAM_SERVICE");
-  // centos - crond, ubuntu - cron
-  if (servicename && (strcmp(servicename, "crond") == 0 || strcmp(servicename, "cron")))
+  // generally credentials will be set up by sssd, pam_krb5, or sshd
+  // in all of those cases we want the usual code. However pam_kgetcred
+  // will put credentials in /tmp, and we want them to stay there even
+  // if the default is keyring. So iscron really means is_kgetcred
+  if (pam_get_data(pamh, "kgetcred_test", &getcred) == PAM_SUCCESS)
     iscron = 1;
 
   // get basic user and kerberos info
@@ -515,9 +517,10 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   //
   // 5. except for cron, see if the ticket lifetime is too small, and warn user.
   // Doesn't make sense for cron because there's no user terminal for warning.
+  // cron sets PAM_SILENT, which seems like the best test to use
   //
 
-  if (!iscron) {
+  if (!(flags & PAM_SILENT)) {
 
   realm_data.data = default_realm;
   realm_data.length = strlen(default_realm);
