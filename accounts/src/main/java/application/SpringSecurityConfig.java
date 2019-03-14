@@ -18,6 +18,9 @@
  */
 
 package application;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Level;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
@@ -46,17 +49,24 @@ public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
     // when basic auth is used, this specifies what it is; LDAP in this case
     @Override
     public void configure(AuthenticationManagerBuilder auth) throws Exception {
+	// in config file, suffix starts with comma
+	var suffix = "/" + Config.getConfig().usersuffix.trim().substring(1);
+
+	// for some reason a base has to be specified with ldaps.
+	// note that the URL can be ldaps://server1, ldap2://server2, so need
+	// to add base to each of them. allow space and comma separation in config file
+	// the syntax here is just space
+	var url = Config.getConfig().kerbldapurl.trim().replaceAll("[ ,]+", suffix + " ") + suffix;
+
+	var logger = LogManager.getLogger();
+	System.out.println("ldap URL for Spring security: " + url);
 
 	auth
 	    .ldapAuthentication()
 	    .contextSource()
-	    // this should work, and does with ldap, but not ldaps
-	    //	    .url("ldaps:///dc=cs,dc=rutgers,dc=edu")
-	    // for some reason a base has to be specified. 
-	    .url(Config.getConfig().kerbldapurl + "/" + Config.getConfig().usersuffix.substring(1))
+	    .url(url)
 	    .and()
 	    .userDnPatterns("uid={0}");
-
     }
 
 }
