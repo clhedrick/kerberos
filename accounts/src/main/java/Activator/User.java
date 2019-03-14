@@ -875,8 +875,8 @@ public class User {
 				var parts = message.split("\n", 2);
 				// default address. we hope to get a better one from ldap
 				var toaddress = username + "@" + config.defaultmaildomain;
-				if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
-				    toaddress = universityData.get("mail").get(0);
+				// if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
+				//   toaddress = universityData.get("mail").get(0);
 				// if email worked, create the file. The File.write call writers a zero length file
 				logger.info("Sending notification for " + username + " to " + toaddress + " for " + cluster);
 				if (!test) {
@@ -925,8 +925,8 @@ public class User {
 				    var parts = message.split("\n", 2);
 				    // default address. we hope to get a better one from ldap
 				    var toaddress = username + "@" + config.defaultmaildomain;
-				    if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
-					toaddress = universityData.get("mail").get(0);
+				    // if (universityData.get("mail") != null && universityData.get("mail").size() > 0)
+				    //	toaddress = universityData.get("mail").get(0);
 				    logger.info("Sending notification that remove is no longer happening for " + username + " to " + toaddress + " for " + cluster);
 				    if (!test) {
 					// for testing, can put a test address in config file. It will
