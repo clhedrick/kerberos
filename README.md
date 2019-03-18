@@ -24,35 +24,44 @@ together. Here are notes on the specific pieces we've had to do:
 
 This is a system for creating groups and accounts based on what role
 someone is in and what courses they are registered for. It's based on
-rules, and designed to be portable. It might be useful for academic departments
-elsewhere, though it would need minor changes.
+rules, and designed to be portable to other environments. It might be useful for academic departments
+elsewhere, though it would need minor changes. (If someone else actually
+wants to use it, I'd be happy to work with them.)
 
 Assumptions: user roles and course registration are avaiable in LDAP, with
-additional role information in an Oracle database. Specific queries are 
+additional role information in an SQL database. Specific queries are 
 defined in the configuraiton file. You'd probably have to adjust Java code
 slightly depending upon the format of our course identifiers.
 
+It can be set to require people responsible for groups to review 
+membership annually.
+
 ## credserv and kgetcred
 
-Kerberos works cleanly for interactive logins, but how to you get credentials
+Kerberos works cleanly for interactive logins, but how do you get credentials
 for cron jobs? The usual documentation tells users to create key tables. There
-are two issues with this (1) security; if someone gets a key table, they can 
+are two issues with this (1) security; if someone can get your key table, they can 
 be you anywhere at any time, and you'll probably never know it (2) at least with
 IPA, users with two factor authentication can't use key tables.
 
 We use a Kerberized client-server application. Credserv is the server. Kgetcred
 will get Kerberos credentials for a specified user. It must be called by root.
-The user must register that they want root to be able to get credentials for the
-specific machine. The credentials are by default not forwardable and have the IP
-address of that machine. This provides a much more controlled approach than
+The user must register that they want root to be able to get credentials for them
+on specific machine. The credentials are by default not forwardable and have the IP
+address of that machine built in. This provides a much more controlled approach than
 a key table. The server duplicates some of the KDC code, and generates credentials
 itself. That allows it to work for users with one-time passwords. Such users
 should think carefully before using this, but there are situations where it 
 makes sense. 
 
-There's a pam version of kgetcred, which we use for cron jobs. Thus the user
-doesn't need to know how this works. They just have to register for the
-machine they need to run cron jobs on.
+There's a pam version of kgetcred, which we use for cron jobs. The user
+doesn't need to know how this works. Pam will see to it that cron issues
+credentials for their job, as long as they have registered that they
+want to cron to work on that machine.
+
+This may also be useful as a sample if you want to know how to call
+LDAP from C using GSSAPI authentication. The documentation for this is
+not very easy to understand.
 
 ## renewd
 
@@ -71,8 +80,11 @@ files via NFS is removed within 10 min.)
 
 We're trying to simplify the way this is done, so renewd and pam_reg_cc
 are likely to change. The code in both is specific to the credential
-cache mechanism. Currently it supposed /tmp files and KEYRING. KCM will
+cache mechanism. Currently it supports /tmp files and KEYRING. KCM will
 be supported when I'm convinced it is ready for use.
+
+This may also be useful as a sample if you want to know how to call LDAP using
+GSSAPI authenticaton from C. 
 
 ## pam_kmkhomedir and mkhomedird
 
@@ -164,6 +176,18 @@ The kgetcred version is probably best, since kinit -n
 depends upon a certificate that will have to be
 renewed annually and distributed to every client.
 
+## radius-wrap
 
+This is designed to allowo Freeradius to support one-time passwords.
+Freeradius supports Kerberos authentication, but it won't work
+with users who have one-time passwords. This small module is
+designed to be used with LD_PRELOAD. It interposes code around
+krb5_get_init_creds_password to handle one-time passwords, as
+long as all factors can put on one line. (E.g. with IPA you
+can put your 6-digit one-time password at the end of your
+normal password, on the same line.)
+
+This is also a simple example of how to write code to process
+one-time passwords in C.
 
 
