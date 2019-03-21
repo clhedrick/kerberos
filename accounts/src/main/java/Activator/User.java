@@ -53,6 +53,9 @@ import common.lu;
 	 
 /*
 
+   Do user activation and cleanup. Because most of the login is in command, this module
+   does several things, depending upon flags in the main call.
+
    This program is driven by LDAP data.  I've written a small middleware on top of the usual Ldap API.
    It turns the output into something like the PHP data: a list of entries. Each entry is a map from attributes
    to values. E.g. if we looked for users we might get
@@ -82,8 +85,11 @@ public class User {
     String warningtemplate = null;
     String unwarntemplate = null;
 
-    // This is to avoid having to put the configuraiton in a file.
-    // The contents of the file would be host-specific. I'd rather generate it dynamically.
+    // Login genertes the Java version of a Kerberos credential cache, called a Subject.
+    // This configuration tells it where to look for the login information. Depending
+    // upon configuration it can ask for password, use a key table, or use an existing
+    // credential cache. In this case we're telling it to use /etc/krb5.keytab, the key
+    // table for the host's own credentials.
 
    class KerberosConfiguration extends Configuration { 
         private String cc;
@@ -532,11 +538,15 @@ public class User {
 	var ldap = new Ldap();
 
 	// begin boilerplate for talking to the LCSR ldap server
+
 	// need credentials for our host to authenticate the LDAP query
+	// makeKerberosConfiguration tells login to generate
+	// Kerberos credentials from /etc/krb5.keytab, which has the
+	// host's default credentials.
 
 	var kconfig = user.makeKerberosConfiguration(null);
 	LoginContext lc = null;
-	try {
+p	try {
 	    lc = new LoginContext("Groups", null, null, kconfig);
 	    lc.login();
 	} catch (LoginException le) {
@@ -547,31 +557,39 @@ public class User {
 	    return false;
 	}
 
+	// Now we have Kerberos credentials in a Subject object. This is
+	// Java's version of a credential cache.
+
 	var subj = lc.getSubject();  
 	if (subj == null) {
 	    logger.error("Login failed");
 	    return false;
 	}
 
+	// Open the departmental database, used to get user roles
 	var db = new Db();
 	if (config.csroleattr != null)
 	    db.openDb(config);
 
 	// end boilerplate
 
-	// try over all users
+	// try over all users. For cleanup it will really be all users.
+	// In other cases the user list is passed in.
 	try {
 	    ArrayList<HashMap<String,ArrayList<String>>> users;
 
 	    // for real cleanup check all currently active users
 	    //   otherwise just specified user
 	    if (cleanup && username == null) {
+		// Need all active users. This LDAP query will generate them.
 		var action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(memberof=cn=login-*,*))", "", "uid"});
 		Subject.doAs(subj, action);
 
 		users = action.val;
 		System.out.println("users " + users.size());
 	    } else {
+		// Except for cleanup, we're working with one user.
+		// So generate a list with just them.
 		users = new ArrayList<HashMap<String,ArrayList<String>>>();
 		var userMap = new HashMap<String,ArrayList<String>>();
 		var uidList = new ArrayList<String>();
