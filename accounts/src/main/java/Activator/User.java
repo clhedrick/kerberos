@@ -53,8 +53,8 @@ import common.lu;
 	 
 /*
 
-   Do user activation and cleanup. Because most of the login is in command, this module
-   does several things, depending upon flags in the main call.
+   Do user activation and cleanup. Because most of the logic is in common, this module
+   does several things, depending upon arguments in the main call.
 
    This program is driven by LDAP data.  I've written a small middleware on top of the usual Ldap API.
    It turns the output into something like the PHP data: a list of entries. Each entry is a map from attributes
