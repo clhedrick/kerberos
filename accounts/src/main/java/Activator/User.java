@@ -546,7 +546,7 @@ public class User {
 
 	var kconfig = user.makeKerberosConfiguration(null);
 	LoginContext lc = null;
-p	try {
+	try {
 	    lc = new LoginContext("Groups", null, null, kconfig);
 	    lc.login();
 	} catch (LoginException le) {
