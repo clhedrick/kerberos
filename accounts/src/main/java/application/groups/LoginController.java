@@ -54,6 +54,10 @@ import Activator.Match;
 @Controller
 public class LoginController {
 
+    // call skinit command in a fork to take the user's password and
+    // generate a Kerberos credential file, /tmp/krb5cc_USER_PID.
+    // This is the actual login. 
+
     String makeCC (String user, String pass, List<String> messages) {
      
 	int retval = -1;
@@ -132,6 +136,11 @@ public class LoginController {
        return ret;
    }
 
+    // Login can get credentials in various ways: prompting for
+    // a password, a key table, or existing credentials from a credential
+    // cache. This configurtion object tells it to use a credential
+    // cache, i.e. /tmp/krb5_USER_PID.
+
     class KerberosConfiguration extends Configuration { 
         private String cc;
  
@@ -192,7 +201,11 @@ public class LoginController {
 	    return loginGet(app, request, response, model);
 	}
 
-	// make credentials cache   
+	// make credentials cache. This calls skinit in a process,
+	// passing it the password the user supplied. Output is
+	// a Kerberos credential file, /tmp/krb5cc_USER_PID.
+	// This is the real login.
+
 
 	String cc = makeCC (username, password, messages);
 	if (cc == null) {
@@ -200,7 +213,17 @@ public class LoginController {
 	    return loginGet(app, request, response, model);
 	}
 
-	// do the actuall login. Output is a Subject.
+	// Do the Java login. Output is a Subject. With the arguments we're using
+	// the login should succeed. We already did skinit and got a valid
+	// Kerberos ticket, so the hard part is done. This just generates the
+	// Java data structure, Subject, with the credentials from the ticket.
+	// With other options, login might have to do the Kerberos login itself,
+	// either from a password or a key table. We don't do that because (1)
+	// Java login can't handle one-time passwords, and (2) we need a credential
+	// cache for each user that's logged in to use with IPA commands. That
+	// credential has to be something the IPA command can handle. The simplest
+	// is a traditional key table file in /tmp. A funny Java object won't mean
+	// anything to a command-line program like IPA.
 
 	Configuration kconfig = new KerberosConfiguration(cc);
 	try {
