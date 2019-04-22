@@ -26,6 +26,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.StandardCopyOption;
@@ -581,6 +582,16 @@ public class User {
 	    // for real cleanup check all currently active users
 	    //   otherwise just specified user
 	    if (cleanup && username == null) {
+		try {
+		    Files.move(Paths.get("/var/log/ldap.1"), Paths.get("/var/log/ldap.2"), StandardCopyOption.REPLACE_EXISTING);
+		} catch (Exception ignore) {}
+		try {
+		    Files.move(Paths.get("/var/log/ldap"), Paths.get("/var/log/ldap.1"), StandardCopyOption.REPLACE_EXISTING);
+		} catch (Exception ignore) {}
+		try {
+		    Files.writeString(Paths.get("/var/log/ldap"), "", StandardOpenOption.CREATE);
+		} catch (Exception ignore) {}
+		
 		// Need all active users. This LDAP query will generate them.
 		var action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(memberof=cn=login-*,*))", "", "uid"});
 		Subject.doAs(subj, action);

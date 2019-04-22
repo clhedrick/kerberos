@@ -31,7 +31,10 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.nio.file.Paths;
 	 
 public class Ldap {
 
@@ -60,6 +63,15 @@ public class Ldap {
 		NamingEnumeration answer =
 		    ctx.search(config.ldapbase, filter, ctls);
 
+		var logmsg = new StringBuffer();
+		logmsg.append(LocalDateTime.now().toString());
+		logmsg.append(" ");
+		logmsg.append(ctx.getEnvironment().get("java.naming.provider.url"));
+		logmsg.append(" base ");
+		logmsg.append(config.ldapbase);
+		logmsg.append(" filter ");
+		logmsg.append(filter);
+
 		while (answer.hasMore()) {
 		    Map<String,List<String>>ans = new HashMap<String,List<String>>();
 		    val.add(ans);
@@ -76,7 +88,17 @@ public class Ldap {
 			    vals.add(s);
 			}			    
 			ans.put(attr.getID().toLowerCase(), vals);
+			logmsg.append("  ");
+			logmsg.append(attr.getID());
+			logmsg.append("=");
+			logmsg.append(vals);
+			logmsg.append("\n");
 		    }
+		    logmsg.append("\n");
+		}
+		try {
+		    Files.writeString(Paths.get("/var/log/ldap"), logmsg, StandardOpenOption.APPEND);
+		} catch (Exception e) {
 		}
 
 	    } catch (NamingException e) {
