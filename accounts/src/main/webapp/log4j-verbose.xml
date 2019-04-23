@@ -7,6 +7,11 @@
    <Socket name="syslog" host="localhost" port="514" protocol="TCP">
      <PatternLayout pattern="&lt;86&gt;accounts[%T]: %m%n" />
    </Socket>
+   <File name="ldaplog" fileName="/var/log/ldap.log">
+     <PatternLayout>
+       <pattern>%d %p %m</pattern>
+     </PatternLayout>
+   </File>
  </Appenders>
  <Loggers>
    <Logger name="org.apache.log4j.xml" level="info"/>
@@ -14,5 +19,8 @@
      <AppenderRef ref="STDOUT" level="debug"/>
      <AppenderRef ref="syslog" level="info"/>
    </Root>
+   <Logger name="Activator.Ldap" level="info" additivity="false">
+     <AppenderRef ref="ldaplog" level="info"/>
+   </Logger>
  </Loggers>
 </Configuration>

@@ -40,6 +40,7 @@ public class Config {
     public String ldapdn = null;
     public String ldappass = null;
     public String ldapbase = null;
+    public String ldapattrs = null;
     public String courseattribute = "rulinkrutgersedustudentcoursereg";
     public String dbdriver = null;
     public String dburl = null;
@@ -145,6 +146,8 @@ public class Config {
 			ldappass = atoms[1];
 		    if (atoms[0].equals("ldapbase"))
 			ldapbase = atoms[1];
+		    if (atoms[0].equals("ldapattrs"))
+			ldapattrs = atoms[1];
 		    if (atoms[0].equals("courseattribute"))
 			courseattribute = atoms[1];
 		    if (atoms[0].equals("dbdriver"))

@@ -18,6 +18,9 @@
  */
 
 package Activator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Level;
 import javax.security.auth.*;
 import javax.security.auth.callback.*;
 import javax.security.auth.login.*;
@@ -40,6 +43,8 @@ public class Ldap {
 
     public List<Map<String,List<String>>> lookup(String filter, Config config){
 
+	    var logger = LogManager.getLogger(Ldap.class);
+
 	    List<Map<String,List<String>>> val = new ArrayList<Map<String,List<String>>>();
 
 	    // Set up environment for creating initial context
@@ -59,18 +64,21 @@ public class Ldap {
 
 		SearchControls ctls = new SearchControls();
 		ctls.setSearchScope(SearchControls.SUBTREE_SCOPE);
+		if (config.ldapattrs != null) {
+		    var attrIDs = config.ldapattrs.replace(" ","").split(",");
+		    ctls.setReturningAttributes(attrIDs);
+		}
 
 		NamingEnumeration answer =
 		    ctx.search(config.ldapbase, filter, ctls);
 
 		var logmsg = new StringBuffer();
-		logmsg.append(LocalDateTime.now().toString());
-		logmsg.append(" ");
 		logmsg.append(ctx.getEnvironment().get("java.naming.provider.url"));
 		logmsg.append(" base ");
 		logmsg.append(config.ldapbase);
 		logmsg.append(" filter ");
 		logmsg.append(filter);
+		logmsg.append("\n");
 
 		while (answer.hasMore()) {
 		    Map<String,List<String>>ans = new HashMap<String,List<String>>();
@@ -97,7 +105,7 @@ public class Ldap {
 		    logmsg.append("\n");
 		}
 		try {
-		    Files.writeString(Paths.get("/var/log/ldap"), logmsg, StandardOpenOption.APPEND);
+		    logger.info(logmsg);
 		} catch (Exception e) {
 		}
 
