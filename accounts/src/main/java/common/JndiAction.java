@@ -31,6 +31,8 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.List;
 import java.util.Set;
+import java.io.File;
+import java.util.Scanner;
 import Activator.Config;
 	 
 public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
@@ -66,6 +68,33 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 	    if (base == null || "".equals(base))
 		base = config.accountbase;
 	    // rest are the attrs to return
+    
+	    // we need to query the same LDAP server that the IPA command is going
+	    // to use. Otherwise we could make a change and when the screen
+	    // redisplays it may not show. If we find something configured for IPA
+	    // add it to the beginning of the configuration list. That way it will
+	    // be tried first but if it fails we'll fall back to the list
+
+	    if (config.kerbldapsyncipa) {
+		// only try once
+		config.kerbldapsyncipa = false;
+		try (var scanner = new Scanner(new File("/etc/ipa/default.conf"))) {
+		    for ( ; scanner.hasNextLine() ; scanner.nextLine()) {
+			// xmlrpc_uri = http(s://krb1.cs.rutgers.edu)/ipa/xml
+			var item = scanner.findInLine("\\s*xmlrpc_uri\\s*=\\s*http([s*]://[^/]+)/");
+			if (item == null)
+			    continue;
+			var url = "ldap" + scanner.match().group(1);
+			// add this to the beginning of the configured url
+			// but remove this url from the configured one if it's there, so we
+			// don't try it twice
+			config.kerbldapurl = url + " " + config.kerbldapurl.replaceAll(url + "\\s+|$", "");
+			break;
+		    }
+		} catch (Exception e) {
+		    ;
+		}
+	    }
 
 	    Hashtable<String,String> env = null;
 
@@ -75,7 +104,6 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		
 		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
 		env.put(Context.PROVIDER_URL, config.kerbldapurl);
-		
 		env.put(Context.SECURITY_AUTHENTICATION, "GSSAPI");
 		env.put("com.sun.jndi.ldap.connect.pool", "true");
 	    }

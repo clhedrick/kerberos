@@ -65,6 +65,7 @@ public class Config {
     public String accountbase = null;
     public String base = null;
     public String kerbldapurl = null;
+    public boolean kerbldapsyncipa = false;
     public String groupmanagerfilter = null;
     public String loginmanagerfilter = null;
     public String groupsownedfilter = null;
@@ -199,6 +200,8 @@ public class Config {
 			base = atoms[1];
 		    if (atoms[0].equals("kerbldapurl"))
 			kerbldapurl = atoms[1];
+		    if (atoms[0].equals("kerbldapsyncipa"))
+			kerbldapsyncipa = (atoms[1].equalsIgnoreCase("true"));
 		    if (atoms[0].equals("groupmanagerfilter"))
 			groupmanagerfilter = atoms[1];
 		    if (atoms[0].equals("loginmanagerfilter"))
