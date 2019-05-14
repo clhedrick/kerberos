@@ -337,6 +337,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   setresgid(pwd->pw_gid, pwd->pw_gid, -1);
   setresuid(pwd->pw_uid, pwd->pw_uid, -1);
   default_name =  krb5_cc_default_name(context);  
+
   setresuid(olduid, olduid, -1);
   setresgid(oldgid, oldgid, -1);
 
@@ -348,16 +349,20 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // kgetcred puts credentials in /tmp files. For the moment I think it's best to leave them there
   // there might be other services like that, but for the moment I can't think of any other than
   // Jupyterhub and Zeppelin. But the default ccache is /tmp for those systems.
-  if (!iscron && default_name && strncasecmp(default_name, "KEYRING:", strlen("KEYRING:")) == 0 &&
-      strncasecmp(ccname, "KEYRING:", strlen("KEYRING:")) != 0) {
-
+  
+  if (!iscron && default_name && 
+      ((strncasecmp(default_name, "KEYRING:", strlen("KEYRING:")) == 0 &&  strncasecmp(ccname, "KEYRING:", strlen("KEYRING:")) != 0) ||
+       (strncasecmp(default_name, "KCM:", strlen("KCM:")) == 0 &&  strncasecmp(ccname, "KCM:", strlen("KCM:")) != 0) ||
+       (strncasecmp(default_name, "DIR:", strlen("DIR:")) == 0 &&  strncasecmp(ccname, "DIR:", strlen("DIR:")) != 0))) {
     const char *cp;
     int numcolon = 0; 
     char *prop = NULL;
     
+    setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+    setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
     ret = krb5_cc_resolve(context, ccname, &firstcache);
-    if (ret) goto err;
+    if (ret) goto err2;
 
     // find cache that matches principal
     // there is no API call that lets us look only for KEYRING caches. The best we
@@ -369,20 +374,25 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     // because we don't kow the semantics. However it won't be able to find DIR collections
     // unless krb5.conf has that as default, so that's safe. Not sure about KCM:
     ret = krb5_cc_cache_match(context, userprinc, &cachecopy);
-    if (ret == 0 && strcmp(krb5_cc_get_type(context, cachecopy), "MEMORY") == 0)
+    if (ret == 0 && (strcmp(krb5_cc_get_type(context, cachecopy), "MEMORY") == 0 ||
+		     strcmp(krb5_cc_get_type(context, cachecopy), "FILE") == 0))
       ret = 1;
 
     // if none, create one
     if (ret) {
-      // need to change to user's id, or ccname will have 0 in it
-      setresgid(pwd->pw_gid, pwd->pw_gid, -1);
-      setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+      char * newtype = "unknown";
 
-      ret = krb5_cc_new_unique(context, "KEYRING", NULL, &cachecopy);
+      if (strncasecmp(default_name, "KEYRING:", strlen("KEYRING:")) == 0)
+	newtype = "KEYRING";
+      else if (strncasecmp(default_name, "KCM:", strlen("KCM:")) == 0)
+	newtype = "KCM";
+      else if (strncasecmp(default_name, "DIR:", strlen("DIR:")) == 0)
+	newtype = "DIR";
 
-      // now put back our real uid
-      setresuid(olduid, olduid, -1);
-      setresgid(oldgid, oldgid, -1);
+
+      ret = krb5_cc_new_unique(context, newtype, NULL, &cachecopy);
+      if (ret)   pam_syslog(pamh, LOG_INFO, "new_uniq failed %s\n", newtype);
+
 
       // it's not clear whether this is a good idea, but it's probably more
       //   likely to be right than wrong. If there is an existing cache and
@@ -395,20 +405,24 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
     }
 
-    if (ret) goto err;
+    if (ret) goto err2;
     ret = krb5_cc_initialize(context, cachecopy, userprinc);
-    if (ret) goto err;
+    if (ret) goto err2;
     ret = krb5_cc_copy_creds(context, firstcache, cachecopy);
-    if (ret) goto err;
+    if (ret) goto err2;
 
     ret = krb5_cc_get_full_name(context, cachecopy, &tempcred);
-    if (ret) goto err;
+    if (ret) goto err2;
     ccname = tempcred;  // tempcred will be freed at exit
 
     krb5_cc_close(context, cachecopy);
     cachecopy = NULL;
     krb5_cc_destroy(context, firstcache);
     firstcache = NULL;
+
+    // now put back our real uid
+    setresuid(olduid, olduid, -1);
+    setresgid(oldgid, oldgid, -1);
 
     // reset environment to collection
     if (asprintf(&prop, "%s=%s", "KRB5CCNAME", ccname) > 0) {
@@ -436,7 +450,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   //   if another process did kswitch
   // for ssh, change KRB5CCNAME to the collection, or kinit with another principal will clobber this one
 
-  if (strncmp(ccname, "KEYRING:", 8) == 0) {
+  if (strncmp(ccname, "KEYRING:", 8) == 0 || strncmp(ccname, "KCM:", 4) == 0 || strncmp(ccname, "DIR:", 4) == 0) {
     int numcolon = 0; 
     int count = 0;
     const char *cp;
@@ -444,15 +458,28 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     // all the funny business happens for keyring
 
     // do we have collection? Count colons
+    // leaves cp at end of collection
+    if (strncmp(ccname, "DIR:", 4) == 0) {
+      // collection ends at last /, but also remove any
+      // redundant ones
+      cp = strrchr(ccname, '/');
+      while (*(cp-1) == '/')
+	cp--;
+    } else if (strncmp(ccname, "KCM:", 4) == 0) {
+      cp = ccname + 4;
+      // numcolon doesn't matter here
+    } else if (strncmp(ccname, "KEYRING:", 8) == 0){
+      for (cp = ccname; *cp; cp++) {
+	if (*cp == ':')
+	  numcolon++;
+	if (numcolon == 3)
+	  break;
+      }
+    }      
 
-    for (cp = ccname; *cp; cp++) {
-      if (*cp == ':')
-	numcolon++;
-      if (numcolon == 3)
-	break;
-    }
-
-    if (numcolon == 2) {
+    if ((strncmp(ccname, "KEYRING:", 8) == 0 && numcolon == 2) || 
+	(strcmp(ccname, "KCM:") == 0) ||
+	(strncmp(ccname, "DIR:", 4) == 0 && ccname[4] != ':')) {
       // have collection
       krb5_ccache ccache = NULL;
 
@@ -484,9 +511,16 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     } else if (usecollection) {
       // have specific cache
       char *prop = NULL;
+      int temp = 0;
 
       // reset environment to collection
-      if (asprintf(&prop, "%s=%.*s", "KRB5CCNAME", (int)(cp-ccname), ccname) > 0) {
+      // for DIR:, specific cccaches start with DIR::, so we have to remove the extra :
+      if (strncmp(ccname, "DIR:", 4) == 0)
+	temp = asprintf(&prop, "%s=DIR:%.*s", "KRB5CCNAME", (int)(cp-ccname-5), ccname+5);
+      else
+	temp = asprintf(&prop, "%s=%.*s", "KRB5CCNAME", (int)(cp-ccname), ccname);
+
+      if (temp > 0) {
 	// ccname will no longer be valid after the putenv
 	cccopy = malloc(strlen(ccname) + 1);
 	strcpy(cccopy, ccname);
@@ -506,7 +540,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   } else if (cccopy) {
     ccname = cccopy;
   }
-
 
   //
   // 4. register the cache for renewal
@@ -533,7 +566,13 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   if (minlife) {
 
+    // KCM requires cc_resolve to be done as user
+    setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+    setresuid(pwd->pw_uid, pwd->pw_uid, -1);
     ret = krb5_cc_resolve(context, ccname, &firstcache);
+    setresuid(olduid, olduid, -1);
+    setresgid(oldgid, oldgid, -1);
+
     if (ret) goto err;
     if ((ret = krb5_cc_start_seq_get(context, firstcache, &cur))) {
       goto err;
@@ -629,6 +668,12 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     krb5_free_context(context);
 
   return PAM_SUCCESS;
+
+ err2:
+  setresuid(olduid, olduid, -1);
+  setresgid(oldgid, oldgid, -1);
+  goto err;
+
 }
 
 PAM_EXTERN int pam_sm_close_session(pam_handle_t *pamh, int flags, int argc, const char **argv) {
