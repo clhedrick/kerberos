@@ -257,6 +257,12 @@ int main(int argc, char *argv[])
      sigjmp_buf env;
      struct addrinfo hints;
      struct addrinfo * addrs;
+     int userswitched = 0;
+     uid_t olduid;
+     gid_t oldgid;
+     uid_t oldeuid;
+     gid_t oldegid;
+
 
      // this has to be internal, because it needs pamh, which is a local
      void __attribute__ ((format (printf, 2, 3))) mylog (int level, const char *format, ...) {
@@ -458,6 +464,11 @@ int main(int argc, char *argv[])
         }
     }
 
+    olduid = getuid();
+    oldgid = getgid();
+    oldeuid = geteuid();
+    oldegid = getegid();
+
     // username user the action applies to, not necesarily the one we will authenticate as
     // defaults to current user.
     if (!username) {
@@ -536,6 +547,10 @@ int main(int argc, char *argv[])
         krb5_get_init_creds_opt_set_forwardable(opts, 0);
         krb5_get_init_creds_opt_set_proxiable(opts, 0);
 
+        setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+        setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+        userswitched = 1;
+
 #ifndef NOFAST
         if (krb5_cc_default(context, &ccdef) == 0)
             krb5_get_init_creds_opt_set_fast_ccache(context, opts, ccdef);
@@ -550,6 +565,10 @@ int main(int argc, char *argv[])
             goto done;
         }
         haveusercreds = 1;
+
+        setresgid(oldgid, oldegid, -1);
+        setresuid(olduid, oldeuid, -1);
+        userswitched = 0;
 
         // now have credentials for current user.
         // put them in a credentials cache for library call that makes
@@ -568,6 +587,10 @@ int main(int argc, char *argv[])
     } else {
         // For list command, and for register and unregister if a privileged user
         // Just use current default credentials
+        setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+        setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+        userswitched = 1;
+
         if ((retval = krb5_cc_default(context, &ccache))) {
             mylog(LOG_ERR, "can't get your Kerberos credentials %s", error_message(retval));
             goto done;
@@ -577,6 +600,10 @@ int main(int argc, char *argv[])
             mylog(LOG_ERR, "can't get principal from your Kerberos credentials %s", error_message(retval));
             goto done;
         }
+        setresgid(oldgid, oldegid, -1);
+        setresuid(olduid, oldeuid, -1);
+        userswitched = 0;
+
     }
 
     // so we don't have to do wait for the subprocess
@@ -907,6 +934,10 @@ int main(int argc, char *argv[])
             // cache, either from environment variable or PAM
             // configuration.
 
+            setresgid(pwd->pw_gid, pwd->pw_gid, -1);
+            setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+            userswitched = 1;
+
             if (krb5ccname) {
                 // for specific cache, open it
                 if ((retval = krb5_cc_resolve(context, krb5ccname, &ccache))) {
@@ -972,6 +1003,10 @@ int main(int argc, char *argv[])
             krb5_cc_close(context,ccache);
             ccache = NULL;
 
+            setresgid(oldgid, oldegid, -1);
+            setresuid(olduid, oldeuid, -1);
+            userswitched = 0;
+
             // final return is the name of the final cache
             mainret = realccname;
 #ifndef PAM
@@ -1021,6 +1056,10 @@ int main(int argc, char *argv[])
         free(serverhostarray);
     }
 
+    if (userswitched) {
+        setresgid(oldgid, oldegid, -1);
+        setresuid(olduid, oldeuid, -1);
+    }
     if (sock >= 0)
         close(sock);
     if (creds)
@@ -1235,18 +1274,32 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // in it.
 
   for (i = 0; i < argc; i++) {
-    if (strcmp(argv[i], "usecollection") == 0 &&
-	strncmp(mainret, "KEYRING:", 8) == 0) {
-      // count colons in ccname
-      int numcolon = 0; 
-      char *cp;
-      for (cp = mainret; *cp; cp++) {
-	if (*cp == ':')
-	  numcolon++;
-	if (numcolon == 3) {
-            *cp = '\0';
-            break;
-        }
+    if (strcmp(argv[i], "usecollection") == 0) {
+      if (strncmp(mainret, "KEYRING:", 8) == 0) {
+          // count colons in ccname
+          int numcolon = 0; 
+          char *cp;
+          for (cp = mainret; *cp; cp++) {
+              if (*cp == ':')
+                  numcolon++;
+              if (numcolon == 3) {
+                  *cp = '\0';
+                  break;
+              }
+          }
+      } else if (strncmp(mainret, "DIR::", 5) == 0) {
+          // collection ends at last /, but also remove any
+          // redundant ones
+          char *cp;
+          cp = strrchr(mainret, '/');
+          while (*(cp-1) == '/')
+              cp--;
+          *cp = '\0';
+          memmove(mainret + 4, mainret + 5, cp - (mainret+5) + 1);  // +1 because we need to copy the null
+      } else if (strncmp(mainret, "KCM:", 4) == 0) {
+          // since we have at least KCM: already there, there has to
+          // be enough space for this strcpy
+          strcpy(mainret, "KCM:");
       }
     }
     break;
