@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
 
@@ -11,6 +12,9 @@
 #ifndef T_SRV
 #define T_SRV		33
 #endif
+
+unsigned short _getshort (
+	  u_char *message_ptr );
 
 /*
  * Copyright 2017 by Rutgers, the State University of New Jersey
