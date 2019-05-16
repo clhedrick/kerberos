@@ -146,6 +146,109 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
     data_eq(princ->data[1], *realm);
 }
 
+// KCM: gets converted to KCM:UID if there's nothing after
+// the KCM. Otherwise all users KCMs will look the same
+// for uniformity, always mallocs memory
+
+
+char *
+convert_to_collection(char *ptr, uid_t uid) {
+  char * retval;
+
+  if (strncmp(ptr, "KEYRING:", 8) == 0) {
+    // count colons in ccname
+    int numcolon = 0; 
+    char *cp;
+
+    retval = malloc(strlen(ptr) + 1);
+    strcpy(retval, ptr);
+    
+    for (cp = retval; *cp; cp++) {
+      if (*cp == ':')
+	numcolon++;
+      if (numcolon == 3) {
+	*cp = '\0';
+	break;
+      }
+    }
+  } else if (strncmp(ptr, "DIR::", 5) == 0) {
+    // collection ends at last /, but also remove any
+    // redundant ones
+    char *cp;
+
+    retval = malloc(strlen(ptr) + 1);
+    strcpy(retval, ptr);
+
+    cp = strrchr(retval, '/');
+    while (*(cp-1) == '/')
+      cp--;
+    *cp = '\0';
+    memmove(retval + 4, retval + 5, cp - (retval+5) + 1);  // +1 because we need to copy the null
+  } else if (strcmp(ptr, "KCM:") == 0) {
+    asprintf(&retval, "KCM:%lu", (unsigned long)uid);
+  } else if (strncmp(ptr, "KCM:", 4) == 0) {
+    // since we have at least KCM: already there, there has to
+    // be enough space for this strcpy
+    // count colons in ccname
+    int numcolon = 0; 
+    char *cp;
+
+    retval = malloc(strlen(ptr) + 1);
+    strcpy(retval, ptr);
+
+    for (cp = retval; *cp; cp++) {
+      if (*cp == ':')
+	numcolon++;
+      if (numcolon == 2) {
+	*cp = '\0';
+	break;
+      }
+    }
+  } else if (ptr[0] == '/') {
+    asprintf(&retval, "FILE:%s", ptr);
+  } else {
+    retval = malloc(strlen(ptr) + 1);
+    strcpy(retval, ptr);
+  }
+  return retval;
+}
+
+// uid arg is used for KCM:. If we know the ccname is a full
+// name, it's ignored
+uid_t
+ccname_to_uid(char *ptr, uid_t uid) {
+
+  if (strncmp(ptr, "FILE:", strlen("FILE:")) == 0 ||
+      strncmp(ptr, "DIR:", strlen("DIR:")) == 0 ||
+      ptr[0] == '/') {
+    // it's a file, use the owner
+    struct stat statbuf;
+    char *path = ptr;
+
+    if (strncmp(ptr, "FILE:", strlen("FILE:")) == 0)
+      path += strlen("FILE:");
+    else if (strncmp(ptr, "DIR::", strlen("DIR::")) == 0)
+      path += strlen("DIR::");
+    else if (strncmp(ptr, "DIR:", strlen("DIR:")) == 0)
+      path += strlen("DIR:");
+
+    if (stat(path, &statbuf) == 0)
+      return statbuf.st_uid;
+    else
+      return -1;
+
+  } else  if (strncmp(ptr, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
+    return atol(ptr + strlen(KEYRING_PREFIX));
+  } else if (strncmp(ptr, "KCM:", 4) == 0) {
+    // if it's just KCM, it means the current user, so there's nothing to check
+    if (ptr[4] != '\0')
+      return atol(ptr + strlen("KCM:"));
+    else
+      return uid;
+  } else
+    return -1;
+}
+
 /* 
    Return 1 if cache needs to be renewed. 0 if it doesn't. If cache is invalid or
    renew would fail, also return 0, since there's nothing we can do with it
@@ -515,9 +618,7 @@ void getccs() {
       uid_t uid;
       FILE *f;
       ENTRY entry;
-      char *cp;
       char *uidend;
-      char *path;
 
       // get uid
       asprintf(&fname, "/proc/%s/status", namelist[i]->d_name);
@@ -601,66 +702,40 @@ void getccs() {
 
       // now have env variable in ptr
       // if it's KEYRING:persistrnt:nnnn:xxx, drop xxx
+      ptr = convert_to_collection(ptr, uid);
+      // ptr is mallocted, but release it
 
-      if (strncmp(ptr, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
-	char *cp2;
-	cp = ptr + strlen(KEYRING_PREFIX);
-	// look for KEYRING:persistent:nnn:xcc
-	cp2 = strchr(cp, ':');
-	// kill the last :
-	if (cp2)
-	  *cp2 = '\0';
-      }
-      // path will be normalized CC name
-      // one more thing: we need to know who the owner is
-      // if it isn't the process owner, ignore it, to avoid a user
-      // getting us to hang onto another user's cc
+      // what gets indexed is the collection, so it will match
+      // any ccname for that user. The problem is that 
+      // KRB5CCNAME may be either a collection or a specific cache
+      // but /run/renewdccs is always the full cache name
+      // to get consistent results we index the collection name
+      // and convert the name in renewdccs to a collection to look up
 
-      if (strncmp(ptr, "FILE:", strlen("FILE:")) == 0 ||
-	  *ptr == '/') {
-	// it's a file, use the owner
-	struct stat statbuf;
-	path = ptr;
-	if (*path != '/')
-	  path += strlen("FILE:");
-	if (stat(path, &statbuf) == 0) {
-	  // wrong user, ignore this
-	  if (statbuf.st_uid != uid) {
-	    free(line);
-	    free(namelist[i]);
-	    continue;
-	  }
-	}
-      } else if (strncmp(ptr, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
-	uid_t kuid = atol(ptr + strlen(KEYRING_PREFIX));
-	if (kuid != uid) {
-	  free(line);
-	  free(namelist[i]);
-	  continue;
-	}
-	path = ptr;
-      } else {
-	// not keyring and doesn't start with /. Seems like junk
+      // do some validity checking
+      if (ccname_to_uid(ptr, uid) != uid) {
+	free(ptr);
 	free(line);
 	free(namelist[i]);
 	continue;
-      }      
+      }
 	
       // looks valid, save it
 
-      entry.key = path;
+      entry.key = ptr;
       if (hsearch(entry, FIND) == NULL) {
 	// didn't find it, add
 	struct cc_entry *nentry = malloc(sizeof(struct cc_entry));
 	nentry->next = cclist;
-	nentry->name = malloc(strlen(path) + 1);
-	strcpy(nentry->name, path);
+	nentry->name = malloc(strlen(ptr) + 1);
+	strcpy(nentry->name, ptr);
 	nentry->uid = uid;
 	entry.key = nentry->name;
 	entry.data = (void *)nentry;
 	cclist = nentry;
 	nentry->entry = hsearch(entry, ENTER);
       }
+      free(ptr);
       free(namelist[i]);
       free(line);      
     } else
@@ -684,15 +759,9 @@ void freeccs() {
 void maybe_renew(krb5_context ctx, char *ccname, time_t minleft, struct cc_entry *ccentry) {
     krb5_ccache cache = NULL;
     int code;
-    int changeduid = 0;
 
-    // we want to run as the owner of the cache. If it's a file
-    // if_reg_cc changed ownership to user. 
-    if ((strncmp(ccname, "FILE:", 5) == 0 ||
-    	 strncmp(ccname, "/", 1) == 0)) {
-      setresuid(ccentry->uid, ccentry->uid, -1L);
-      changeduid = 1;
-    }
+    // file and KCM require us to be the user
+    setresuid(ccentry->uid, ccentry->uid, -1L);
     
     code = krb5_cc_resolve(ctx, ccname, &cache);
     if (code) {
@@ -700,9 +769,7 @@ void maybe_renew(krb5_context ctx, char *ccname, time_t minleft, struct cc_entry
       if (cache)
 	krb5_cc_close(ctx, cache);
       cache = NULL;
-      if (changeduid) {
-	setresuid(0L, 0L, -1L);
-      }
+      setresuid(0L, 0L, -1L);
       return;
     }
 			   
@@ -714,9 +781,7 @@ void maybe_renew(krb5_context ctx, char *ccname, time_t minleft, struct cc_entry
     }
     cache = NULL;
 
-    if (changeduid) {
-      setresuid(0L, 0L, -1L);
-    }
+    setresuid(0L, 0L, -1L);
 }
 
 
@@ -732,6 +797,7 @@ maybe_delete(krb5_context kcontext, char *name, char *filename, int only_valid, 
     krb5_error_code code;
     krb5_ccache cache = NULL;
     char *newname;
+    uid_t uid;
     
     // 1. is it in the hash, i.e. still in use?
     // we'll keep it around even if it is expired
@@ -741,6 +807,9 @@ maybe_delete(krb5_context kcontext, char *name, char *filename, int only_valid, 
     }
       
     // not in use. kill it
+
+    uid = ccname_to_uid(name, 0);
+    setresuid(uid, uid, -1L);
 
     code = krb5_cc_resolve(kcontext, name, &cache);
 
@@ -755,6 +824,8 @@ maybe_delete(krb5_context kcontext, char *name, char *filename, int only_valid, 
       if (cache)
 	krb5_cc_close(kcontext, cache); // not likely we have a cache if resolv failed
     }
+
+    setresuid(0, 0, -1L);
 
     // remove entry from /run/renewdccs
 
@@ -782,6 +853,7 @@ void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_de
   for (i = 0; i < numdirs; i++) {
     char *filename = namelist[i]->d_name;
     char *ccname;
+    char *collection;
     char *ccmem; // original malloc
     char *key;
     int deleted = 0;
@@ -814,27 +886,23 @@ void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_de
 
     // normaize it, remove FILE: and remove trailing stuff from keyring
     cp = NULL;
-    if (strncmp(ccname, "FILE:", 5) == 0) {
-      ccname += 5;
-    }
+    // don't need uid for convert_to_collection, because this is always the
+    // full name
+    collection = convert_to_collection(ccname, 0);
+
     // key to lookup in hash is normally the ccname
-    key = ccname;
-    if (*ccname == '/') {
+    key = collection;
+    if (strncmp(ccname, "FILE:", 5) == 0) {
       // if it's a GSSproxy ticket, we only ask that the user stil
       // has a process, so look up the uid, not the ccname
-      if (gssproxy_prefix && strncmp(ccname, gssproxy_prefix,
+      if (gssproxy_prefix && strncmp(ccname + 5, gssproxy_prefix,
 		  strlen(gssproxy_prefix)) == 0)
-        key += strlen(gssproxy_prefix);
+        key += strlen(gssproxy_prefix) + 5;
       else if (gssproxy_prefix2 && strncmp(ccname, gssproxy_prefix2,
 		  strlen(gssproxy_prefix2)) == 0)
-        key += strlen(gssproxy_prefix2);
-    } else if (strncmp(ccname, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
-      cp2 = ccname + strlen(KEYRING_PREFIX);
-      cp = strchr(cp2, ':');
-      if (cp)
-	*cp = '\0';
+        key += strlen(gssproxy_prefix2) + 5;
     }      
-    mylog(LOG_DEBUG, "checking cache %s", ccname);
+    mylog(LOG_DEBUG, "checking cache %s full %s", key, ccname);
 
     // ccname is now full ccache name, except that *cp may need to be
     // restored
@@ -843,9 +911,9 @@ void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_de
     if ((fentry = hsearch(entry, FIND))) {
       ccentry = (struct cc_entry *)fentry->data;
     }
-    // restore ccname to full ccname
-    if (cp)
-      *cp = ':';
+
+    free(collection);
+
     // special problem: there's a brief time in sssd when the cache
     // has been created but the user process hasn't been started. If
     // we look during that time we don't want to delete. So if there's

@@ -31,13 +31,11 @@ to do it via GSSAPICleanupCredentials. Instead, renewd will delete
 credentials that no longer correspond to any active session.
 .PP 
 For NFS to work reliably credentials must be either the primary
-credential in KEYRING:persistebt:UID, in a file
+credential in a collection (e.g. KEYRING:persistebt:UID or KCM:),
+in a file
 in /tmp owned by the user, or in a credential listed in
-/etc/gssproxy/gssproxy.conf. We're currently using KEYRING for
-interaction logins, and files in /tmp for cron jobs. pam_reg_cc
-can (and at Rutgers does) copy the credentials for interactive
-sessions to /var/lib/gssproxy/clients/krb5cc_%U, which is used
-by gssproxy.
+/etc/gssproxy/gssproxy.conf. We're currently using KEYRING or KCM for
+interaction logins, and files in /tmp for cron jobs.
 .SH DELETION
 .PP
 In addition to renewing, renewd can remove out of date credential caches.
@@ -98,8 +96,8 @@ the user that owns the cache.
 .SH IMPLEMENTATTION
 .PP
 To do its work, renewd needs to know which credentials are still in 
-use. Renewing all credential files in /tmp would probably lead to a
-never-ending increae in files there. Renewd currently expects programs
+use. Renewing all credentials would probably lead to a
+never-ending increae in credentials. Renewd currently expects programs
 that create tickets to register them by creating a pointer 
 /run/renewdccs. It is ccache name as normally used by Kerberos,
 but with / replaced by \. 
@@ -107,12 +105,10 @@ but with / replaced by \.
 Renewd only looks at caches listed in /run/renewdccs. It looks
 through all processes on the system, checking for environment
 variable KRB5CCNAMAE. If a credential is listed in some process's
-KRB5CCNAME it is considered active. If a credential matches
-the credcopy parameter for either register-cc or renewd in
-the appdefauls section of krb5.conf, it is considered active
-if there is any process with its UID.  (credcopy is assumed
-to be a pattern ending in %U. So everything after the % is
-assumed to be a UID.) 
+KRB5CCNAME it is considered active. Note that KRB5CCNAME is
+often set to a collection rather than a specific cache. So
+for credential types that are in a collection, i.e. all 
+except FILE:, it considers all credentials in the collection active.
 .PP
 If a credential is active, it is periodically renewed.
 If not, it is deleted and the entry in /run/renewdccs is
@@ -127,16 +123,6 @@ The keyring implementation is specific to Linux. To implement renewd
 for other operating systems you would need to find another way to track all
 processes started from a session.
 .PP
-The credcopy mechanism is actually a bad idea, which we may stop using.
-However on some systems we have processes started by a
-web server which don't have KRB5CCNAME set even through credentials
-exist in /tmp. By listing the pattern of crednetial names as 
-renewd.credcopy, we cause them to be renewed even though they don't
-match KRB5CCNAME.
-.PP
-You could argue that we should renew all credentials for users
-who have any process. But we have situations where credentials
-are created for cron jobs with unique names. They need to get
-killed at the end of the job, or they'll buuid up forever if the
-user is logged in interactively. As a result, renewd is a fairly
-complex combination of compromises.
+Renewd supports credentials of type FILE, DIR, KEYRING, and KCM.
+These appear to be the only valid types for Linux (except MEMORY,
+which we can't renew).

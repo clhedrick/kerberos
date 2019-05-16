@@ -88,7 +88,7 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
 
 #define RENEWDCCS "/run/renewdccs/"
 
-void register_for_delete(pam_handle_t *pamh, const char *cache) {
+void register_for_delete(pam_handle_t *pamh, const char *cache, uid_t uid) {
   char *newname;
   const char *cp;
   char *cp2;
@@ -128,6 +128,7 @@ void register_for_delete(pam_handle_t *pamh, const char *cache) {
     free(newname);
     return;
   }
+  dprintf(fd, "%lu\n", (unsigned long)uid);
   free(newname);
   close(fd);
 }
@@ -545,7 +546,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // 4. register the cache for renewal
   //
 
-  register_for_delete(pamh, ccname);
+  register_for_delete(pamh, ccname, pwd->pw_uid);
 
   //
   // 5. except for cron, see if the ticket lifetime is too small, and warn user.
