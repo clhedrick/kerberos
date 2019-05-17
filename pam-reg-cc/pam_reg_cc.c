@@ -348,36 +348,34 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   ret = krb5_build_principal(context, &userprinc, strlen(default_realm), default_realm, username, NULL);
   if (ret) goto err1;
 
-  // kgetcred puts credentials in /tmp files. For the moment I think it's best to leave them there
-  // there might be other services like that, but for the moment I can't think of any other than
-  // Jupyterhub and Zeppelin. But the default ccache is /tmp for those systems.
-  // This code will leave things alone if ccname is a different collection type than default. No
-  // obvious reason to copy it in the case.
+  // For NFS to work, rpc.gssd has to be able to find the credentials. It looks at /tmp and
+  // the default in krb5.conf. We've got two issues: (1) sshd likes to put things in /tmp
+  // (2) Ubuntu sssd likes to put things in keyring, even if that's not right. If krb5.conf
+  // points to KCM and the actual ticket is in KEYRING, gssd will fail and the user won't be
+  // able to get files. So if the default is not /tmp, and login put the credential somewhere
+  // other than the default, move it.
   
   if (!iscron && default_name &&
-      is_collection_type(default_name) && !is_collection_type(ccname)) {
+      is_collection_type(default_name) &&
+      strcmp(get_cc_type(ccname), get_cc_type(default_name)) != 0) {
     const char *cp;
     int numcolon = 0; 
     char *prop = NULL;
-    
+
+
     setresgid(pwd->pw_gid, pwd->pw_gid, -1);
     setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
     ret = krb5_cc_resolve(context, ccname, &firstcache);
     if (ret) goto err2;
 
-    // find cache that matches principal
-    // there is no API call that lets us look only for KEYRING caches. The best we
-    // can do is this, and verify that it's keyring. If there's a KCM or DIR that
-    // will take precedence. It's unlikely that they'll be used if they aren't
-    // the default, so in practice this should work. Have to check type because
-    // there may be something in MEMORY. We certainly don't want that. If by
-    // chance there is a DIR or KCM, the normalization code won't change it,
-    // because we don't kow the semantics. However it won't be able to find DIR collections
-    // unless krb5.conf has that as default, so that's safe. Not sure about KCM:
+    // If possible we reuse an existing cache, if one has the right principal.
+    // There is no API call that lets us look only for caches of a specific type. The best we
+    // can do is this. We then have to verify that it's the right type. If it's not
+    // we ignore it. That means in some cases we can create a new cache every time
+    // we login. That's not so terrible. sshd and sssd already do that.
     ret = krb5_cc_cache_match(context, userprinc, &cachecopy);
-    if (ret == 0 && (strcmp(krb5_cc_get_type(context, cachecopy), "MEMORY") == 0 ||
-		     strcmp(krb5_cc_get_type(context, cachecopy), "FILE") == 0))
+    if (ret == 0 && strcmp(krb5_cc_get_type(context, cachecopy), get_cc_type(default_name)) != 0)
       ret = 1;
 
     // if none, create one
@@ -407,6 +405,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
     ret = krb5_cc_get_full_name(context, cachecopy, &tempcred);
     if (ret) goto err2;
+
+    pam_syslog(pamh, LOG_INFO, "moving credentials from %s to %s", ccname, tempcred);
     ccname = tempcred;  // tempcred will be freed at exit
 
     krb5_cc_close(context, cachecopy);
