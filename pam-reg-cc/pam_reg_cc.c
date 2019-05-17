@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
+#include "../common/ccacheutil.h"
 
 /*
  * Copyright 2017 by Rutgers, the State University of New Jersey
@@ -350,11 +351,11 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // kgetcred puts credentials in /tmp files. For the moment I think it's best to leave them there
   // there might be other services like that, but for the moment I can't think of any other than
   // Jupyterhub and Zeppelin. But the default ccache is /tmp for those systems.
+  // This code will leave things alone if ccname is a different collection type than default. No
+  // obvious reason to copy it in the case.
   
-  if (!iscron && default_name && 
-      ((strncasecmp(default_name, "KEYRING:", strlen("KEYRING:")) == 0 &&  strncasecmp(ccname, "KEYRING:", strlen("KEYRING:")) != 0) ||
-       (strncasecmp(default_name, "KCM:", strlen("KCM:")) == 0 &&  strncasecmp(ccname, "KCM:", strlen("KCM:")) != 0) ||
-       (strncasecmp(default_name, "DIR:", strlen("DIR:")) == 0 &&  strncasecmp(ccname, "DIR:", strlen("DIR:")) != 0))) {
+  if (!iscron && default_name &&
+      is_collection_type(default_name) && !is_collection_type(ccname)) {
     const char *cp;
     int numcolon = 0; 
     char *prop = NULL;
@@ -381,15 +382,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
     // if none, create one
     if (ret) {
-      char * newtype = "unknown";
-
-      if (strncasecmp(default_name, "KEYRING:", strlen("KEYRING:")) == 0)
-	newtype = "KEYRING";
-      else if (strncasecmp(default_name, "KCM:", strlen("KCM:")) == 0)
-	newtype = "KCM";
-      else if (strncasecmp(default_name, "DIR:", strlen("DIR:")) == 0)
-	newtype = "DIR";
-
+      char * newtype = get_cc_type(default_name);
 
       ret = krb5_cc_new_unique(context, newtype, NULL, &cachecopy);
       if (ret)   pam_syslog(pamh, LOG_INFO, "new_uniq failed %s\n", newtype);
@@ -451,37 +444,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   //   if another process did kswitch
   // for ssh, change KRB5CCNAME to the collection, or kinit with another principal will clobber this one
 
-  if (strncmp(ccname, "KEYRING:", 8) == 0 || strncmp(ccname, "KCM:", 4) == 0 || strncmp(ccname, "DIR:", 4) == 0) {
-    int numcolon = 0; 
-    int count = 0;
-    const char *cp;
-
-    // all the funny business happens for keyring
-
-    // do we have collection? Count colons
-    // leaves cp at end of collection
-    if (strncmp(ccname, "DIR:", 4) == 0) {
-      // collection ends at last /, but also remove any
-      // redundant ones
-      cp = strrchr(ccname, '/');
-      while (*(cp-1) == '/')
-	cp--;
-    } else if (strncmp(ccname, "KCM:", 4) == 0) {
-      cp = ccname + 4;
-      // numcolon doesn't matter here
-    } else if (strncmp(ccname, "KEYRING:", 8) == 0){
-      for (cp = ccname; *cp; cp++) {
-	if (*cp == ':')
-	  numcolon++;
-	if (numcolon == 3)
-	  break;
-      }
-    }      
-
-    if ((strncmp(ccname, "KEYRING:", 8) == 0 && numcolon == 2) || 
-	(strcmp(ccname, "KCM:") == 0) ||
-	(strncmp(ccname, "DIR:", 4) == 0 && ccname[4] != ':')) {
-      // have collection
+  if (is_collection(ccname)) {
       krb5_ccache ccache = NULL;
 
       setresgid(pwd->pw_gid, pwd->pw_gid, -1);
@@ -509,30 +472,22 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       setresgid(oldgid, oldgid, -1);
 
       // end of collection
-    } else if (usecollection) {
+  } else if (is_collection_type(ccname) && usecollection) {
       // have specific cache
       char *prop = NULL;
-      int temp = 0;
+      char *collection = convert_to_collection(ccname, (uid_t)-1);
 
       // reset environment to collection
-      // for DIR:, specific cccaches start with DIR::, so we have to remove the extra :
-      if (strncmp(ccname, "DIR:", 4) == 0)
-	temp = asprintf(&prop, "%s=DIR:%.*s", "KRB5CCNAME", (int)(cp-ccname-5), ccname+5);
-      else
-	temp = asprintf(&prop, "%s=%.*s", "KRB5CCNAME", (int)(cp-ccname), ccname);
-
-      if (temp > 0) {
+      if (asprintf(&prop, "KRB5CCNAME=%s", collection) > 0) {
 	// ccname will no longer be valid after the putenv
 	cccopy = malloc(strlen(ccname) + 1);
 	strcpy(cccopy, ccname);
 
 	pam_putenv(pamh, prop);
-	if (prop)
-	  free(prop);
       }
-
-    }
-
+      if (prop)
+	free(prop);
+      free(collection);
   }
 
   // note: ccname doesn't have to be freed; fullname does

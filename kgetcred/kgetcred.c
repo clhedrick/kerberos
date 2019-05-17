@@ -87,6 +87,7 @@ If you don't have clearenv you'll need to use the MAC code
 #include <stdlib.h>
 
 #include "sample.h"
+#include "../common/ccacheutil.h"
 
 #ifndef GETSOCKNAME_ARG3_TYPE
 #define GETSOCKNAME_ARG3_TYPE int
@@ -514,7 +515,7 @@ int main(int argc, char *argv[])
         if ((retval = krb5_cc_initialize(context, ccache, client))) {
             mylog(LOG_ERR, "unable to initialized credentials file for host %s", error_message(retval));
             goto done;
-        }                                                                                                                        
+        }                                                                                                                       
 
         if ((retval = krb5_cc_store_cred(context, ccache, &hostcreds))) {                                                                  mylog(LOG_ERR, "unable to store host credentials in cache %s", error_message(retval));
             goto done;
@@ -579,6 +580,11 @@ int main(int argc, char *argv[])
             goto done;
         }
 
+        if ((retval = krb5_cc_initialize(context, ccache, client))) {
+            mylog(LOG_ERR, "unable to initialized credentials file for host %s", error_message(retval));
+            goto done;
+        }
+        
         if ((retval = krb5_cc_store_cred(context, ccache, &usercreds))) { 
             mylog(LOG_ERR, "unable to store your credentials in cache %s", error_message(retval));
             goto done;
@@ -952,15 +958,7 @@ int main(int argc, char *argv[])
                 }
             }
 
-            if (krb5_cc_get_principal(context, ccache, &defcache_princ) != 0 || 
-                !krb5_principal_compare(context, creds[0]->client, defcache_princ)) {
-                // cache not set up or wrong principal
-                retval = krb5_cc_initialize(context, ccache, creds[0]->client);
-                if (retval) {
-                    mylog(LOG_ERR, "unable to initialize credentials file 1 %s", error_message(retval));
-                    goto done;
-                }
-            } else if (strcmp(krb5_cc_get_type(context, ccache), "FILE") == 0) {
+            if (strcmp(krb5_cc_get_type(context, ccache), "FILE") == 0) {
                 // cc exists; in KEYRING we can just store, but in /tmp create a new one and rename it
                 // have to copy names, because cc_get_name is invalid after close
                 // fortunately FILE: is the default, so we can just use the name for cc_resolv
@@ -982,7 +980,15 @@ int main(int argc, char *argv[])
                     goto done;
                 }
                 needrename = 1;
-            }
+            } else {
+                // have to initialize all the time, or we get duplicate entries
+                // kinit does this even for kinit -R
+                retval = krb5_cc_initialize(context, ccache, creds[0]->client);
+                if (retval) {
+                    mylog(LOG_ERR, "unable to initialize credentials file 1 %s", error_message(retval));
+                    goto done;
+                }
+            } 
 
             // now we've got the cache open and initialized
             // store the credentials in it
@@ -1275,32 +1281,10 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   for (i = 0; i < argc; i++) {
     if (strcmp(argv[i], "usecollection") == 0) {
-      if (strncmp(mainret, "KEYRING:", 8) == 0) {
-          // count colons in ccname
-          int numcolon = 0; 
-          char *cp;
-          for (cp = mainret; *cp; cp++) {
-              if (*cp == ':')
-                  numcolon++;
-              if (numcolon == 3) {
-                  *cp = '\0';
-                  break;
-              }
-          }
-      } else if (strncmp(mainret, "DIR::", 5) == 0) {
-          // collection ends at last /, but also remove any
-          // redundant ones
-          char *cp;
-          cp = strrchr(mainret, '/');
-          while (*(cp-1) == '/')
-              cp--;
-          *cp = '\0';
-          memmove(mainret + 4, mainret + 5, cp - (mainret+5) + 1);  // +1 because we need to copy the null
-      } else if (strncmp(mainret, "KCM:", 4) == 0) {
-          // since we have at least KCM: already there, there has to
-          // be enough space for this strcpy
-          strcpy(mainret, "KCM:");
-      }
+        char *temp;
+        temp = convert_to_collection(mainret, pwd->pw_uid);
+        free(mainret);
+        mainret = temp;
     }
     break;
   }

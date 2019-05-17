@@ -60,6 +60,7 @@
 #include <errno.h>
 #include <search.h>
 #include <keyutils.h>
+#include "../common/ccacheutil.h"
 
 /**************************
 
@@ -75,8 +76,6 @@ automatically renew tickets.
    but I can't use scanf %lu, because I can't narrow the assignment. So I use atol and assign it.
    The assignment narrows it to the actual size.
 */
-
-#define KEYRING_PREFIX "KEYRING:persistent:"
 
 int debug = 0;
 int test = 0;
@@ -150,104 +149,6 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
 // the KCM. Otherwise all users KCMs will look the same
 // for uniformity, always mallocs memory
 
-
-char *
-convert_to_collection(char *ptr, uid_t uid) {
-  char * retval;
-
-  if (strncmp(ptr, "KEYRING:", 8) == 0) {
-    // count colons in ccname
-    int numcolon = 0; 
-    char *cp;
-
-    retval = malloc(strlen(ptr) + 1);
-    strcpy(retval, ptr);
-    
-    for (cp = retval; *cp; cp++) {
-      if (*cp == ':')
-	numcolon++;
-      if (numcolon == 3) {
-	*cp = '\0';
-	break;
-      }
-    }
-  } else if (strncmp(ptr, "DIR::", 5) == 0) {
-    // collection ends at last /, but also remove any
-    // redundant ones
-    char *cp;
-
-    retval = malloc(strlen(ptr) + 1);
-    strcpy(retval, ptr);
-
-    cp = strrchr(retval, '/');
-    while (*(cp-1) == '/')
-      cp--;
-    *cp = '\0';
-    memmove(retval + 4, retval + 5, cp - (retval+5) + 1);  // +1 because we need to copy the null
-  } else if (strcmp(ptr, "KCM:") == 0) {
-    asprintf(&retval, "KCM:%lu", (unsigned long)uid);
-  } else if (strncmp(ptr, "KCM:", 4) == 0) {
-    // since we have at least KCM: already there, there has to
-    // be enough space for this strcpy
-    // count colons in ccname
-    int numcolon = 0; 
-    char *cp;
-
-    retval = malloc(strlen(ptr) + 1);
-    strcpy(retval, ptr);
-
-    for (cp = retval; *cp; cp++) {
-      if (*cp == ':')
-	numcolon++;
-      if (numcolon == 2) {
-	*cp = '\0';
-	break;
-      }
-    }
-  } else if (ptr[0] == '/') {
-    asprintf(&retval, "FILE:%s", ptr);
-  } else {
-    retval = malloc(strlen(ptr) + 1);
-    strcpy(retval, ptr);
-  }
-  return retval;
-}
-
-// uid arg is used for KCM:. If we know the ccname is a full
-// name, it's ignored
-uid_t
-ccname_to_uid(char *ptr, uid_t uid) {
-
-  if (strncmp(ptr, "FILE:", strlen("FILE:")) == 0 ||
-      strncmp(ptr, "DIR:", strlen("DIR:")) == 0 ||
-      ptr[0] == '/') {
-    // it's a file, use the owner
-    struct stat statbuf;
-    char *path = ptr;
-
-    if (strncmp(ptr, "FILE:", strlen("FILE:")) == 0)
-      path += strlen("FILE:");
-    else if (strncmp(ptr, "DIR::", strlen("DIR::")) == 0)
-      path += strlen("DIR::");
-    else if (strncmp(ptr, "DIR:", strlen("DIR:")) == 0)
-      path += strlen("DIR:");
-
-    if (stat(path, &statbuf) == 0)
-      return statbuf.st_uid;
-    else
-      return -1;
-
-  } else  if (strncmp(ptr, KEYRING_PREFIX, strlen(KEYRING_PREFIX)) == 0) {
-    return atol(ptr + strlen(KEYRING_PREFIX));
-  } else if (strncmp(ptr, "KCM:", 4) == 0) {
-    // if it's just KCM, it means the current user, so there's nothing to check
-    if (ptr[4] != '\0')
-      return atol(ptr + strlen("KCM:"));
-    else
-      return uid;
-  } else
-    return -1;
-}
 
 /* 
    Return 1 if cache needs to be renewed. 0 if it doesn't. If cache is invalid or
