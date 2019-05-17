@@ -406,7 +406,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     ret = krb5_cc_get_full_name(context, cachecopy, &tempcred);
     if (ret) goto err2;
 
-    pam_syslog(pamh, LOG_INFO, "moving credentials from %s to %s", ccname, tempcred);
     ccname = tempcred;  // tempcred will be freed at exit
 
     krb5_cc_close(context, cachecopy);
