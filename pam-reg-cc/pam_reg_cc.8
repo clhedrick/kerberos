@@ -37,20 +37,21 @@ just created. It will pick a cache from the collection that
 has the user's main principal. That's the same cache that sssd
 uses, so it should be the right one.
 .PP
-If usecollection is specified, and the cache is in KEYRING, strips
+If usecollection is specified, and the cache is in a collection
+type cache (e.g. KEYRING or KCM), strips
 any subsidiary name. E.g if it is KEYRING:persistent:1003:1003,
 although that name will be registered for renewd, the environment
 variable will be updated to KEYRING:persistent:1003. This will 
 allow kinit, klist, and kdestroy to work as intended with collections.
 .PP
 In general we recommend setting default_ccache_name in krb5.conf to
-KEYRING:persistent:%{uid}, and setting usecollection. 
+KEYRING:persistent:%{uid} or KCM:, and setting usecollection. 
 .PP
 Sshd has two known problems: (1) On Centos it tends to set KRB5CCNAME
 to the actual cache name. If the user does kinit as a different
 principal, it will overwrite the cache. This can cause the user to
 lose access to NFS. To fix this, set the default cc in /etc/krb5.conf
-to KEYRING:persistent:%{uid}, and set "usecollection." As explained
+to KEYRING:persistent:%{uid} or KCM:, and set "usecollection." As explained
 above, that will fix up KRB5CCNAME to point to the collection. Kinit
 is smart enough that it will create a new cache if the user kinits
 as a different principal. If used with the gssd wrapper, gssd will
@@ -61,11 +62,11 @@ sets the default credential cache to something else.
 Because /tmp/krb5... isn't a collection, That causes the same
 issue as above, but in addition, rpc.gssd doesn't seem to work as
 well with credentials in /tmp as in KEYRING. So there's a special
-check in pam_reg_cc. If the default in krb5.conf is in KEYRING,
-and KRB5CCNAME is in /tmp, it copies the credentials into a new
-KEYRING credential and fixes up KRB5CCNAME to point to it. So on
+check in pam_reg_cc. If the default in krb5.conf is a collection,
+and KRB5CCNAME is something else, it copies the credentials into a new
+collection that matches what's in krb5.conf and fixes up KRB5CCNAME to point to it. So on
 Ubuntu we still recommend setting the default in krb5.conf to
-KEYRING:persistent:%{uid}, and setting "usecollection".
+KEYRING:persistent:%{uid} or KCM:, and setting "usecollection".
 .PP
 From auth, this module implements a no-op authenticate. The code is in setcred.
 From session, it implements session start. Session end is a no-op. It does not 
