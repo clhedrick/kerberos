@@ -107,6 +107,8 @@ net_read(int fd, char *buf, int len)
 {
     int cc, len2 = 0;
 
+    __asm__ (".symver memcpy,memcpy@GLIBC_2.2.5");
+
     do {
         cc = SOCKET_READ((SOCKET)fd, buf, len);
         if (cc < 0) {
@@ -190,6 +192,19 @@ int write_lasthost(char *buf) {
 
 */
 
+// this is stupid. There are two different versions of strerror_r with the same name
+// have to figure out which one we have and provide a standard interface
+char *my_strerror(int errnum, char *buf, size_t buflen);
+char *my_strerror(int errnum, char *buf, size_t buflen) {
+#if (_POSIX_C_SOURCE >= 200112L) && !_GNU_SOURCE
+    if (strerror_r(errnum, buf, buflen) == 0)
+        return "unable to translate error number";
+    return buf;
+#else
+    return strerror_r(errnum, buf, buflen);
+#endif
+}
+
 
 #ifdef PAM
 char *pam_kgetcred(char *krb5ccname, struct passwd * pwd, krb5_context context, pam_handle_t *pamh);
@@ -263,7 +278,9 @@ int main(int argc, char *argv[])
      gid_t oldgid;
      uid_t oldeuid;
      gid_t oldegid;
-
+     struct passwd pwd_struct;
+     char pwd_buf[2048];
+     char error_buf[2048];
 
      // this has to be internal, because it needs pamh, which is a local
      void __attribute__ ((format (printf, 2, 3))) mylog (int level, const char *format, ...) {
@@ -335,6 +352,7 @@ int main(int argc, char *argv[])
       */
      opterr = 0;
 #ifndef PAM
+
      // pam uses pam_syslog, which doesn't need this
      openlog("kgetcred", 0, LOG_AUTHPRIV);
      while ((ch = getopt(argc, argv, "dalruPU:F:H:w:")) != -1) {
@@ -458,7 +476,8 @@ int main(int argc, char *argv[])
     // back to the user when we've finished doing things that
     // require setuid root.
     if (!pwd) {
-        pwd = getpwuid(getuid());
+        getpwuid_r(getuid(), &pwd_struct, pwd_buf, sizeof(pwd_buf), &pwd);
+        // ignoring return value. An error return sets pwd to NULL
         if (!pwd) {
             mylog(LOG_ERR, "Can't find current user");
             goto done;
@@ -714,11 +733,11 @@ int main(int argc, char *argv[])
         strncat(mbuf, pbuf, sizeof(mbuf) - strlen(mbuf) - 1);
         sock = socket(ap->ai_family, SOCK_STREAM, 0);
         if (sock < 0) {
-            mylog(LOG_ERR, "%s: socket: %s", mbuf, strerror(errno));
+            mylog(LOG_ERR, "%s: socket: %s", mbuf, my_strerror(errno, error_buf, sizeof(error_buf)));
             continue;
         }
         if (connect(sock, ap->ai_addr, ap->ai_addrlen) < 0) {
-            mylog(LOG_ERR, "%s: connect: %s", mbuf, strerror(errno));
+            mylog(LOG_ERR, "%s: connect: %s", mbuf, my_strerror(errno, error_buf, sizeof(error_buf)));
             close(sock);
             sock = -1;
             continue;
@@ -1133,6 +1152,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *ccname = NULL;
   const char *username;
   struct passwd * pwd;
+  struct passwd pwd_struct;
+  char pwd_buf[2048];
   krb5_context context;
   int retval;
   char *specified_name = NULL; // ccache name specified by user
@@ -1162,7 +1183,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       return PAM_AUTHINFO_UNAVAIL; // go ahead and do the login anyway
   }
 
-  pwd = getpwnam(username);
+  getpwnam_r(username, &pwd_struct, pwd_buf, sizeof(pwd_buf), &pwd);
   if (!pwd) {
       mylog(LOG_ERR, "pam_kgetcred can't get information on current user");
       return PAM_USER_UNKNOWN; // go ahead and do the login anyway

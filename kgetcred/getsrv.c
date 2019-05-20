@@ -80,6 +80,7 @@ char **getsrv( const char * domain,
     u_char hostbuf[256];
     u_char *msg, *eom, *cp;	/* answer buffer positions */
     int dlen, type, priority, weight, port;
+    char *nextitem;
 
     if ( !domain || !*domain ||
 	 !service || !*service ||
@@ -141,6 +142,7 @@ char **getsrv( const char * domain,
 
 	dlen = _getshort(cp);
 	cp += sizeof(u_short);
+	nextitem = cp + dlen;
 
 	// not srv record, skip to the next record
 	if ( type != T_SRV ) {
@@ -168,6 +170,9 @@ char **getsrv( const char * domain,
 	strcpy(hostdata[answerno].name, (char *)hostbuf );
 
 	answerno++;
+
+	cp = nextitem;
+
     }
     if (answerno) {
       int i;

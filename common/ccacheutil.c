@@ -53,6 +53,8 @@ char *
 convert_to_collection(const char *ptr, uid_t uid) {
   char * retval;
 
+  __asm__ (".symver memcpy,memcpy@GLIBC_2.2.5");
+
   if (strncmp(ptr, "KEYRING:", 8) == 0) {
     // count colons in ccname
     int numcolon = 0; 
