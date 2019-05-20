@@ -84,6 +84,18 @@ static void mylog (int level, const char *format, ...) {
   va_end(args);
 }
 
+// this is stupid. There are two different versions of strerror_r with the same name
+// have to figure out which one we have and provide a standard interface
+char *my_strerror(int errnum, char *buf, size_t buflen);
+char *my_strerror(int errnum, char *buf, size_t buflen) {
+#if (_POSIX_C_SOURCE >= 200112L) && !_GNU_SOURCE
+    if (strerror_r(errnum, buf, buflen) == 0)
+        return "unable to translate error number";
+    return buf;
+#else
+    return strerror_r(errnum, buf, buflen);
+#endif
+}
 
 static int
 net_read(int fd, char *buf, int len)
@@ -177,6 +189,7 @@ int main(int argc, char *argv[])
     unsigned debug = 0;
     char *message = NULL;
     char *testfile = NULL;
+    char error_buf[2048];
 
     __asm__ (".symver memcpy,memcpy@GLIBC_2.2.5");
 
@@ -368,11 +381,11 @@ int main(int argc, char *argv[])
         strncat(mbuf, pbuf, sizeof(mbuf) - strlen(mbuf) - 1);
         sock = socket(ap->ai_family, SOCK_STREAM, 0);
         if (sock < 0) {
-            mylog(LOG_ERR, "%s: socket: %s", mbuf, strerror(errno));
+            mylog(LOG_ERR, "%s: socket: %s", mbuf, my_strerror(errno, error_buf, sizeof(error_buf)));
             continue;
         }
         if (connect(sock, ap->ai_addr, ap->ai_addrlen) < 0) {
-            mylog(LOG_ERR, "%s: connect: %s", mbuf, strerror(errno));
+            mylog(LOG_ERR, "%s: connect: %s", mbuf, my_strerror(errno, error_buf, sizeof(error_buf)));
             close(sock);
             sock = -1;
             continue;
