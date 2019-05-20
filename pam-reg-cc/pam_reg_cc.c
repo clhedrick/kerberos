@@ -250,6 +250,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   krb5_cc_cursor cur = NULL;
   krb5_creds creds;
   struct passwd * pwd = NULL;
+  struct passwd pwd_struct;
+  char pwd_buf[2048];
   krb5_principal userprinc = NULL;
   int found_current_tgt = FALSE;
   time_t now;
@@ -290,7 +292,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   if (pam_get_user(pamh, &username, NULL) != PAM_SUCCESS) 
     return PAM_AUTHINFO_UNAVAIL;
 
-  pwd = getpwnam(username);
+  getpwnam_r(username, &pwd_struct, pwd_buf, sizeof(pwd_buf), &pwd);
   if (!pwd) goto err;
 
   olduid = getuid();

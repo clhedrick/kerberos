@@ -74,7 +74,10 @@ Such scripts should do a kdestroy at the end.
 .PP
 pam_kgetcred implements only session start (and a no-op session end).
 .PP
-The hostname of at least one server running credserv must be specified in /etc/krb5.conf, e.g.
+Normally, kgetcred assumes that the server is on the same system as the Kerberos
+server(s). It should be able to find this by doing a DNS lookup of the Kerberos
+services using SRV records. If this isn't set up for your domain, you can
+use the following to specify the servers:
 .PP
 .nf
 [appdefaults]

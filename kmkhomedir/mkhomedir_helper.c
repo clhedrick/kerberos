@@ -8,7 +8,7 @@
      <morgan@parc.power.net> 1996
  */
 
-#include "config.h"
+//#include "config.h"
 
 #include <stdarg.h>
 #include <sys/types.h>

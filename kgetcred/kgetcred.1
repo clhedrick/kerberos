@@ -85,6 +85,10 @@ Kgetcred does not work for users with one-time passwords unless credserv is run
 with the impersonate option. Without impersonate, kgetcred keeps a copy of a key table
 for the user. Key tables can't be generated or used for users with one-time passwords.
 .PP
+Normally, kgetcred assumes that the server is on the same system as the Kerberos
+server(s). It should be able to find this by doing a DNS lookup of the Kerberos
+services using SRV records. If this isn't set up for your domain, you can
+use the following to specify the servers:
 .nf
 [appdefaults]
 kgetcred = {

@@ -142,6 +142,8 @@ int main(int argc, char *argv[])
     char ch;
     char *dirname = NULL;
     struct passwd * pwd;
+    struct passwd pwd_struct;
+    char pwd_buf[2048];
     char *serverhost = NULL;
 #endif
 
@@ -251,7 +253,7 @@ int main(int argc, char *argv[])
     }
 
 #ifndef PAM    
-    pwd = getpwnam(username);
+    getpwnam_r(username, &pwd_struct, pwd_buf, sizeof(pwd_buf), &pwd);
     if (!pwd) {
         message = "Can't find current user";
         goto done;
@@ -519,6 +521,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   const char *username;
   struct passwd * pwd;
+  struct passwd pwd_struct;
+  char pwd_buf[2048];
   struct stat statbuf;
   char *message;
   char *serverhost = NULL;
@@ -568,7 +572,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   pwfile = fopen("/etc/passwd", "r");
   if (pwfile) {
-      while ((pwd = fgetpwent(pwfile))) {
+      while (fgetpwent_r(pwfile, &pwd_struct, pwd_buf, sizeof(pwd_buf), &pwd) == 0) {
           if (strcmp(pwd->pw_name, username) == 0) {
               fclose(pwfile);
               return PAM_SUCCESS; // local user; nothing to do
@@ -577,7 +581,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       fclose(pwfile);      
   }
   
-  pwd = getpwnam(username);
+  getpwnam_r(username, &pwd_struct, pwd_buf, sizeof(pwd_buf), &pwd);
   if (!pwd) {
       pam_syslog(pamh, LOG_ERR, "Can't find current user");
       pam_error(pamh, "Can't find current user");

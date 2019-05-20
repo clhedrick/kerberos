@@ -130,6 +130,11 @@ char **getsrv( const char * domain,
 
 	cp += n;
 
+	// make sure we have at least through dlen
+	if (cp >= (eom - 10)) {
+	  break;
+	}
+
 	// despite the name, getshort gets an unsigned short
 	type = _getshort(cp);
 	cp += sizeof(u_short);
@@ -148,6 +153,11 @@ char **getsrv( const char * domain,
 	if ( type != T_SRV ) {
 	    cp += dlen;
 	    continue;
+	}
+
+	// make sure we have priority, weight, port
+	if (cp >= (eom - 6)) {
+	  break;
 	}
 
 	priority = _getshort(cp);
