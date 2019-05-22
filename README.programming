@@ -1,3 +1,50 @@
+This file applies to the C programs. There's a separate file
+for the Java application.
+
+----------
+
+The pam modules are intended to be thread-safe. Beware of library
+functions that aren't. The most common are getpwnam/uid, and strerr.
+Use the reentrant versions.
+
+----------
+
+There should be no code that depends upon the details of specific
+credential cache types, except in common/ccacheutil. You should
+be able to add support for a new cache type just by adding
+support to ccacheutil.
+
+There's one exception for FILE type, where there's specific code
+a couple of places for renewing credentials. It creates a new
+file, gets it right, then renames it over the old one. I don't
+see a way to renew credentials atomically with the othe cache
+types. 
+
+In theory this means there's a race condition in renewal if a
+renewal happens at exactly the same time that rpc.gssd tries to
+reevaluate a user's credentials.
+
+
+---------
+
+Note that there's an issue with time in 2038. Make sure this
+code can handle it. This is a possible issue with anything that
+is krb5_timestamp and with the times component in a credential.
+
+The problem is that krb5_timestamp is signed 32-bits. It will
+become negative in 2038. When a time needs to be compared with
+a time_t or otherwise used for a computation, it should be
+cast, e.g. (time_t)(uint32_t)creds.times.endtime
+
+I don't do those casts in impersonate.c, because we're neither
+widening to a 64-bit time_t nor doing comparisons. I think 
+the code is safe.
+
+Testing is hard, because it requires a Kerberos server whose time
+is set forward.
+
+---------
+
 I build all of the code under Centos 7. But I want to support Centos 7
 and Ubuntu 14.  Generally code can be used in older releases. But
 sometimes a newer version of a libray function is used. The loader
