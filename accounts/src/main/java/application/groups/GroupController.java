@@ -437,13 +437,32 @@ public class GroupController {
 		return groupGet(name, request, response, model);	
 	    }
 
-	    for (String d: delowner) {
-		logger.info("ip group-mod " + name + " --delattr=owner=uid=" + filtername(d) + conf.usersuffix);
-		if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--delattr=owner=uid=" + filtername(d) + conf.usersuffix}, env) != 0) {
-		    messages.add("Unable to delete user " + filtername(d) + " as owner.");
-		    continue;
+	    // for some reason this no longer works
+	    if (false) {
+		for (String d: delowner) {
+		    logger.info("ip group-mod " + name + " --delattr=owner=uid=" + filtername(d) + conf.usersuffix);
+		    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--delattr=owner=uid=" + filtername(d) + conf.usersuffix}, env) != 0) {
+			messages.add("Unable to delete user " + filtername(d) + " as owner.");
+			continue;
+		    }
 		}
 	    }
+
+	    for (String d: delowner)
+		oldowners.remove(filtername(d));
+
+	    // oldowners is now updated to have all owners
+	    var command = new ArrayList<String>();
+	    command.add("/bin/ipa");
+	    command.add("group-mod");
+	    command.add(name);
+	    for (var owner: oldowners)
+		command.add("--owner=" + owner);
+	    logger.info(command.toString());
+	    if (docommand.docommand (command.toArray(new String[0]), env) != 0) {
+		messages.add("Unable to update owners " + oldowners.toString());
+	    }
+
 	    // other fields aren't populated, so return immediately
 	    return groupGet(name, request, response, model);	
 	}
@@ -477,21 +496,41 @@ public class GroupController {
 		    // delete the original creator from being an owner.
 		    if (first && oldowners.size() == 0 && creators.size() > 0) {
 			for (String c: creators) {
-			    logger.info("ipa group-mod " + name + " --addattr=owner=" + c);
-			    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=owner=" + c}, env) != 0) { 
-				messages.add("Unable to add creator as owner: " + c);
-				return groupGet(name, request, response, model);
+			    if (false) {
+				logger.info("ipa group-mod " + name + " --addattr=owner=" + c);
+				if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=owner=" + c}, env) != 0) { 
+				    messages.add("Unable to add creator as owner: " + c);
+				    return groupGet(name, request, response, model);
+				}
 			    }
+			    oldowners.add(c);
 			}
 		    }
 		    first = false;
-		    logger.info("ipa group-mod " + name + " --addattr=owner=uid=" + filtername(n) + conf.usersuffix);	     
-		    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=owner=uid=" + filtername(n) + conf.usersuffix}, env) != 0) {
-			messages.add("Unable to add user " + n + " as owner.");
-			continue;
+		    if (false) {
+			logger.info("ipa group-mod " + name + " --addattr=owner=uid=" + filtername(n) + conf.usersuffix);	     
+			if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--addattr=owner=uid=" + filtername(n) + conf.usersuffix}, env) != 0) {
+			    messages.add("Unable to add user " + n + " as owner.");
+			    continue;
+			}
 		    }
+		    oldowners.add(filtername(n));
 		}
 	    }
+
+	    // oldowners is now updated to have all owners, new and old
+	    // will give [a, b], need {a,b}. this isn't the most efficient but is the clearest
+	    var command = new ArrayList<String>();
+	    command.add("/bin/ipa");
+	    command.add("group-mod");
+	    command.add(name);
+	    for (var owner: oldowners)
+		command.add("--owner=" + owner);
+	    logger.info(command.toString());
+	    if (docommand.docommand (command.toArray(new String[0]), env) != 0) {
+		messages.add("Unable to update owners " + oldowners.toString());
+	    }
+
 	}
 
 	if (confirmMembers != null && confirmMembers.equals("true")) {
