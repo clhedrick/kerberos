@@ -468,7 +468,7 @@ public class GroupController {
 	}
 
 
-	if (newowner != null) {
+	if (newowner != null && newowner.trim().length() > 0) {
 	    boolean first = true;
 	    for (String n: newowner.split("\\s")) {
 		n = n.trim();
