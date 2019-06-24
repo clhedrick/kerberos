@@ -161,15 +161,7 @@ public class HostsController {
 	if (!foundAddr)
 	    return ("Error: the hostnae specified " + hostname + " doesn't agree with the address you're coming from, " + remoteAddr).getBytes();
 
-	// need an authorized user to add a host
-	// root can update their key table
-	// so see if they're authorized
-	if (principal != null && principal.getName() != null) {
-
-        // yes. verify that they're in the right group, and try to add the host
-
-	String user = principal.getName();
-
+	// set up for LDAP operations
 	Configuration sconfig = makeServicesConfiguration(null);
 	LoginContext lc = null;
 	try {
@@ -188,6 +180,52 @@ public class HostsController {
 	    logger.error("LoginContext has empty subject");
 	    return "Error: HostsController Can't setup authentication".getBytes();
 	}
+
+	// we need either an authorized user or a host in hostgroup self-managed
+
+	// if no user, better be in the hostgroup
+	if (principal == null || principal.getName() != null) {
+
+	    // look up hostgroup in LDAP
+	    common.JndiAction action = new common.JndiAction(new String[]{Config.getConfig().selfmanagedfilter, "", "member"});
+
+	    Subject.doAs(servicesSubject, action);
+
+	    if (action.val == null || action.val.size() == 0) {
+		return ("Error: HostsController can't find hostgroup self-managed in database").getBytes();
+	    }
+
+	    // here's what we'll find:
+	    // member: fqdn=c217.cs.rutgers.edu,cn=computers,cn=accounts,dc=cs,dc=rutgers,dc=edu
+
+	    var attrs = action.val.get(0);
+	    var hosts = attrs.get("member");
+	    var hostIsMember = false;
+
+	    if (hosts != null) {
+		for (var host: hosts) {
+		    var comma = host.indexOf(",");
+		    if (comma > 0) {
+			var memberhost = host.substring("fqdn=".length(), comma);
+			if (hostname.equals(memberhost)) {
+			    hostIsMember = true;
+			    break;
+			}
+		    }			
+		}
+	    }
+	    if (! hostIsMember)
+		return "Sorry, your host is not registered as self-managed".getBytes();
+
+	    // end if not principal specified. At this point the host has been checked,
+	    // so it's OK to get a key table
+	} else {
+
+        // we have a principal. If it's authorized, we can add the host
+
+        // yes. verify that they're in the right group, and try to add the host
+
+	String user = principal.getName();
 
 	common.JndiAction action = new common.JndiAction(new String[]{"(uid=" + user + ")", "", "memberof"});
 
@@ -273,6 +311,7 @@ public class HostsController {
 	}
 
 	}
+
 	// end of code to add the host
 	// get a new key table, even if not authorized user
 

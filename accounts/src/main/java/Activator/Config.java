@@ -69,6 +69,7 @@ public class Config {
     public String groupmanagerfilter = null;
     public String loginmanagerfilter = null;
     public String groupsownedfilter = null;
+    public String selfmanagedfilter = null;
     public String helpmail = null;
     public String usersuffix = null;
     public String usermgmturl = null;
@@ -208,6 +209,8 @@ public class Config {
 			loginmanagerfilter = atoms[1];
 		    if (atoms[0].equals("groupsownedfilter"))
 			groupsownedfilter = atoms[1];
+		    if (atoms[0].equals("selfmanagedfilter"))
+			selfmanagedfilter = atoms[1];
 		    if (atoms[0].equals("helpmail"))
 			helpmail = atoms[1];
 		    if (atoms[0].equals("usersuffix"))
