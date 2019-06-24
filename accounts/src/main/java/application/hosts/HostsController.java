@@ -127,7 +127,9 @@ public class HostsController {
     public byte[] hostsGet(@RequestParam(value="host", required=false) String hostname,
 			   HttpServletRequest request, HttpServletResponse response, Principal principal) {
 
-	Logger logger = null;
+	List<String> messages;
+	final String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
+	final Logger logger = LogManager.getLogger();
 
 	if (hostname == null)
 	    return "Error: you must supply a host parameter".getBytes();
@@ -159,9 +161,14 @@ public class HostsController {
 	if (!foundAddr)
 	    return ("Error: the hostnae specified " + hostname + " doesn't agree with the address you're coming from, " + remoteAddr).getBytes();
 
-	String user = principal.getName();
+	// need an authorized user to add a host
+	// root can update their key table
+	// so see if they're authorized
+	if (principal != null && principal.getName() != null) {
 
-	logger = LogManager.getLogger();
+        // yes. verify that they're in the right group, and try to add the host
+
+	String user = principal.getName();
 
 	Configuration sconfig = makeServicesConfiguration(null);
 	LoginContext lc = null;
@@ -203,10 +210,9 @@ public class HostsController {
 	    return ("Error: HostController: " + user + " is not authorized to add hosts").getBytes();
 	}
 
-	String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
-
+	messages = new ArrayList<String>();
 	logger.info("ipa host-add " + hostname + " --addattr=nshostlocation=research-user");
-	List<String> messages = new ArrayList<String>();
+
 	if (docommand.docommand (new String[]{"/bin/ipa", "host-add", hostname, "--addattr=nshostlocation=research-user"}, env, messages) != 0) {
 	    boolean exists = false;
 	    String errmsg = "Error: ";
@@ -266,6 +272,10 @@ public class HostsController {
 	} catch (Exception igore) {
 	}
 
+	}
+	// end of code to add the host
+	// get a new key table, even if not authorized user
+
 	logger.info("ipa-getkeytab -p host/" + hostname + " -k /tmp/" + hostname + ".kt");
 	messages = new ArrayList<String>();
 	if (docommand.docommand (new String[]{"/sbin/ipa-getkeytab", "-p", "host/" + hostname, "-k", "/tmp/" + hostname + ".kt"}, env, messages) != 0) {
@@ -301,7 +311,6 @@ public class HostsController {
 	    return errmsg.getBytes();
 	    }
 
-
 	try {
 	    File file = new File("/tmp/" + hostname + ".kt");
 	    FileInputStream fis = new FileInputStream(file);
@@ -314,6 +323,5 @@ public class HostsController {
 	} catch (Exception e) {
 	    return "Error: can't read keytable from file".getBytes();
 	}
-
     }
 }

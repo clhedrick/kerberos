@@ -42,7 +42,7 @@ public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
         http
 	    .httpBasic().and().authorizeRequests()
 	    // use basic auth with LDAP for this one URL only
-            .antMatchers("/enrollhosts").authenticated()
+            .antMatchers("/enrollhosts").permitAll()
 	    .antMatchers("/**").permitAll();
     }
 
