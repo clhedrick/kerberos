@@ -36,7 +36,19 @@ public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
     // We're doing our own authentiction. So we essentially disable 
     // Spring's by saying everything is authorized. The reason we want
     // Spring security is because it handles CSRF for us as long as
-    // we use Thyme forms.
+    // we use Thyme forms, and also to handle BASIC.
+    //   Note that http BASIC auth is enabled.
+    // However nothing says authentication required, which makes it
+    // optional. The hosts enrollment process uses BASIC auth, but
+    // some functions don't require it. So the code checks whether
+    // the request is authenticated or not.
+    //   In this configuration there's actually nothing accomplished
+    // by listing /enrollhosts separately. It used to have a different
+    // requirement.
+
+    // The second configure sets up the LDAP authentication used
+    // to implement the HTTP BASIC.
+
      @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
