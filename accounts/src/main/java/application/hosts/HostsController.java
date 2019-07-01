@@ -200,19 +200,16 @@ public class HostsController {
 
 	    var attrs = action.val.get(0);
 	    var hosts = attrs.get("member");
-	    var hostIsMember = false;
 
-	    if (!hosts)
-		return "group " + Config.getConfig().selfmanagedfilter + " doesn't have any members";
+	    if (hosts == null)
+		return ("group " + Config.getConfig().selfmanagedfilter + " doesn't have any members").getBytes();
 
-	    for (var host: hosts) {
-		memberhost = utils.getMatch(host, "^fqdn=(.+?),");
-		if (hostname.equals(memberhost)) {
-		    hostIsMember = true;
-		    break;
-		}
-	    }
-	    if (! hostIsMember)
+	    // hostname has to match at least one entry in hosts.
+	    // but hosts isn't just a list of hostnames. They look like fqdn=HOST,....
+	    // utils.getMatch(x, "^fqdn=(.+?),.*") extracts the hostname from the this. trailing .* needed because
+	    //    it matches the whole string. +? is reluctant match. matches minimal length, because it needs
+	    //    to terminate on the first ,
+	    if (! hosts.stream().anyMatch (x -> hostname.equals(utils.getMatch(x, "^fqdn=(.+?),.*"))))
 		return "Sorry, your host is not registered as self-managed".getBytes();
 
 	    // end if not principal specified. At this point the host has been checked,

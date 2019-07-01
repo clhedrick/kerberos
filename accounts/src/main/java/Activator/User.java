@@ -124,7 +124,7 @@ public class User {
 
     // based on results of ldap query to Rutgers ldap, get the list of groups they are in
     // that we manage. based on [managed] section of config file
-    public Set<String> makeUserMaintainedGroups(Config config, Map<String,List<String>> universityData) {
+    public Set<String> makeAutomaticGroups(Config config, Map<String,List<String>> universityData) {
 	var retGroups = new HashSet<String>();
 
 	// non-course groups. these are defined by ldap filters, so we run the filters on each group
@@ -191,7 +191,7 @@ public class User {
 
     private Map<String, Set<String>> loginClusterCache = new HashMap<String, Set<String>>();
 
-    // See what clusters this group is allowed on. 
+    // See what clusters this group is allowed on, input is DN specifying the group
     // Only for manually maintained groups
     // cache the data, because when we're reviewing accounts this could be done a lot
     public Set<String> getLoginClustersDn(String dn, Subject subj, Config config) {
@@ -206,7 +206,7 @@ public class User {
 	if (loginClusterCache.containsKey(groupName))
 	    return loginClusterCache.get(groupName);
 
-	// this is for manually maintained groups, so exclose automatch groups
+	// this is for manually maintained groups, so exclude automatch groups
 	// there are two types of automatic group: course and other, with somewhat different tests
 	if (isCourseGroup(groupName, config) || config.managed.groups.contains(groupName)) {
 	    loginClusterCache.put(groupName, null);
@@ -674,9 +674,9 @@ public class User {
 	
 
 		    // get automaticallly maintained groups from University data. will have to filters to see if they fit the cluster
-		    var userMaintainedGroups = user.makeUserMaintainedGroups(config, universityData);
+		    var automaticGroups = user.makeAutomaticGroups(config, universityData);
 		    // list of login groups for all clusters - just for logging
-		    var userManualLoginGroups = new HashSet<String>();
+		    var manualLoginGroups = new HashSet<String>();
 		    // list clusters user is allowed on
 		    var userAllowedClusters = new HashSet<String>();
 
@@ -686,14 +686,14 @@ public class User {
 			if (cleanup && !cluster.docleanup)
 			    continue;
 			logger.debug("For cluster " + cluster.name);
-			// for each group user is in from univ data (usermainainedgroups)
+			// for each group user is in from univ data (automaticgroups)
 			//   if course
 			//      filter with cluster's course list
 			//   no,
 			//      filter with cluster's group list
 			var ok = false;
 			logger.debug("  Automatic groups:");
-			for (var group: userMaintainedGroups) {
+			for (var group: automaticGroups) {
 			    if (user.isCourseGroup(group, config)) {
 				if (user.isCourseOkForCluster(group, cluster)) {
 				    ok = true;
@@ -711,7 +711,7 @@ public class User {
 			logger.debug("  Manual groups:");
 			var manualLoginForCluster = user.makeManualLoginGroups(config, action.val, subj, cluster.name);
 			// merge into full list for log info
-			userManualLoginGroups.addAll(manualLoginForCluster);
+			manualLoginGroups.addAll(manualLoginForCluster);
 			
 			for (var group: manualLoginForCluster) {
 			    logger.debug("    " + group);
@@ -761,16 +761,16 @@ public class User {
 
 		    // add to groups that they should be in but aren't
 		    var addGroups = new HashSet<String>();
-		    addGroups.addAll(userMaintainedGroups);
+		    addGroups.addAll(automaticGroups);
 		    addGroups.removeAll(existingAutomaticGroups);
 
 		    // remove from groups that they are in but shouldn't be
 		    var removeGroups = new HashSet<String>();
 		    removeGroups.addAll(existingAutomaticGroups);
-		    removeGroups.removeAll(userMaintainedGroups);
+		    removeGroups.removeAll(automaticGroups);
 
-		    logger.debug("User should be in groups: " + userMaintainedGroups);
-		    logger.debug("User is in manual groups: " + userManualLoginGroups);
+		    logger.debug("User should be in groups: " + automaticGroups);
+		    logger.debug("User is in manual groups: " + manualLoginGroups);
 		    logger.debug("User should be in clusters: " + userAllowedClusters);
 		    logger.debug("Automatic groups user actually is a member of: " + existingAutomaticGroups);
 		    logger.debug("Add to groups: " + addGroups);

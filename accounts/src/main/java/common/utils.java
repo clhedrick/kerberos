@@ -289,12 +289,11 @@ public class utils {
 	    return null;
 	if (!matcher.matches())
 	    return null;
-	return matcher.group();
+	return matcher.group(1);
     }
 
-
     public static void main( String[] argarray) {
-	String memberhost = getMatch(argarray[0], "^fqdn=(.+?),");
+	String memberhost = getMatch(argarray[0], "^fqdn=(.+?),.*");
 	System.out.println(memberhost);
 	//	System.out.println(needsPassword(argarray[0]));
     }
