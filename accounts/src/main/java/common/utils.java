@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Calendar;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import java.text.SimpleDateFormat;
 import javax.security.auth.*;
 import javax.security.auth.callback.*;
@@ -278,8 +280,23 @@ public class utils {
 	return false;
     }
 
+    public static String getMatch(String input, String regex) {
+	Pattern pat = Pattern.compile(regex);
+	if (pat == null)
+	    return null;
+	Matcher matcher = pat.matcher(input);
+	if (matcher == null)
+	    return null;
+	if (!matcher.matches())
+	    return null;
+	return matcher.group();
+    }
+
+
     public static void main( String[] argarray) {
-	System.out.println(needsPassword(argarray[0]));
+	String memberhost = getMatch(argarray[0], "^fqdn=(.+?),");
+	System.out.println(memberhost);
+	//	System.out.println(needsPassword(argarray[0]));
     }
 
 }

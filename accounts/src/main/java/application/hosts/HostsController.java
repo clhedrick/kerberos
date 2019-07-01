@@ -202,16 +202,14 @@ public class HostsController {
 	    var hosts = attrs.get("member");
 	    var hostIsMember = false;
 
-	    if (hosts != null) {
-		for (var host: hosts) {
-		    var comma = host.indexOf(",");
-		    if (comma > 0) {
-			var memberhost = host.substring("fqdn=".length(), comma);
-			if (hostname.equals(memberhost)) {
-			    hostIsMember = true;
-			    break;
-			}
-		    }			
+	    if (!hosts)
+		return "group " + Config.getConfig().selfmanagedfilter + " doesn't have any members";
+
+	    for (var host: hosts) {
+		memberhost = utils.getMatch(host, "^fqdn=(.+?),");
+		if (hostname.equals(memberhost)) {
+		    hostIsMember = true;
+		    break;
 		}
 	    }
 	    if (! hostIsMember)
