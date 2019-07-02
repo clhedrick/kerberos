@@ -280,6 +280,9 @@ public class utils {
 	return false;
     }
 
+    // find the first match in a regexp. THis would be the first
+    // thing in (). Uses find, so you need to put ^ at the beginning
+    // and $ at the end if you want to match the whole string
     public static String getMatch(String input, String regex) {
 	Pattern pat = Pattern.compile(regex);
 	if (pat == null)
@@ -287,13 +290,13 @@ public class utils {
 	Matcher matcher = pat.matcher(input);
 	if (matcher == null)
 	    return null;
-	if (!matcher.matches())
+	if (!matcher.find())
 	    return null;
 	return matcher.group(1);
     }
 
     public static void main( String[] argarray) {
-	String memberhost = getMatch(argarray[0], "^fqdn=(.+?),.*");
+	String memberhost = getMatch(argarray[0], "^fqdn=(.+?),");
 	System.out.println(memberhost);
 	//	System.out.println(needsPassword(argarray[0]));
     }

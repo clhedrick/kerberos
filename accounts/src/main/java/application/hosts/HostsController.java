@@ -184,64 +184,39 @@ public class HostsController {
 	// we need either an authorized user or a host in hostgroup self-managed
 
 	// if no user, better be in the hostgroup
-	if (principal == null || principal.getName() != null) {
+	if (principal == null || principal.getName() == null) {
 
 	    // look up hostgroup in LDAP
-	    common.JndiAction action = new common.JndiAction(new String[]{Config.getConfig().selfmanagedfilter, "", "member"});
+	    var filter = Config.getConfig().selfmanagedfilter.replace("$HOST", hostname);
+	    common.JndiAction action = new common.JndiAction(new String[]{filter, "", "dn"});
 
 	    Subject.doAs(servicesSubject, action);
 
 	    if (action.val == null || action.val.size() == 0) {
-		return ("Error: HostsController can't find hostgroup self-managed in database").getBytes();
+		return "Error: your host is not registered as self-managed".getBytes();
 	    }
-
-	    // here's what we'll find:
-	    // member: fqdn=c217.cs.rutgers.edu,cn=computers,cn=accounts,dc=cs,dc=rutgers,dc=edu
-
-	    var attrs = action.val.get(0);
-	    var hosts = attrs.get("member");
-
-	    if (hosts == null)
-		return ("group " + Config.getConfig().selfmanagedfilter + " doesn't have any members").getBytes();
-
-	    // hostname has to match at least one entry in hosts.
-	    // but hosts isn't just a list of hostnames. They look like fqdn=HOST,....
-	    // utils.getMatch(x, "^fqdn=(.+?),.*") extracts the hostname from the this. trailing .* needed because
-	    //    it matches the whole string. +? is reluctant match. matches minimal length, because it needs
-	    //    to terminate on the first ,
-	    if (! hosts.stream().anyMatch (x -> hostname.equals(utils.getMatch(x, "^fqdn=(.+?),.*"))))
-		return "Sorry, your host is not registered as self-managed".getBytes();
 
 	    // end if not principal specified. At this point the host has been checked,
 	    // so it's OK to get a key table
 	} else {
 
-        // we have a principal. If it's authorized, we can add the host
+	// we have a principal. If it's authorized, we can add the host
 
         // yes. verify that they're in the right group, and try to add the host
 
 	String user = principal.getName();
+	var filter = "(&(uid=" + user + ")" + Config.getConfig().addhostsfilter + ")";
 
-	common.JndiAction action = new common.JndiAction(new String[]{"(uid=" + user + ")", "", "memberof"});
+	common.JndiAction action = new common.JndiAction(new String[]{filter, "", "dn"});
 
 	Subject.doAs(servicesSubject, action);
 
 	if (action.val == null || action.val.size() == 0) {
-	    return ("Error: HostsController can't find " + user + " in database").getBytes();
-	}
-
-	boolean canAddHost = true;
-
-	HashMap<String, ArrayList<String>> attrs = null;
-	attrs = action.val.get(0);
-
-	ArrayList groups = attrs.get("memberof");
-	if (groups != null && groups.contains("cn=user-add-host,cn=groups,cn=accounts,dc=cs,dc=rutgers,dc=edu"))
-	    canAddHost = true;
-
-	if (!canAddHost) {
 	    return ("Error: HostController: " + user + " is not authorized to add hosts").getBytes();
 	}
+
+	// the hosts add code is in the alternative with a principal
+	// without a principal we can get a new key table, but not add the host
 
 	messages = new ArrayList<String>();
 	logger.info("ipa host-add " + hostname + " --addattr=nshostlocation=research-user");
@@ -307,8 +282,9 @@ public class HostsController {
 
 	}
 
-	// end of code to add the host
-	// get a new key table, even if not authorized user
+	// end of code to add the host, which is the alternative for authorized user
+
+	// get a new key table, if either authorized user or self-managed host
 
 	logger.info("ipa-getkeytab -p host/" + hostname + " -k /tmp/" + hostname + ".kt");
 	messages = new ArrayList<String>();
