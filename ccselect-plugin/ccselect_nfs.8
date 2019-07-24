@@ -1,0 +1,39 @@
+.TH PAM_REG_CC 8
+.SH NAME
+ccselect_nfs \- cause GSSAPI to use the right principal for NFS
+.SH DESCRIPTION
+.nf
+In /etc/krb5.conf:
+[plugins]
+  ccselect = {
+     module = nfs:/usr/lib/ccselect_nfs.so
+  }
+.fi
+.PP
+This is only relevant to you if users have more than one Kerberos
+principal. We have separate principals for administrative use. I.e.
+user foo also has a principal foo-admin. (It should be foo/admin,
+but IPA won't support that.) If KRB5CCNAME is set to a collection,
+e.g. KEYRING:persistent:NNN, kinit will create a new credential
+cache, but leave the existing one. So you can switch with kswitch.
+(This is particularly useful with one-time passwords, where it's 
+sort of a pain to type in your password.) 
+.PP
+Unfortunately this causes problems with NFS. If your principal 
+expires (or gssd needs to recheck it, as ours does every 10 min),
+it will use your current primary principal. If you've just 
+switched to foo-admin, it will try to set up an NFS context with
+that principal, and presumably fail. 
+.PP
+ccselect_nfs is a plugin that will cause GSSAPI to pick the
+principal that's based on your username.
+.PP
+It should be installed by adding the section 
+shown above to /etc/krb5.conf
+.PP
+Note that there is a default plugin that picks principals based
+on the contents of ~/.k5identity. This plugin is designed to take
+a lower priority than this default one. That way a user can
+still specify their own preferred values. (However currently
+rpc.gssd seems to use .k5identity in /, so .k5identity may not work.)
+

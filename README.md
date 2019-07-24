@@ -97,7 +97,7 @@ mounted without Kerberos). pam_kmkhomedir calls it if your home directory
 doesn't exist. This can also be used for file systems other than 
 home directories, with appropriate options.
 
-## gssd-wrapper
+## ccselect-plugin
 
 This is only relevant to you if users have more than one Kerberos
 principal. We have separate principals for administrative use. I.e.
@@ -112,15 +112,14 @@ Unfortunately this causes problems with NFS. If your principal
 expires (or gssd needs to recheck is, as ours does every 10 min),
 it will use your current primary principal. If you've just 
 switched to foo-admin, it will try to set up an NFS context with
-that principal, and presumably fail. gssd-wrapper intercepts the
-call to gssapi, and tell gssapi to look for the correct principal
-in your collection. As long as there's an active principal for
-foo, it will be used, even if the current primary principal is
-foo-admin.
+that principal, and presumably fail. 
 
-This would be trivial to fix in gssd itself, but we can't get 
-anyone's attention. We fix it with a small library that is 
-added into gssd with LD_PRELOAD.
+ccselect-plugin contains a plugin that will cause GSSAPI to pick the
+principal that's based on your username.
+
+This replaces gssd-wrap, which accomplished the same thing. 
+However gssd-wrap was sort of a hack, that could conceivably
+be broken by code changes. This uses a documented interface.
 
 ## krenew-wrap
 
