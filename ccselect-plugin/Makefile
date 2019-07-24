@@ -8,9 +8,10 @@ ccselect_nfs.so: ccselect_nfs.c
 
 installans: all
 	install --owner=root --group=root --mode=0755 ccselect_nfs.so /config/kerberos-ansible/kerberos-files/copy/usr/lib/ccselect_nfs.so
+	install --owner=root --group=root --mode=0644 ccselect_nfs.8 /config/kerberos-ansible/kerberos-files/copy/usr/share/man/man8/ccselect_nfs.8
 
 install: all
 	install --owner=root --group=root --mode=0755 ccselect_nfs.so /usr/lib/ccselect_nfs.so
-      
+	install --owner=root --group=root --mode=0644 ccselect_nfs.8 /usr/share/man/man8/ccselect_nfs.8      
 
 

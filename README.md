@@ -115,7 +115,7 @@ switched to foo-admin, it will try to set up an NFS context with
 that principal, and presumably fail. 
 
 ccselect-plugin contains a plugin that will cause GSSAPI to pick the
-principal that's based on your username.
+principal that's based on your username when the service is nfs
 
 This replaces gssd-wrap, which accomplished the same thing. 
 However gssd-wrap was sort of a hack, that could conceivably
