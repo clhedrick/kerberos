@@ -83,7 +83,7 @@ ccselect_nfs_initvt(krb5_context context, int maj_ver, int min_ver,
     if (maj_ver != 1)
         return KRB5_PLUGIN_VER_NOTSUPP;
     vt = (krb5_ccselect_vtable)vtable;
-    vt->name = "clh";
+    vt->name = "nfs";
     vt->init = ccselect_nfs_init;
     vt->choose = ccselect_nfs_choose;
     return 0;
