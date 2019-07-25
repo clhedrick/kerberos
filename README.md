@@ -80,8 +80,10 @@ files via NFS is removed within 10 min.)
 
 We're trying to simplify the way this is done, so renewd and pam_reg_cc
 are likely to change. The code in both is specific to the credential
-cache mechanism. Currently it supports /tmp files and KEYRING. KCM will
-be supported when I'm convinced it is ready for use.
+cache mechanism. There's a library in common that has all the code that
+depends upon the mechanism. It should be possible to add a new one
+just by changing that library. Currently only types used on Linux are
+supported.
 
 This may also be useful as a sample if you want to know how to call LDAP using
 GSSAPI authenticaton from C. 
@@ -151,7 +153,9 @@ KRB5CCNAME to the specific credential, e.g.
 KEYRING:persistent:123:krb_ccache_VtilcGC. For kinit
 and kswitch to work properly, you want to set it to
 the collection, i.e. KEYRING:persistent:123. pam_reg_cc
-will fix up KRB5CCNAME in this case
+will fix up KRB5CCNAME in this case. (The code will
+actually work with any collection type. It uses a library
+that understands the specifics of various collection types.)
 
 (2) With Ubuntu, sshd puts credentials in a file in /tmp,
 even if /etc/krb5.conf specifies KEYRING. pam_reg_cc
@@ -177,7 +181,7 @@ renewed annually and distributed to every client.
 
 ## radius-wrap
 
-This is designed to allowo Freeradius to support one-time passwords.
+This is designed to allow Freeradius to support one-time passwords.
 Freeradius supports Kerberos authentication, but it won't work
 with users who have one-time passwords. This small module is
 designed to be used with LD_PRELOAD. It interposes code around
