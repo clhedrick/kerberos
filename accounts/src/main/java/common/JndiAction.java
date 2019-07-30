@@ -112,6 +112,9 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		if (ctx == null)
 		    ctx = new InitialDirContext(env);
 
+		if (filter == null)
+		    return;
+
 		String[] attrIDs = new String[args.length - 2];
 		for (int i = 0; i < (args.length - 2); i++) {
 		    attrIDs[i] = args[i+2];

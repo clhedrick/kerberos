@@ -268,6 +268,10 @@ public class LoginController {
 	if (Match.matchLdap(ourData, conf.groupmanagerfilter))
 	    privs.add("addgroup");
 
+	// DHCP manager?
+	if (Match.matchLdap(ourData, conf.dhcpmanagerfilter))
+	    privs.add("dhcpmanager");
+
 	// now see if they are in login mangers. They can set login attribute
 	if (Match.matchLdap(ourData, conf.loginmanagerfilter)) 
 	    privs.add("loginmanager");

@@ -71,6 +71,7 @@ public class Config {
     public String groupsownedfilter = null;
     public String selfmanagedfilter = null;
     public String addhostsfilter = null;
+    public String dhcpmanagerfilter = null;
     public String helpmail = null;
     public String usersuffix = null;
     public String usermgmturl = null;
@@ -87,6 +88,7 @@ public class Config {
     public String reviewnoclose = null;
     public String reviewurl = null;
     public String superuserfilter = null;
+    public String dhcpbase = null;
 
     final static String CONFIGFILE = "/etc/activator.config";
 
@@ -214,6 +216,9 @@ public class Config {
 			selfmanagedfilter = atoms[1];
 		    if (atoms[0].equals("addhostsfilter"))
 			addhostsfilter = atoms[1];
+		    if (atoms[0].equals("dhcpmanagerfilter"))
+			dhcpmanagerfilter = atoms[1];
+
 		    if (atoms[0].equals("helpmail"))
 			helpmail = atoms[1];
 		    if (atoms[0].equals("usersuffix"))
@@ -246,6 +251,9 @@ public class Config {
 			reviewurl = atoms[1];
 		    if (atoms[0].equals("superuserfilter"))
 			superuserfilter = atoms[1];
+		    if (atoms[0].equals("dhcpbase"))
+			dhcpbase = atoms[1];
+
 
 		}
 
