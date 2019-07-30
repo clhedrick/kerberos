@@ -175,6 +175,8 @@ public class LoginController {
 		    response.sendRedirect("../users/showuser");
 		if ("hosts".equals(model.asMap().get("app")))
 		    response.sendRedirect("../hosts/showhosts");
+		if ("dhcp".equals(model.asMap().get("app")))
+		    response.sendRedirect("../dhcp/showsubnets");
 		else
 		    response.sendRedirect("showgroups");
 	    }
@@ -289,6 +291,8 @@ public class LoginController {
 		response.sendRedirect("../users/showuser");
 	    } else if ("hosts".equals(app)) {
 		response.sendRedirect("../hosts/showhosts");
+	    } else if ("dhcp".equals(app)) {
+		response.sendRedirect("../dhcp/showsubnets");
 	    } else
 		response.sendRedirect("showgroups");
 	} catch (Exception e) {
