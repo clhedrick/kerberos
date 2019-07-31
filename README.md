@@ -80,8 +80,10 @@ files via NFS is removed within 10 min.)
 
 We're trying to simplify the way this is done, so renewd and pam_reg_cc
 are likely to change. The code in both is specific to the credential
-cache mechanism. Currently it supports /tmp files and KEYRING. KCM will
-be supported when I'm convinced it is ready for use.
+cache mechanism. There's a library in common that has all the code that
+depends upon the mechanism. It should be possible to add a new one
+just by changing that library. Currently only types used on Linux are
+supported.
 
 This may also be useful as a sample if you want to know how to call LDAP using
 GSSAPI authenticaton from C. 
@@ -97,7 +99,7 @@ mounted without Kerberos). pam_kmkhomedir calls it if your home directory
 doesn't exist. This can also be used for file systems other than 
 home directories, with appropriate options.
 
-## gssd-wrapper
+## ccselect-plugin
 
 This is only relevant to you if users have more than one Kerberos
 principal. We have separate principals for administrative use. I.e.
@@ -112,15 +114,14 @@ Unfortunately this causes problems with NFS. If your principal
 expires (or gssd needs to recheck is, as ours does every 10 min),
 it will use your current primary principal. If you've just 
 switched to foo-admin, it will try to set up an NFS context with
-that principal, and presumably fail. gssd-wrapper intercepts the
-call to gssapi, and tell gssapi to look for the correct principal
-in your collection. As long as there's an active principal for
-foo, it will be used, even if the current primary principal is
-foo-admin.
+that principal, and presumably fail. 
 
-This would be trivial to fix in gssd itself, but we can't get 
-anyone's attention. We fix it with a small library that is 
-added into gssd with LD_PRELOAD.
+ccselect-plugin contains a plugin that will cause GSSAPI to pick the
+principal that's based on your username when the service is nfs
+
+This replaces gssd-wrap, which accomplished the same thing. 
+However gssd-wrap was sort of a hack, that could conceivably
+be broken by code changes. This uses a documented interface.
 
 ## krenew-wrap
 
@@ -152,7 +153,9 @@ KRB5CCNAME to the specific credential, e.g.
 KEYRING:persistent:123:krb_ccache_VtilcGC. For kinit
 and kswitch to work properly, you want to set it to
 the collection, i.e. KEYRING:persistent:123. pam_reg_cc
-will fix up KRB5CCNAME in this case
+will fix up KRB5CCNAME in this case. (The code will
+actually work with any collection type. It uses a library
+that understands the specifics of various collection types.)
 
 (2) With Ubuntu, sshd puts credentials in a file in /tmp,
 even if /etc/krb5.conf specifies KEYRING. pam_reg_cc
@@ -178,7 +181,7 @@ renewed annually and distributed to every client.
 
 ## radius-wrap
 
-This is designed to allowo Freeradius to support one-time passwords.
+This is designed to allow Freeradius to support one-time passwords.
 Freeradius supports Kerberos authentication, but it won't work
 with users who have one-time passwords. This small module is
 designed to be used with LD_PRELOAD. It interposes code around
