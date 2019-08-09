@@ -13,8 +13,6 @@
 #include <sched.h>
 #include <sys/stat.h>
 
-#define NETNS_RUN_DIR "/var/run/netns"
-
 int main(int argc, char **argv) {
   pid_t parent = getpid();
   uid_t uid = getuid();
@@ -51,13 +49,26 @@ int main(int argc, char **argv) {
   // we'll get a failure either if th link doesn't
   // exist or the file it points to doesn't
   ret = stat(linkname, &statbuf);
+  // we need to check the link owner. if it's root, we
+  // put it there. We don't want a user to be able to
+  // create a link to another user's namespace.
+  if (ret == 0) {
+    // shouldn't be able to fail since stat worked
+    ret = lstat(linkname, &statbuf);    
+    // if owner not root, set failure so we'll kill link
+    if (ret == 0 && statbuf.st_uid != 0)
+      ret = 1;
+  }
+
   if (ret != 0) {
     // in case link exists but file doesn't
-    // we'd want to remove the link
+    // or wrong user owns it
+    // we want to remove the link and recreate it
     unlink(linkname);
   }
 
-  // do the real thing rather than calling system, because
+  // if link doesn't exist, call create.py to create it
+  //   do a fork/exec rather than calling system, because
   // system may not work right for setuid
   if (ret != 0) {
     pid_t pid = fork();
