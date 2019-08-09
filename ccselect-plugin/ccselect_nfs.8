@@ -27,6 +27,9 @@ that principal, and presumably fail.
 .PP
 ccselect_nfs is a plugin that will cause GSSAPI to pick the
 principal that's based on your username, if the service is nfs.
+Note that this module has a lower priority than the default
+module that uses .k5identity. Thus you can override this value
+in that module, if it's every fixed to work with rpc.gssd.
 .PP
 It should be installed by adding the section 
 shown above to /etc/krb5.conf
