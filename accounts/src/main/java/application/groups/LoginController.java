@@ -175,6 +175,8 @@ public class LoginController {
 		    response.sendRedirect("../users/showuser");
 		if ("hosts".equals(model.asMap().get("app")))
 		    response.sendRedirect("../hosts/showhosts");
+		if ("dhcp".equals(model.asMap().get("app")))
+		    response.sendRedirect("../dhcp/showsubnets");
 		else
 		    response.sendRedirect("showgroups");
 	    }
@@ -268,6 +270,10 @@ public class LoginController {
 	if (Match.matchLdap(ourData, conf.groupmanagerfilter))
 	    privs.add("addgroup");
 
+	// DHCP manager?
+	if (Match.matchLdap(ourData, conf.dhcpmanagerfilter))
+	    privs.add("dhcpmanager");
+
 	// now see if they are in login mangers. They can set login attribute
 	if (Match.matchLdap(ourData, conf.loginmanagerfilter)) 
 	    privs.add("loginmanager");
@@ -285,6 +291,8 @@ public class LoginController {
 		response.sendRedirect("../users/showuser");
 	    } else if ("hosts".equals(app)) {
 		response.sendRedirect("../hosts/showhosts");
+	    } else if ("dhcp".equals(app)) {
+		response.sendRedirect("../dhcp/showsubnets");
 	    } else
 		response.sendRedirect("showgroups");
 	} catch (Exception e) {

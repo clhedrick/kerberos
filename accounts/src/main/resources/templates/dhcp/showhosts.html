@@ -1,0 +1,102 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html lang="en">
+<head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
+<title>DHCP Management</title>
+<script type="text/javascript" src="../jquery-3.2.1.min.js" ></script>
+<script th:inline="javascript" type="text/javascript">
+/*<![CDATA[*/
+function deletegroup(event) {
+  var group = $(event.target).next().val();
+  if (!confirm("Are you sure you want to delete this group?"))
+    return;
+  $("#deleteInput").val(group);
+  $("#deleteSubmit").click();
+}
+
+function deleteKeyPress(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 32 || event.keyCode === 13) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    deletegroup(event);
+  }
+}
+
+function validateSubmit(event) {
+  if ($("#name").val() == '') {
+    alert("Name for the new group must be supplied");
+    event.preventDefault();
+    return;
+  }
+  if ("[[${isloginmanager}]]" == "false")
+    return;
+  if (! ($("#sharing").prop("checked") || $("#guests").prop("checked"))) {
+    alert("Sharing and/or login must be checked");
+    event.preventDefault();
+    return;
+  }
+}
+
+function dolookup(event) {
+  window.location.href = "showgroup?name=" + $("#lookup").val();
+}
+
+//$(document).ready(function(){
+//    $(".deleteButton").click(deletegroup);
+//    $(".deleteButton").keypress(deleteKeyPress);
+//    $("#submit").click(validateSubmit);
+//    $("#dolookup").click(dolookup);
+//    });
+
+/*]]>*/
+</script>
+</head>
+<div id="masthead"></div>
+<div id="main">
+
+<div class="messages" th:if="${messages?.size()}">
+<p th:each="msg : ${messages}" th:text="${msg}" />
+</div>
+
+
+<a href="../"> Account Management</a>
+
+<h1> DHCP Host Management </h1>
+
+<form th:action="@{/dhcp/showhosts}" method="post">
+
+<input type="hidden" name="subnet" th:value="${subnet}"/>
+
+<div th:if="${hosts != null and hosts.size() > 0}">
+
+<h2>Current hosts</h2>
+
+<div class="inset" style="padding-top:0.5em">
+
+<div th:each="h : ${hosts}">
+<input type="checkbox" name="del" th:value="${h.cn[0]}"/> 
+<span th:text="${h.address}"/> <span th:text="${h.cn[0]}"/> <span th:text="${h.dhcphwaddress[0]}"/><br/>
+</div>
+</div>
+</div>
+
+<div th:if="${dhcpmanager || superuser}">
+
+<h2 style="margin-top:2em"> Add Host </h2>
+
+<div class="inset" style="margin-top:1em">
+<label>Hostname: <input type="text" name="name" id="name"/></label>
+<br/>
+<label>Ethernet: <input type="text" name="ethernet" id="ethernet"/></label>
+<label>Options: [not normally needed]</br>
+<textarea rows="4" cols="80" name="options" id="options">
+</textarea>
+</label><br/>
+<input type="submit" value="Add/Delete Hosts"/>
+</div>
+</div>
+</form>
+<div th:insert="~{accessibility :: footer}"></div>
+</div>
+</html>
