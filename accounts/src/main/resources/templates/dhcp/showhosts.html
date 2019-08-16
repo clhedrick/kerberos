@@ -60,7 +60,7 @@ function dolookup(event) {
 </div>
 
 
-<a href="../"> Account Management</a>
+<a href="../"> Account Management</a> | <a href="showsubnets"> Subnets </a>
 
 <h1> DHCP Host Management </h1>
 
@@ -75,7 +75,7 @@ function dolookup(event) {
 <div class="inset" style="padding-top:0.5em">
 
 <div th:each="h : ${hosts}">
-<input type="checkbox" name="del" th:value="${h.cn[0]}"/> 
+<input type="checkbox" name="del"  th:value="${h.cn[0]}"/> 
 <span th:text="${h.address}"/> <span th:text="${h.cn[0]}"/> <span th:text="${h.dhcphwaddress[0]}"/><br/>
 </div>
 </div>

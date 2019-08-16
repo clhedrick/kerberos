@@ -80,7 +80,7 @@ public class DhcpHostsController {
     public String filtername(String s) {
 	if (s == null)
 	    return null;
-	String ret = s.replaceAll("[^.0-9]","");
+	String ret = s.replaceAll("[^./0-9]","");
 	if (ret.equals(""))
 	    return null;
 	return ret;
@@ -92,6 +92,8 @@ public class DhcpHostsController {
 	// This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.
 	// This JndiAction junk is needed to execute the LDAP code in a context that's authenticated by
 	// that Subject.
+
+	System.out.println("point 0 " + subnet);
 
 	Config conf = Config.getConfig();
 	var privs = (Set<String>)request.getSession().getAttribute("privs");
@@ -107,122 +109,76 @@ public class DhcpHostsController {
 	// I use an API I wrote around Sun's API support.
 	// See comments on showgroup.jsp
 
-	// default filter -- all hosts
-	// finding all hosts in a subnet is non-trivial. For it to work, we
-	// need a fixedaddress option for all hosts. Otherwise we would have to look at all
-	//   hosts and convert hostname to ip
-	// furthermore, we can only do a text compare, which means we can't do an ldap
-	//   query for the exact range. We convert the subnet to a prefix, do an ldap search
-	//   on that, and then test which of the results are actually in the subnet
-	var filter = "objectclass=dhcphost";
+	// default base, no subnet
+	var base = conf.dhcpbase;
 	if (subnet != null && !subnet.isBlank()) {
-	    // user has passed subnet, parse it
-	    SubnetUtils subnetu = null;
-	    try {
-		subnetu = new SubnetUtils(subnet);
-	    } catch (IllegalArgumentException ignore) {
-		List<String> messages = new ArrayList<String>();
-		messages.add("Subnet must be in format n.n.n.n/d");
-		model.addAttribute("messages", messages);
-		return subnetsController.subnetsGet(request, response, model);
-	    }
-
-	    var subnetInfo = subnetu.getInfo();
-	    // OK. Now look for everything in that range.
-
-	    var i = subnet.indexOf("/");
-	    var net = subnet.substring(0, i);
-	    var bits = 0;
-	    try {
-		bits = Integer.parseInt(subnet.substring(i+1));
-	    } catch (Exception impossible) {}
-	    String mask;
-	    if (bits < 8)
-		mask = "*";
-	    else {
-		i = net.indexOf(".");
-		if (bits < 16)
-		    mask = net.substring(0, i+1) + "*";  // include the .
-		else {
-		    i = net.indexOf(".", i+1);
-		    if (bits < 24)
-			mask = net.substring(0, i+1) + "*";  // include the .			
-		    else {
-			i = net.indexOf(".", i+1);
-			if (bits < 32)
-			    mask = net.substring(0, i+1) + "*";  // include the .
-			else
-			    mask = net;
-		    }
-		}
-	    }
+	    // subnet specified, find the object
+	    var filtered = filtername(subnet);
+	    // filter doesn't allow this
+	    if (subnet.equals("orphanhosts"))
+		filtered = "orphanhosts";
 	    
-	    // now mask is something like 128.6.*
-	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(dhcpStatements=fixed-address* " + mask + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements"});
+	    var filter = "(&(objectclass=dhcpgroup)(cn=" + filtered + "))";
+	    
+	    System.out.println("filter " + filter + " base " + conf.dhcpbase);
+	    common.JndiAction action = new common.JndiAction(new String[]{filter, conf.dhcpbase, "dn"});
 	    Subject.doAs(subject, action);
 
-	    var hosts = action.data;
-	    var entries = new ArrayList<Map<String,List<String>>>();
-	    if (hosts != null && hosts.size() > 0) {
-		for (var host: hosts) {
-		    var statements = host.get("dhcpstatements");
-		    if (statements != null)
-			for (var statement: statements) {
-			    if (statement.startsWith("fixed-address")) {
-				var addresslist = statement.substring("fixed-address".length() + 1);
-				var addresses = addresslist.split("\\s+");
-				for (var address: addresses) {
-				    if (subnetInfo.isInRange(address)) {
-					var addrs = new ArrayList<String>();
-					addrs.add(address);
-					host.put("address", addrs); // save for sort
-					entries.add(host);
-				    }
-				}
-			    }
-			}
-		}
-		// now entries is all the hosts that match the subnet specification
-		Collections.sort(entries, (g1, g2) -> g1.get("address").get(0).compareTo(g2.get("address").get(0)));
-
+	    // should be a list of 1 subnet entry
+	    var entries = action.data;
+	    System.out.println("subnet entries " + entries);
+	    if (entries != null && entries.size() > 0) {
+		// should have a list of one DN
+		var dn = entries.get(0).get("dn");
+		if (dn != null && dn.size() >= 0)
+		    // search base for hosts is the DN of the subnet
+		    base = dn.get(0);
 	    }
-	    // set up model for JSTL to output
 
-	    model.addAttribute("hosts", entries);
-	    model.addAttribute("subnet", subnet);
-	    model.addAttribute("dhcpmanager", (privs.contains("dhcpmanager")));
-	    model.addAttribute("superuser", (privs.contains("superuser")));
-
-	    return "/dhcp/showhosts";
 	}
+				
+	// now look for all hosts within that search base
+	
+	System.out.println("point 1 " + base);
 
-	// no subnet arg. all hosts
-	common.JndiAction action = new common.JndiAction(new String[]{"(objectclass=dhcphost)", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements"});
+	common.JndiAction action = new common.JndiAction(new String[]{"(objectclass=dhcphost)", base, "cn", "dhcphwaddress", "dhcpstatements"});
 	Subject.doAs(subject, action);
 
 	var hosts = action.data;
+
+	System.out.println("point 2 " + hosts);
+	
 	if (hosts != null && hosts.size() > 0) {
 	    for (var host: hosts) {
 		var statements = host.get("dhcpstatements");
+		var address = "255.255.255.255"; // in case none found
 		if (statements != null)
 		    for (var statement: statements) {
 			if (statement.startsWith("fixed-address")) {
 			    var addresslist = statement.substring("fixed-address".length() + 1);
 			    var addresses = addresslist.split("\\s+");
-			    var addrs = new ArrayList<String>();
-			    addrs.add(addresses[0]);
-			    host.put("address", addrs); // save for sort
+			    if (addresses.length > 0)
+				address = addresses[0];
 			}
 		    }
+
+		var addrs = new ArrayList<String>();
+		addrs.add(address);
+		host.put("address", addrs); // save for sort
+
 	    }
 	    // now entries is all the hosts that match the subnet specification
 	    Collections.sort(hosts, (g1, g2) -> g1.get("address").get(0).compareTo(g2.get("address").get(0)));
 	}
 
+	System.out.println("point 3");
+
 	model.addAttribute("subnet", subnet);
 	model.addAttribute("hosts", hosts);
 	model.addAttribute("dhcpmanager", (privs.contains("dhcpmanager")));
 	model.addAttribute("superuser", (privs.contains("superuser")));
+
+	System.out.println("displaying");
 
 	return "/dhcp/showhosts";	
 		
@@ -236,6 +192,8 @@ public class DhcpHostsController {
 			       @RequestParam(value="del", required=false) List<String>del,
 			       HttpServletRequest request, HttpServletResponse response,
 			       Model model) {
+
+	// add or delete hosts
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
@@ -255,34 +213,50 @@ public class DhcpHostsController {
 	    return subnetsController.subnetsGet(request, response, model);
 	}
 
+	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
+	if (subject == null) {
+	    messages.add("Session has expired");
+	    model.addAttribute("messages", messages);
+	    return loginController.loginGet("dhcp", request, response, model); 
+	}
+
+	// delete hosts
+
 	if (del != null && del.size() > 0) {
-	    Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
-	    if (subject == null) {
-		messages.add("Session has expired");
-		model.addAttribute("messages", messages);
-		return loginController.loginGet("dhcp", request, response, model); 
-	    }
 
-	    // no filter, so no search. this is just to get a context
-	    common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
-	    action.noclose = true;
+	    DirContext ctx = null;
 
-	    Subject.doAs(subject, action);
-
-	    var ctx = action.ctx;
-
+	    
+	    // list of hosts to delete. do them one by one
+	    // have to find them first
 	    for (String d: del) {
-		var dn = "cn=" + d + ",cn=config," + conf.dhcpbase;
-		try {
-		    ctx.destroySubcontext(dn);
-		} catch (javax.naming.NamingException e) {
-		    messages.add("Unable to delete " + d + ": " + e.toString());
-		    model.addAttribute("messages", messages);
+		var action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(cn=" + d + "))", conf.dhcpbase, "dn"});
+		// reuse existing context when doing repeated opertions
+		if (ctx != null)
+		    action.ctx = ctx;
+		action.noclose = true;
+
+		Subject.doAs(subject, action);
+		ctx = action.ctx;
+		
+		var hosts = action.data;
+		// should be just one
+		if (hosts != null && hosts.size() > 0) {
+		    var dn = lu.oneVal(hosts.get(0).get("dn"));
+
+		    try {
+			ctx.destroySubcontext(dn);
+		    } catch (javax.naming.NamingException e) {
+			messages.add("Unable to delete " + d + ": " + e.toString());
+			model.addAttribute("messages", messages);
+		    }
+
 		}
 	    }
 
 	    try {
-		ctx.close();
+		if (ctx != null)
+		    ctx.close();
 	    } catch (Exception ignore) {
 	    }
 	}
@@ -295,6 +269,8 @@ public class DhcpHostsController {
 
 	InetAddress[] addresses;
 
+	System.out.println("name " + name);
+
 	try {
 	    addresses = InetAddress.getAllByName(name);
 	} catch (UnknownHostException e) {
@@ -303,30 +279,90 @@ public class DhcpHostsController {
 	    return hostsGet(subnet, request, response, model);
 	}
 
-	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
-	if (subject == null) {
-	    messages.add("Session has expired");
-	    model.addAttribute("messages", messages);
-	    return loginController.loginGet("dhcp", request, response, model); 
-	}
-
-	if (ethernet == null || ! ethernet.matches("\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}")) {
-	    messages.add("Ethernet address must be of form xx:xx:xx:xx:xx:xx");
+	if (addresses.length < 1) {
+	    messages.add("No addresses for ostname");
 	    model.addAttribute("messages", messages);
 	    return hostsGet(subnet, request, response, model);
 	}
 
-	// no filter, so no search. this is just to get a context
-	common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
+	// adding is easy. The problem is we have to add it within the group
+	// representing the subnet. finding the group based on the IP address isn't easy
+
+	// Since we don't know what masks may be used by subnets, and the name is in
+	// octets, some trial and error is needed. For the moment we just look at all
+	// groups and see which one matches. The hope is that addition isn't done
+	// that often.
+
+	var action = new common.JndiAction(new String[]{"(objectclass=dhcpgroup)", conf.dhcpbase, "cn", "dn", "dhcpoption"});
+
+	System.out.println("point 1");
+	// save the context for the addition
 	action.noclose = true;
-
 	Subject.doAs(subject, action);
-
 	var ctx = action.ctx;
+			
+	var groups = action.data;
+	if (groups == null) {
+	    messages.add("Please add the subnet before adding hosts");
+	    model.addAttribute("messages", messages);
+	    return hostsGet(subnet, request, response, model);
+	}
 
+	// this is going to be the dn of the new host. starts as subnet dn
+	String dn = null;
+
+	System.out.println("point 2");
+	for (var group: groups) {
+	    var cn = lu.oneVal(group.get("cn"));
+	    String mask = null;
+	    // cn should be a subnet name. need subnet mask
+	    for (var option: lu.valList(group.get("dhcpoption")))
+		if (option.toLowerCase().startsWith("subnet-mask"))
+		    mask = option.substring(11).trim();
+
+	    // not a usable subnet without a mask
+	    if (mask == null)
+		continue;
+
+	    System.out.println("cn " + cn + " mask " + mask);
+	    SubnetUtils subnetu = null;
+	    try {
+		subnetu = new SubnetUtils(cn, mask);
+	    } catch (IllegalArgumentException ignore) {
+		// ignore groups that don't look like subnets
+		continue;
+	    }
+
+	    var subnetInfo = subnetu.getInfo();
+	    // OK. Now look for everything in that range.
+
+	    if (subnetInfo.isInRange(addresses[0].getHostAddress())) {
+		// found it
+		dn = lu.oneVal(group.get("dn"));
+		break;
+	    }
+
+	}
+	System.out.println("point 3");
+	if (dn == null) {
+	    messages.add("Please add the subnet before adding hosts");
+	    model.addAttribute("messages", messages);
+	    return hostsGet(subnet, request, response, model);
+	}
+
+	// we now have data for the new host in the variables from
+	// the form, and the dn to add it under in subnet
+	// a DirContext is left over in ctx from the search
+
+	// create the new host entry
+
+	System.out.println("point 4");
 	var oc = new BasicAttribute("objectClass");
 	oc.add("top");
 	oc.add("dhcpHost");
+
+	// have container, i.e. subnet; make the real dn
+	dn = "cn=" + name + "," + dn;
 
 	var cn = new BasicAttribute("cn", name);
 	var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", "ethernet " + ethernet);
@@ -350,22 +386,22 @@ public class DhcpHostsController {
 	    entry.put(dhcpOption);
 	}
 
-	var dn = "cn=" + name + ",cn=config," + conf.dhcpbase;
 	try {
 	    var newctx = ctx.createSubcontext(dn, entry);
 	    newctx.close();
 	} catch (Exception e) {
-	    try {
-		ctx.close();
-	    } catch (Exception ignore) {}
 	    messages.add("Can't create new entry: " + e.toString());
 	    model.addAttribute("messages", messages);
 	    return subnetsController.subnetsGet(request, response, model); 
+	} finally {
+	    try {
+		ctx.close();
+	    } catch (Exception ignore) {}
 	}
 
-	try {
-	    ctx.close();
-	} catch (Exception ignore) {}	    
+	if (subnet != null)
+	    model.addAttribute("subnet", filtername(subnet));
+
 	return hostsGet(subnet, request, response, model);
 
     }

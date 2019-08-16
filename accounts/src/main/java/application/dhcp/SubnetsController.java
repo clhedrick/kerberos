@@ -80,6 +80,135 @@ public class SubnetsController {
 	return ret;
     }
 
+    // delete subnet
+    // this gets complex because we have to move any hosts out of it first
+    public boolean delSubnet(String subnet, DirContext ctx, List<String> messages, Config conf, Subject subject) {
+
+	var dn = "cn=" + subnet + ",cn=config," + conf.dhcpbase;
+		
+	System.out.println("delsub ctx " + ctx);
+
+	common.JndiAction action = new common.JndiAction(new String[]{"objectclass=dhcphost", dn, "dn", "cn"});
+	action.ctx = ctx;
+	action.noclose = true;
+	Subject.doAs(subject, action);
+	System.out.println("point a");
+
+	var hosts = action.data;
+
+	if (hosts != null && hosts.size() > 0) {
+	    // look up catchall group
+	    System.out.println("point b");
+	    action = new common.JndiAction(new String[]{"(&(cn=orphanhosts)(objectclass=dhcpgroup))", conf.dhcpbase, "dn"});	    
+	    action.ctx = ctx;
+	    action.noclose = true;
+	    Subject.doAs(subject, action);
+	    var groups = action.data;
+	    System.out.println("point c");
+
+	    if (groups == null || groups.size() == 0 ) {
+		// doesn't exist, create it
+		var oc = new BasicAttribute("objectClass");
+		oc.add("top");
+		oc.add("dhcpGroup");
+		oc.add("dhcpOptions");
+
+		var cn = new BasicAttribute("cn", "orphanhosts");
+
+		var entry = new BasicAttributes();
+		entry.put(oc);
+		entry.put(cn);
+
+		var newdn = "cn=orphanhosts,cn=config," + conf.dhcpbase;
+		try {
+		    var newctx = ctx.createSubcontext(newdn, entry);
+		    newctx.close();
+		} catch (Exception e) {
+		    messages.add("Can't create new entry: " + e.toString());
+		    return false;
+		}
+	    }
+	    System.out.println("point d");
+	    
+	    // have the orphanhosts group, rename hosts into it
+
+	    for (var host: hosts) {
+		var oldname = lu.oneVal(host.get("dn"));
+		var hostname = lu.oneVal(host.get("cn"));
+		var newname = "cn=" + hostname + ",cn=orphanhosts,cn=config," + conf.dhcpbase;
+
+		System.out.println("oldname " + oldname + " newname " + newname);
+
+		try {
+		    ctx.rename(oldname, newname);
+		} catch (javax.naming.NamingException e) {
+		    messages.add("Unable to rename " + hostname + "into orphanhostss: " + e.toString());
+		    return false;
+		}
+	    }
+
+	}
+
+	// no more hosts in subnet, safe to delete it now
+
+	try {
+	    ctx.destroySubcontext(dn);
+	} catch (javax.naming.NamingException e) {
+	    messages.add("Unable to delete " + subnet + ": " + e.toString());
+	    return false;
+	}
+	return true;
+    }
+
+    // delete subnet
+    // this gets complex because we have to move any hosts out of it first
+    public void adoptOrphans(SubnetUtils.SubnetInfo subnetInfo, String dn, DirContext ctx, List<String> messages, Config conf, Subject subject) {
+
+	// look at all hosts in orphan group, to see if any should move
+	// into the new subnet
+
+	var orphanDn = "cn=orphanhosts,cn=config," + conf.dhcpbase;
+
+	common.JndiAction action = new common.JndiAction(new String[]{"objectclass=dhcphost", orphanDn, "dn", "cn", "dhcpstatements"});
+	action.ctx = ctx;
+	action.noclose = true;
+	Subject.doAs(subject, action);
+
+	var hosts = action.data;
+	System.out.println("adoptor dn " + dn + " hosts " + hosts);
+
+	// all hosts in orphan group
+	if (hosts != null && hosts.size() > 0) {
+	    for (var host: hosts) {
+		var statements = host.get("dhcpstatements");
+		String address = null;
+		if (statements != null)
+		    for (var statement: statements) {
+			if (statement.startsWith("fixed-address")) {
+			    var addresslist = statement.substring("fixed-address".length() + 1);
+			    var addresses = addresslist.split("\\s+");
+			    if (addresses.length > 0)
+				address = addresses[0].trim();
+			}
+		    }
+
+		System.out.println("address " + address);
+		// see if address of host is within the new subnet
+		if (address != null) {
+		    if (subnetInfo.isInRange(address)) {
+			var oldDn = lu.oneVal(host.get("dn"));
+			var cn = lu.oneVal(host.get("cn"));
+			var newDn = "cn=" + cn + "," + dn;
+			try {
+			    ctx.rename(oldDn, newDn);
+			} catch (Exception ignore) {}
+		    }
+		}
+	    }
+	}
+
+    }
+
     @GetMapping("/dhcp/showsubnets")
     public String subnetsGet(HttpServletRequest request, HttpServletResponse response, Model model) {
 	// This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.
@@ -101,12 +230,60 @@ public class SubnetsController {
 	// See comments on showgroup.jsp
 
 	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
-	common.JndiAction action = new common.JndiAction(new String[]{"objectclass=dhcpsubnet", conf.dhcpbase, "cn", "dhcpnetmask"});
+	common.JndiAction action = new common.JndiAction(new String[]{"objectclass=dhcpgroup", conf.dhcpbase, "cn", "dhcpnetmask", "dhcpoption"});
 
 	Subject.doAs(subject, action);
 
 	// look at the results of the LDAP query
-	var subnets = action.data;
+	var groups = action.data;
+	List<Map<String,List<String>>> subnets = new ArrayList<Map<String,List<String>>>();
+	// not all groups are usable subnets, so have to check them
+	
+	if (groups != null) 
+	    for (var group: groups) {
+		var cn = lu.oneVal(group.get("cn"));
+
+		if ("orphanhosts".equals(cn)) {
+		    // add cidr property for display
+		    group.put("cidr", List.of(cn));
+		    // this group looks ok
+		    subnets.add(group);
+		}
+
+
+		String mask = null;
+
+		// cn should be a subnet name. need subnet mask
+		for (var option: lu.valList(group.get("dhcpoption")))
+		    if (option.toLowerCase().startsWith("subnet-mask"))
+			mask = option.substring(11).trim();
+
+		System.out.println("mask " + mask);
+
+		if (mask == null)
+		    continue;
+
+		SubnetUtils subnetu = null;
+		try {
+		    subnetu = new SubnetUtils(cn, mask);
+		} catch (IllegalArgumentException ignore) {
+		    // ignore groups that don't look like subnets
+		    continue;
+		}
+
+		var subnetInfo = subnetu.getInfo();
+		var cidr = subnetInfo.getCidrSignature();
+
+		System.out.println("cidr " + cidr);
+		
+		// add cidr property for display
+		group.put("cidr", List.of(cidr));
+
+		// this group looks ok
+		subnets.add(group);
+
+	    }
+
 	Collections.sort(subnets, (g1, g2) -> g1.get("cn").get(0).compareTo(g2.get("cn").get(0)));
 
 	// set up model for JSTL to output
@@ -160,12 +337,9 @@ public class SubnetsController {
 	    var ctx = action.ctx;
 
 	    for (String d: del) {
-		var dn = "cn=" + d + ",cn=config," + conf.dhcpbase;
-		try {
-		    ctx.destroySubcontext(dn);
-		} catch (javax.naming.NamingException e) {
-		    messages.add("Unable to delete " + d + ": " + e.toString());
+		if (! delSubnet(d, ctx, messages, conf, subject)) {
 		    model.addAttribute("messages", messages);
+		    return subnetsGet(request, response, model);
 		}
 	    }
 
@@ -219,11 +393,11 @@ public class SubnetsController {
 
 	var oc = new BasicAttribute("objectClass");
 	oc.add("top");
-	oc.add("dhcpSubnet");
+	oc.add("dhcpGroup");
 	oc.add("dhcpOptions");
 
 	var cn = new BasicAttribute("cn", net);
-	var dhcpNetMask = new BasicAttribute("dhcpNetMask", bits);
+	// var dhcpNetMask = new BasicAttribute("dhcpNetMask", bits);
 	var dhcpOption = new BasicAttribute("dhcpOption");
 	dhcpOption.add("broadcast-address " + broadcast);
 	dhcpOption.add("routers " + router);
@@ -237,7 +411,7 @@ public class SubnetsController {
 	var entry = new BasicAttributes();
 	entry.put(oc);
 	entry.put(cn);
-	entry.put(dhcpNetMask);
+	// entry.put(dhcpNetMask);
 	entry.put(dhcpOption);
 
 	var dn = "cn=" + net + ",cn=config," + conf.dhcpbase;
@@ -252,6 +426,10 @@ public class SubnetsController {
 	    model.addAttribute("messages", messages);
 	    return subnetsGet(request, response, model); 
 	}
+
+	// if there are any hosts in the new subnet currently
+	// orphaned, move them into the subnet
+	adoptOrphans(subnetInfo, dn, ctx, messages, conf, subject);
 
 	try {
 	    ctx.close();

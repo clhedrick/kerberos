@@ -73,8 +73,8 @@ function dolookup(event) {
 <div class="inset" style="padding-top:0.5em">
 
 <div th:each="s : ${subnets}">
-<input type="checkbox" name="del" th:value="${s.cn[0]}"/> 
-<a th:href="@{showhosts(subnet=${s.cn[0] + '/' + s.dhcpnetmask[0]})}"><span th:text="${s.cn[0] + '/' + s.dhcpnetmask[0]}"/></a>
+<input type="checkbox" name="del" th:disabled="${s.cn[0].equals('orphanhosts')}" th:value="${s.cn[0]}"/> 
+<a th:href="@{showhosts(subnet=${s.cn[0]})}"><span th:text="${s.cidr[0]}"/></a>
 </div>
 </div>
 </div>
