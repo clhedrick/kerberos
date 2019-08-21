@@ -72,10 +72,14 @@ function dolookup(event) {
 
 <div class="inset" style="padding-top:0.5em">
 
-<div th:each="s : ${subnets}">
-<input type="checkbox" name="del" th:value="${s.cn[0]}"/> 
-<a th:href="@{showhosts(subnet=${s.cn[0] + '/' + s.dhcpnetmask[0]})}"><span th:text="${s.cn[0] + '/' + s.dhcpnetmask[0]}"/></a>
-</div>
+<ul class="itemlist">
+<li class="itemlist-row" th:each="s : ${subnets}">
+<div class="itemlist-entry1"><input type="checkbox" name="del" th:value="${s.cn[0]}"/> </div>
+<div class="itemlist-entry2"> <a th:href="@{showhosts(subnet=${s.cn[0] + '/' + s.dhcpnetmask[0]})}"><span th:text="${s.cn[0] + '/' + s.dhcpnetmask[0]}"/></a></div>
+<div class="itemlist-entry3" th:if="${s['dhcpoption']}"  th:text="${s['dhcpoption']}"/>
+</li>
+</ul>
+
 </div>
 </div>
 

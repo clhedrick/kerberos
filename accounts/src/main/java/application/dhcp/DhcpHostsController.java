@@ -25,6 +25,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.Calendar;
+import java.util.Arrays;
 import java.text.SimpleDateFormat;
 import java.net.UnknownHostException;
 import java.net.InetAddress;
@@ -114,6 +115,9 @@ public class DhcpHostsController {
 	// furthermore, we can only do a text compare, which means we can't do an ldap
 	//   query for the exact range. We convert the subnet to a prefix, do an ldap search
 	//   on that, and then test which of the results are actually in the subnet
+	// Another way to do this would be to add a lowaddress and highattress attribute to
+	//   the subnet that is a 32-bit number, and a 32-bit address to each host.
+	//   Then we could do an LDAP search for addresses >= low and < high. 
 	var filter = "objectclass=dhcphost";
 	if (subnet != null && !subnet.isBlank()) {
 	    // user has passed subnet, parse it
@@ -136,6 +140,14 @@ public class DhcpHostsController {
 	    try {
 		bits = Integer.parseInt(subnet.substring(i+1));
 	    } catch (Exception impossible) {}
+
+	    // bits is the CDIR suffix, e.g. 128.6.4.0/24 it's the 24
+
+	    // Now create search term. For 128.6.4.0/24 it's 128.6.4.*
+	    // But because it's a text compare, we have to use the same thing for 128.6.4.128/25.
+	    // So any bits value from 24 to 31 gives us 128.6.4.*. Similarly for 16 to 23 it's 128.6.*
+	    // the search wildcard, e.g. 128.6.4.* goes in "mask"
+
 	    String mask;
 	    if (bits < 8)
 		mask = "*";
@@ -152,17 +164,22 @@ public class DhcpHostsController {
 			if (bits < 32)
 			    mask = net.substring(0, i+1) + "*";  // include the .
 			else
+			    // /32 means an exact host, though it would be really
+			    //   odd to have such a subnet
 			    mask = net;
 		    }
 		}
 	    }
 	    
 	    // now mask is something like 128.6.*
-	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(dhcpStatements=fixed-address* " + mask + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements"});
+	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(dhcpStatements=fixed-address* " + mask + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption"});
 	    Subject.doAs(subject, action);
 
 	    var hosts = action.data;
 	    var entries = new ArrayList<Map<String,List<String>>>();
+	    // we may have hosts not actually in the subnet because the LDAP search is approximate.
+	    // So we need to test subnetInfo.isInRange(address) before we use the host
+	    //   Add an address property to make sorting easier
 	    if (hosts != null && hosts.size() > 0) {
 		for (var host: hosts) {
 		    var statements = host.get("dhcpstatements");
@@ -173,10 +190,10 @@ public class DhcpHostsController {
 				var addresses = addresslist.split("\\s+");
 				for (var address: addresses) {
 				    if (subnetInfo.isInRange(address)) {
-					var addrs = new ArrayList<String>();
-					addrs.add(address);
-					host.put("address", addrs); // save for sort
+					// only one address may match, but we should show them all when we show the host
+					host.put("address", Arrays.asList(addresses)); // save for sort
 					entries.add(host);
+					break; // don't add host more than once
 				    }
 				}
 			    }
@@ -210,7 +227,8 @@ public class DhcpHostsController {
 			    var addresslist = statement.substring("fixed-address".length() + 1);
 			    var addresses = addresslist.split("\\s+");
 			    var addrs = new ArrayList<String>();
-			    addrs.add(addresses[0]);
+			    for (var addr: addresses)
+				addrs.add(addr);
 			    host.put("address", addrs); // save for sort
 			}
 		    }

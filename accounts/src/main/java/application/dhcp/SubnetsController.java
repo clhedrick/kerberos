@@ -47,6 +47,7 @@ import javax.naming.ldap.*;
 import javax.naming.directory.BasicAttribute;
 import javax.naming.directory.BasicAttributes;
 import javax.security.auth.kerberos.KerberosTicket;
+import javax.naming.directory.Attributes;
 import com.sun.security.auth.callback.TextCallbackHandler;
 import java.util.Hashtable;
 import java.util.Set;
@@ -101,7 +102,7 @@ public class SubnetsController {
 	// See comments on showgroup.jsp
 
 	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
-	common.JndiAction action = new common.JndiAction(new String[]{"objectclass=dhcpsubnet", conf.dhcpbase, "cn", "dhcpnetmask"});
+	common.JndiAction action = new common.JndiAction(new String[]{"objectclass=dhcpsubnet", conf.dhcpbase, "cn", "dhcpnetmask", "dhcpoption"});
 
 	Subject.doAs(subject, action);
 
@@ -116,6 +117,33 @@ public class SubnetsController {
 
         return "/dhcp/showsubnets";
     }
+
+    // increment the serial number for the configuration
+    // this tells the DHCP servers to reread configuration
+    public void incrementSerial(DirContext ctx) {
+
+	var dn = "cn=config," + Config.getConfig().dhcpbase;
+
+	// I don't check for nulls because they are unlikely, and
+	// would generate exceptions that try will get
+	try {
+	    var attrs = ctx.getAttributes(dn, new String[]{"dhcpcomments"});
+
+	    var comment = (String)attrs.get("dhcpcomments").get();
+	    var serial = Long.parseLong(comment);
+	    
+	    serial ++;
+
+	    var newcomments = new BasicAttribute("dhcpcomments", Long.toString(serial));
+	    var newAttributes = new BasicAttributes();
+	    newAttributes.put(newcomments);
+	    ctx.modifyAttributes(dn, DirContext.REPLACE_ATTRIBUTE, newAttributes);
+
+	} catch (Exception ignore) {
+	    System.out.println("incrementserial " + ignore.toString());
+	}
+
+    }	
 
     @PostMapping("/dhcp/showsubnets")
     public String subnetsSubmit(@RequestParam(value="name", required=false) String name,
@@ -168,6 +196,10 @@ public class SubnetsController {
 		    model.addAttribute("messages", messages);
 		}
 	    }
+
+	    // if there's an add request also, update the serial after that's done
+	    if (name != null && ! "".equals(name.trim()))
+		incrementSerial(ctx);
 
 	    try {
 		ctx.close();
@@ -252,6 +284,8 @@ public class SubnetsController {
 	    model.addAttribute("messages", messages);
 	    return subnetsGet(request, response, model); 
 	}
+
+	incrementSerial(ctx);
 
 	try {
 	    ctx.close();
