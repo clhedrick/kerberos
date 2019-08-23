@@ -247,10 +247,10 @@ public class DhcpHostsController {
     }
 
     @PostMapping("/dhcp/showhosts")
-    public String subnetsSubmit(@RequestParam(value="name", required=false) String name,
+    public String subnetsSubmit(@RequestParam(value="names[]", required=false) String[] names,
 			       @RequestParam(value="subnet", required=false) String subnet,
-			       @RequestParam(value="ethernet", required=false) String ethernet,
-			       @RequestParam(value="options", required=false) String options,
+			       @RequestParam(value="ethernet[]", required=false) String[] ethernets,
+			       @RequestParam(value="options[]", required=false) String[] optionss,
 			       @RequestParam(value="del", required=false) List<String>del,
 			       HttpServletRequest request, HttpServletResponse response,
 			       Model model) {
@@ -305,82 +305,103 @@ public class DhcpHostsController {
 	    }
 	}
 
+	System.out.println("names " + names);
+
 	// if no name specified, nothing more to do
-	if (name == null || "".equals(name.trim()))
+	if (names == null || names.length == 0)
 	    return hostsGet(subnet, request, response, model);
 
-	name = name.trim();
+	DirContext ctx = null;
+	for (var newi = 0; newi < names.length; newi++) {
 
-	InetAddress[] addresses;
+	    // arrays get null elements if nothing there
+	    // but omit null elements if they are at the end
+	    // of the array. so if beyond the end, assume null
+	    String name = names[newi];
+	    if (name == null)
+		continue;
+	    String ethernet = null;
+	    if (ethernets.length >  newi)
+		ethernet = ethernets[newi];
+	    String options = null;
+	    if (optionss.length > newi)
+		options = optionss[newi];
 
-	try {
-	    addresses = InetAddress.getAllByName(name);
-	} catch (UnknownHostException e) {
-	    messages.add("Hostname not found");
-	    model.addAttribute("messages", messages);
-	    return hostsGet(subnet, request, response, model);
-	}
+	    name = name.trim();
 
-	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
-	if (subject == null) {
-	    messages.add("Session has expired");
-	    model.addAttribute("messages", messages);
-	    return loginController.loginGet("dhcp", request, response, model); 
-	}
+	    InetAddress[] addresses;
 
-	if (ethernet == null || ! ethernet.matches("\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}")) {
-	    messages.add("Ethernet address must be of form xx:xx:xx:xx:xx:xx");
-	    model.addAttribute("messages", messages);
-	    return hostsGet(subnet, request, response, model);
-	}
-
-	// no filter, so no search. this is just to get a context
-	common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
-	action.noclose = true;
-
-	Subject.doAs(subject, action);
-
-	var ctx = action.ctx;
-
-	var oc = new BasicAttribute("objectClass");
-	oc.add("top");
-	oc.add("dhcpHost");
-
-	var cn = new BasicAttribute("cn", name);
-	var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", "ethernet " + ethernet);
-	var addrstatement = "fixed-address";
-	for (var address: addresses)
-	    addrstatement = addrstatement + " " + address.getHostAddress();;
-
-	var dhcpStatements = new BasicAttribute("dhcpStatements", addrstatement);
-
-	var entry = new BasicAttributes();
-	entry.put(oc);
-	entry.put(cn);
-	entry.put(dhcpHWAddress);
-	entry.put(dhcpStatements);
-
-	if (options != null && ! options.isBlank()) {
-	    var dhcpOption = new BasicAttribute("dhcpOption");
-	    var lines = options.split("\n");
-	    for (var line: lines)
-		dhcpOption.add(line.trim());
-	    entry.put(dhcpOption);
-	}
-
-	var dn = "cn=" + name + ",cn=config," + conf.dhcpbase;
-	try {
-	    var newctx = ctx.createSubcontext(dn, entry);
-	    newctx.close();
-	} catch (Exception e) {
 	    try {
-		ctx.close();
-	    } catch (Exception ignore) {}
-	    messages.add("Can't create new entry: " + e.toString());
-	    model.addAttribute("messages", messages);
-	    return subnetsController.subnetsGet(request, response, model); 
-	}
+		addresses = InetAddress.getAllByName(name);
+	    } catch (UnknownHostException e) {
+		messages.add("Hostname not found");
+		model.addAttribute("messages", messages);
+		return hostsGet(subnet, request, response, model);
+	    }
 
+	    Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
+	    if (subject == null) {
+		messages.add("Session has expired");
+		model.addAttribute("messages", messages);
+		return loginController.loginGet("dhcp", request, response, model); 
+	    }
+
+	    if (ethernet == null || ! ethernet.matches("\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}")) {
+		messages.add("Ethernet address must be of form xx:xx:xx:xx:xx:xx");
+		model.addAttribute("messages", messages);
+		return hostsGet(subnet, request, response, model);
+	    }
+
+	    // no filter, so no search. this is just to get a context
+	    common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
+
+	    action.ctx = ctx;
+	    action.noclose = true;
+	    
+	    Subject.doAs(subject, action);
+	    
+	    ctx = action.ctx;
+	    
+	    var oc = new BasicAttribute("objectClass");
+	    oc.add("top");
+	    oc.add("dhcpHost");
+
+	    var cn = new BasicAttribute("cn", name);
+	    var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", "ethernet " + ethernet);
+	    var addrstatement = "fixed-address";
+	    for (var address: addresses)
+		addrstatement = addrstatement + " " + address.getHostAddress();;
+	    
+	    var dhcpStatements = new BasicAttribute("dhcpStatements", addrstatement);
+	    
+	    var entry = new BasicAttributes();
+	    entry.put(oc);
+	    entry.put(cn);
+	    entry.put(dhcpHWAddress);
+	    entry.put(dhcpStatements);
+
+	    if (options != null && ! options.isBlank()) {
+		var dhcpOption = new BasicAttribute("dhcpOption");
+		var lines = options.split("\n");
+		for (var line: lines)
+		    dhcpOption.add(line.trim());
+		entry.put(dhcpOption);
+	    }
+
+	    var dn = "cn=" + name + ",cn=config," + conf.dhcpbase;
+	    try {
+		var newctx = ctx.createSubcontext(dn, entry);
+		newctx.close();
+	    } catch (Exception e) {
+		try {
+		    ctx.close();
+		} catch (Exception ignore) {}
+		messages.add("Can't create new entry: " + e.toString());
+		model.addAttribute("messages", messages);
+		return subnetsController.subnetsGet(request, response, model); 
+	    }
+	    
+	}
 	try {
 	    ctx.close();
 	} catch (Exception ignore) {}	    

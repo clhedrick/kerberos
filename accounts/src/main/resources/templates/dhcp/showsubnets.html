@@ -68,6 +68,13 @@ function dolookup(event) {
 
 <div th:if="${subnets != null and subnets.size() > 0}">
 
+<div th:if="${options}">
+<h2> Global options </h2>
+<ul class="itemlist">
+  <li th:each="o : ${options}" th:text="${o}" />
+</ul>
+</div>
+
 <h2>Current subnets</h2>
 
 <div class="inset" style="padding-top:0.5em">
@@ -91,7 +98,7 @@ function dolookup(event) {
 <label>Subnet n.n.n.n/b: <input type="text" name="name" id="name"/></label>
 <br/>
 <label>Routers: <input type="text" name="routers" id="routers"/></label> [default is first address in the subnet]<br/>
-<label>Options: [not normally needed]</br>
+<label>Options: [not normally needed. We generate broadcast-address, routers, subnet-mask, but you can override them.]</br>
 <textarea rows="4" cols="80" name="options" id="options">
 </textarea>
 </label><br/>

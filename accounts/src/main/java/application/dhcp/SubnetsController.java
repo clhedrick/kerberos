@@ -25,6 +25,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.Calendar;
+import java.util.HashSet;
 import java.text.SimpleDateFormat;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -104,7 +105,10 @@ public class SubnetsController {
 	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
 	common.JndiAction action = new common.JndiAction(new String[]{"objectclass=dhcpsubnet", conf.dhcpbase, "cn", "dhcpnetmask", "dhcpoption"});
 
+	// save context for lookup
+	action.noclose = true;
 	Subject.doAs(subject, action);
+	var ctx = action.ctx;
 
 	// look at the results of the LDAP query
 	var subnets = action.data;
@@ -114,6 +118,13 @@ public class SubnetsController {
 	model.addAttribute("subnets", subnets);
 	model.addAttribute("dhcpmanager", (privs.contains("dhcpmanager")));
 	model.addAttribute("superuser", (privs.contains("superuser")));
+
+	try {
+	    var dn = "cn=config," + conf.dhcpbase;
+	    var attrs = ctx.getAttributes(dn, new String[]{"dhcpoption"});
+	    var options = attrs.get("dhcpoption").getAll();
+	    model.addAttribute("options", options);
+	} catch (Exception ignore) {}	    
 
         return "/dhcp/showsubnets";
     }
@@ -257,14 +268,33 @@ public class SubnetsController {
 	var cn = new BasicAttribute("cn", net);
 	var dhcpNetMask = new BasicAttribute("dhcpNetMask", bits);
 	var dhcpOption = new BasicAttribute("dhcpOption");
-	dhcpOption.add("broadcast-address " + broadcast);
-	dhcpOption.add("routers " + router);
-	dhcpOption.add("subnet-mask " + netmask);
+
+	// user has supplied this option
+	var haveOptions = new HashSet<String>();
+
+	// add options specified by user, but also
+	// remember which we've seen, so we don't add defaults
+	// for them
 	if (options != null && ! options.isBlank()) {
 	    var lines = options.split("\n");
-	    for (var line: lines)
-		dhcpOption.add(line.trim());
+	    for (var line: lines) {
+		line = line.trim();
+
+		// remember we've seen this option
+		var sp = line.indexOf(" ");
+		if (sp > 0)
+		    haveOptions.add(line.substring(0, sp));
+
+		dhcpOption.add(line);
+	    }
 	}
+
+	if (! haveOptions.contains("broadcast-address"))
+	    dhcpOption.add("broadcast-address " + broadcast);
+	if (! haveOptions.contains("routers"))
+	    dhcpOption.add("routers " + router);
+	if (! haveOptions.contains("subnet-mask"))
+	    dhcpOption.add("subnet-mask " + netmask);
 
 	var entry = new BasicAttributes();
 	entry.put(oc);
