@@ -37,6 +37,9 @@ function showedit(event) {
   editentry.find('.optionbox').click(optionvisible);
   var cn = thisentry.find('.itemname').text();
   var address = thisentry.find('.itemaddress').text();
+  if (address.startsWith('[')) {
+     address = address.substring(1,address.length-1);
+  }
   var hwaddress = thisentry.find('.itemhwaddress').text();
   if (hwaddress.startsWith('ethernet ')) {
      hwaddress = hwaddress.substring(9);
@@ -51,9 +54,10 @@ function showedit(event) {
      options = options.substring(1);
 
   editentry.find('.newname').val(cn);
+  editentry.find('.newaddress').val(address);
   editentry.find('.newhwaddress').val(hwaddress);
   editentry.find('.newoptions').val(options);
-  editentry.find('.newedit').val('true');
+  editentry.find('.origname').val(cn);
  
 }
 
@@ -112,24 +116,28 @@ $(document).ready(function(){
 
 <div class="inset" style="margin-top:1em">
 <div class="newhost">
+<input type="hidden" class="origname" name="origname[]" value="" />
 <label>Hostname: <input class="newname" type="text" name="names[]" id="names[]"/></label>
+<button type="button"  class="optionbox">Click to show options (not normally needed)</button>
 <br/>
 <label>Ethernet: <input type="text" name="ethernet[]" id="ethernet[]"/></label>
-<label><button type="button"  class="optionbox">Click to show options (not normally needed)</button>
+<br/>
+<label>IP address: <input type="text" name="ip[]" id="ip[]"/></label> (comma separated for more than one, blank for DNS lookup)
 <textarea rows="4" cols="80" name="options[]" id="options[]" style=display:none>
 </textarea>
 </label>
-<input type="hidden" name="edit[]" value="false"/>
 </div>
 <div class="modelhost" style="display:none; margin-top:15px">
+<input type="hidden" class="origname" name="origname[]" value="" />
 <label>Hostname: <input class="newname" type="text" name="names[]" id="names[]"/></label>
+<button type="button"  class="optionbox">Click to show options (not normally needed)</button>
 <br/>
 <label>Ethernet: <input class="newhwaddress" type="text" name="ethernet[]" id="ethernet[]"/></label>
-<label><button type="button"  class="optionbox">Click to show options (not normally needed)</button>
+<br/>
+<label>IP address: <input class="newaddress" type="text" name="ip[]" id="ip[]"/></label> (comma separated for more than one, blank for DNS lookup)
 <textarea rows="4" cols="80" class="newoptions" name="options[]" id="options[]" style=display:none>
 </textarea>
 </label>
-<input class="newedit" type="hidden" name="edit[]" value="false"/>
 </div>
 
 <input type="submit" value="Add/Delete Hosts"/>

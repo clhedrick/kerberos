@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.Calendar;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.text.SimpleDateFormat;
 import java.net.UnknownHostException;
 import java.net.InetAddress;
@@ -81,7 +82,7 @@ public class DhcpHostsController {
     public String filtername(String s) {
 	if (s == null)
 	    return null;
-	String ret = s.replaceAll("[^.0-9]","");
+	String ret = s.replaceAll("[^-a-zA-Z.0-9]","");
 	if (ret.equals(""))
 	    return null;
 	return ret;
@@ -250,6 +251,8 @@ public class DhcpHostsController {
     public String subnetsSubmit(@RequestParam(value="names[]", required=false) String[] names,
 			       @RequestParam(value="subnet", required=false) String subnet,
 			       @RequestParam(value="ethernet[]", required=false) String[] ethernets,
+			       @RequestParam(value="ip[]", required=false) String[] ips,
+			       @RequestParam(value="origname[]", required=false) String[] orignames,
 			       @RequestParam(value="options[]", required=false) String[] optionss,
 			       @RequestParam(value="del", required=false) List<String>del,
 			       HttpServletRequest request, HttpServletResponse response,
@@ -305,39 +308,42 @@ public class DhcpHostsController {
 	    }
 	}
 
-	System.out.println("names " + names);
-
 	// if no name specified, nothing more to do
 	if (names == null || names.length == 0)
 	    return hostsGet(subnet, request, response, model);
 
 	DirContext ctx = null;
+	mainloop:
 	for (var newi = 0; newi < names.length; newi++) {
 
 	    // arrays get null elements if nothing there
 	    // but omit null elements if they are at the end
 	    // of the array. so if beyond the end, assume null
 	    String name = names[newi];
-	    if (name == null)
+	    if (name == null || name.isBlank())
 		continue;
+	    name = name.trim();
+	    if (! name.equals(filtername(name))) {
+		messages.add("Illegal hostname: " + name);
+		model.addAttribute("messages", messages);
+		continue;
+	    }
+
 	    String ethernet = null;
 	    if (ethernets.length >  newi)
 		ethernet = ethernets[newi];
+
 	    String options = null;
 	    if (optionss.length > newi)
 		options = optionss[newi];
 
-	    name = name.trim();
+	    String ip = null;
+	    if (ips.length > newi)
+		ip = ips[newi];
 
-	    InetAddress[] addresses;
-
-	    try {
-		addresses = InetAddress.getAllByName(name);
-	    } catch (UnknownHostException e) {
-		messages.add("Hostname not found");
-		model.addAttribute("messages", messages);
-		return hostsGet(subnet, request, response, model);
-	    }
+	    String origname = null;
+	    if (orignames.length > newi)
+		origname = orignames[newi];
 
 	    Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
 	    if (subject == null) {
@@ -349,8 +355,126 @@ public class DhcpHostsController {
 	    if (ethernet == null || ! ethernet.matches("\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}")) {
 		messages.add("Ethernet address must be of form xx:xx:xx:xx:xx:xx");
 		model.addAttribute("messages", messages);
-		return hostsGet(subnet, request, response, model);
+		continue;
 	    }
+
+	    var addrstatement = "fixed-address";
+	    if (ip !=  null && !ip.isBlank()) {
+		var addrs = ip.split(",");
+		for (var addr: addrs) {
+		    addr = addr.trim();
+		    if (addr.isBlank())
+			continue;
+		    // make sure it's legal. there's tnothingin InetAddress to parse numerical
+		    try {
+			var subnetu = new SubnetUtils(addr, "255.255.255.255");
+		    } catch (IllegalArgumentException ignore) {
+			messages.add("IP address must be in format n.n.n.n");
+			model.addAttribute("messages", messages);
+			continue mainloop;
+		    }
+		    addrstatement = addrstatement + " " + addr;
+		}
+	    } else {
+		InetAddress[] addresses;
+
+		try {
+		    addresses = InetAddress.getAllByName(name);
+		} catch (UnknownHostException e) {
+		    messages.add("Hostname not found");
+		    model.addAttribute("messages", messages);
+		    continue;
+		}
+
+		for (var address: addresses)
+		    addrstatement = addrstatement + " " + address.getHostAddress();;
+
+	    }
+
+	    if (origname != null && !origname.isBlank()) {
+		// edit existing item
+
+		common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(cn="+ filtername(origname) + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
+
+		action.ctx = ctx;
+		action.noclose = true;
+		Subject.doAs(subject, action);
+
+		var hosts = action.data;
+
+		ctx = action.ctx;
+
+		if (hosts.size() != 1) {
+		    messages.add("Trying to edit " + filtername(origname) + " but does not exist or is not unique");
+		    model.addAttribute("messages", messages);
+		    continue;
+		}
+
+		var host = hosts.get(0);
+		var changed = false;
+		
+		var entry = new BasicAttributes();
+		if (! lu.valList(host.get("dhcpstatements")).contains(addrstatement)) {
+		    changed = true;
+		    var dhcpStatements = new BasicAttribute("dhcpStatements", addrstatement);
+		    entry.put(dhcpStatements);
+		}
+	    
+		var etherval = "ethernet " + ethernet;
+		if (! etherval.equals(lu.oneVal(host.get("dhcphwaddress")))) {
+		    changed = true;
+		    var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", "ethernet " + ethernet);
+		    entry.put(dhcpHWAddress);
+		}
+
+		// need set so we can compare
+		var oldOptions = new HashSet<String>(lu.valList(host.get("dhcpoption")));
+		var newOptions = new HashSet<String>();
+		var lines = options.split("\n");
+
+		for (var line: lines)
+		    if (! line.trim().isBlank())
+			newOptions.add(line.trim());
+
+		if (! oldOptions.equals(newOptions)) {
+		    changed = true;
+
+		    var dhcpOption = new BasicAttribute("dhcpOption");
+		    for (var line: lines)
+			if (! line.trim().isBlank())
+			    dhcpOption.add(line.trim());
+		    entry.put(dhcpOption);
+		}
+
+		if (changed) {
+		    try {
+			var dhcpOption = new BasicAttribute("dhcpOption");
+			ctx.modifyAttributes(lu.oneVal(host.get("dn")), DirContext.REPLACE_ATTRIBUTE, entry);
+		    } catch (Exception e) {
+			messages.add("Unable to change " + filtername(origname) + ": " + e.toString());
+			model.addAttribute("messages", messages);
+			continue;
+		    }
+		}
+
+		// need to rename?
+		if (! origname.equals(name) && name != null && !name.isBlank()) {
+		    var newdn = "cn=" + name + ",cn=config," + conf.dhcpbase;
+		    try {
+			ctx.rename(lu.oneVal(host.get("dn")), newdn);
+		    } catch (Exception e) {
+			messages.add("Unable to rename " + filtername(origname) + " to " + name + ": " + e.toString());
+			model.addAttribute("messages", messages);
+			continue;
+		    }
+			
+		}
+
+		continue;
+
+	    }
+
+	    // not edit, so adding new item
 
 	    // no filter, so no search. this is just to get a context
 	    common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
@@ -361,17 +485,13 @@ public class DhcpHostsController {
 	    Subject.doAs(subject, action);
 	    
 	    ctx = action.ctx;
-	    
+
 	    var oc = new BasicAttribute("objectClass");
 	    oc.add("top");
 	    oc.add("dhcpHost");
 
 	    var cn = new BasicAttribute("cn", name);
 	    var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", "ethernet " + ethernet);
-	    var addrstatement = "fixed-address";
-	    for (var address: addresses)
-		addrstatement = addrstatement + " " + address.getHostAddress();;
-	    
 	    var dhcpStatements = new BasicAttribute("dhcpStatements", addrstatement);
 	    
 	    var entry = new BasicAttributes();
