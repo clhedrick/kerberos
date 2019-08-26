@@ -25,20 +25,20 @@ $(document).ready(function(){
 /*]]>*/
 </script>
 </head>
-<div id="masthead"></div>
-<div id="main">
-<p class="messages message" th:if="${username == null}">
+<div role="banner" id="masthead"></div>
+<div role="main" id="main">
+<p role="alert" class="messages message" th:if="${username == null}">
 Your username is already in use for system purposes. Please contact
 <a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>. We
 will assign you a different username for use within computer science.
 </p>
 
-<p class="messages message" th:if="${activatefailed}">
+<p role="alert" class="messages message" th:if="${activatefailed}">
 Unable to activate your account. Please contact 
 <a th:href="${'mailto:' + helpmail}" th:text="${helpmail}"/>.
 </p>
 
-<a href="..">Account Management</a>
+<div role="navigation"> <a href="..">Account Management</a></div>
 
 <div th:if="${username != null}">
 

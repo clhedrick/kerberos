@@ -52,15 +52,15 @@ $(document).ready(function(){
 /*]]>*/
 </script>
 </head>
-<div id="masthead"></div>
-<div id="main">
+<div role="banner" id="masthead"></div>
+<div role="main" id="main">
 
-<div class="messages" th:if="${messages?.size()}">
+<div role="alert" class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
 
-<a href="../"> Account Management</a>
+<div role="navigation"><a href="../"> Account Management</a></div>
 
 <h1> Group Management </h1>
 

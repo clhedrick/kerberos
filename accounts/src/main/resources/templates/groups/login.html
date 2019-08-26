@@ -4,13 +4,13 @@
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
 <title>Login for group management</title>
 </head>
-<div id="masthead"></div>
-<div id="main">
-<div class="messages" th:if="${messages?.size()}">
+<div role="banner" id="masthead"></div>
+<div role="main" id="main">
+<div role="alert" class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
-<a href="../"> Account Management</a> 
+<div role="navigation"><a href="../"> Account Management</a> </div>
 
 <h1> Login to user / system management tools for Computer Science systems </h1>
 

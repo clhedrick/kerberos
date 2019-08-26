@@ -75,7 +75,7 @@ function showedit(event) {
   editentry.find('.newoptions').val(options);
   editentry.find('.origname').val(cn);
 
-  / generate legend for control group, for accessiility
+  // generate legend for control group, for accessiility
   editentry.find('legend').text('Edit ' + cn);
   // call it a dialog box and set it for ESC closes it
   editentry.attr('role', 'dialog');
@@ -204,6 +204,6 @@ $(document).ready(function(){
 <input type="submit" value="Submit changes" th:if="${dhcpmanager || superuser}"/>
 </p>
 </form>
-<div role="contentinfo"  th:insert="~{accessibility :: footer}"></div>
+<div th:insert="~{accessibility :: footer}"></div>
 </div>
 </html>

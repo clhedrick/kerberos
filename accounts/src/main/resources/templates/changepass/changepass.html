@@ -3,15 +3,15 @@
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
 <title>Change Computer Science Password</title>
 </head>
-<div id="masthead"></div>
-<div id="main">
-<div class="messages" th:if="${messages?.size()}">
+<div role="banner" id="masthead"></div>
+<div role="main" id="main">
+<div role="alert" class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
-<div class="messages" th:if="${retval == 2}">
+<div role="alert" class="messages" th:if="${retval == 2}">
 <p>You don't have a computer science account. If you are eligible, please <a href="../activate/activate">Activate Your Account</a> first and then return here.</p>
 </div>
-<a href="../"> Account Management</a> 
+<div role="navigation"><a href="../"> Account Management</a> </div>
 
 <div th:if="${!allowchange}">
 <p>You have previously requested that we disable this function for your account.</p>
