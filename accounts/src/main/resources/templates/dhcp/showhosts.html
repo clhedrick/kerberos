@@ -16,18 +16,31 @@ function nextexists(event) {
      return;
   // find the model and insert a clone. make it not a model and
   // make sure it triggers this
-  thisentry.parent().find('.modelhost').clone().insertAfter(thisentry).
-    addClass('newhost').removeClass('modelhost').show().change(nextexists).
+  var newentry = thisentry.parent().find('.modelhost').clone().insertAfter(thisentry);
+  newentry.addClass('newhost').removeClass('modelhost').show().change(nextexists).
     find('.optionbox').click(optionvisible);
+  // increment the number used to build the legend: "add host N"
+  var addnum = parseInt(thisentry.find('.addnum').val(), 10) + 1;
+  // now add legend
+  newentry.find('.addnum').val(addnum);
+  newentry.find('legend').text('Add host ' + addnum);
   
 }
 
+// show a host edit box for this host
+// for accessibiity reasons I'm considering this a dialog box
+// focus has to go to it when opened. ESC has to close it
 function showedit(event) {
   var thisentry = $(this).closest('.itemlist-row');
   var nextentry = thisentry.next();
   // is there already an entry after this one? if so done
   if (nextentry.length && nextentry.hasClass('edithost')) {
      nextentry.toggle();
+     // this has aria role dialog. if we're opening, focus on it
+     if (nextentry.css('display') != 'none') {
+        nextentry.find('.newname').focus();
+        nextentry.keyup(closeEdit);
+     }
      return;
   }
   // find the model and insert a clone. make it not a model and
@@ -35,6 +48,8 @@ function showedit(event) {
   var editentry = $('.modelhost').clone().insertAfter(thisentry).
     addClass('edithost').removeClass('modelhost').show();
   editentry.find('.optionbox').click(optionvisible);
+
+  // find exist data for the host to set up defaults
   var cn = thisentry.find('.itemname').text();
   var address = thisentry.find('.itemaddress').text();
   if (address.startsWith('[')) {
@@ -53,16 +68,45 @@ function showedit(event) {
   if (optionelements.length > 0)
      options = options.substring(1);
 
-  editentry.find('.newname').val(cn);
+  // now put in the defaults
+  editentry.find('.newname').val(cn).focus();
   editentry.find('.newaddress').val(address);
   editentry.find('.newhwaddress').val(hwaddress);
   editentry.find('.newoptions').val(options);
   editentry.find('.origname').val(cn);
+
+  / generate legend for control group, for accessiility
+  editentry.find('legend').text('Edit ' + cn);
+  // call it a dialog box and set it for ESC closes it
+  editentry.attr('role', 'dialog');
+  editentry.keyup(closeEdit);
  
 }
 
+// called by ESC key to close edit dialog
+function closeEdit(event) {
+  // Check to see if space or enter were pressed
+  if (event.keyCode === 27) {
+    // Prevent the default action to stop scrolling when space is pressed
+    event.preventDefault();
+    var thisentry = $(this);
+    var preventry = thisentry.prev();
+    thisentry.hide();
+    preventry.find('button').focus();
+  }
+}
+
+
+// toggle visibility of options box
+// it's always visible to screen readers,
+// so this uses the hidden class rather than
+// display:none
 function optionvisible(event) {
-  $(this).parent().find('textarea').toggle();
+  var t = $(this).parent().find('.optionlabel');
+  if (t.hasClass('hidden'))
+    t.removeClass('hidden');
+  else
+    t.addClass('hidden');
 }
 
 $(document).ready(function(){
@@ -74,15 +118,15 @@ $(document).ready(function(){
 /*]]>*/
 </script>
 </head>
-<div id="masthead"></div>
-<div id="main">
+<div role="banner" id="masthead"></div>
+<div role="main" id="main">
 
-<div class="messages" th:if="${messages?.size()}">
+<div role="alert" class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
 
-<a href="../"> Account Management</a> | <a href="showsubnets"> Subnets </a>
+<div role="navigation"><a href="../"> Account Management</a> | <a href="showsubnets"> Subnets </a></div>
 
 <h1> DHCP Host Management </h1>
 
@@ -94,16 +138,21 @@ $(document).ready(function(){
 
 <h2>Current hosts</h2>
 
-<div class="inset" style="padding-top:0.5em">
+<p style="font-size:smaller">To delete an entry, click on the box in front of it and hit Submit</p>
+
+<div class="inset">
 
 <ul class="itemlist">
 <li th:each="h : ${hosts}">
+<fieldset class="transparent-fieldset">
 <div class="itemlist-row">
-<div class="itemlist-entry1"> <input type="checkbox" name="del" th:value="${h.cn[0]}"/> </div>
+<legend class="hidden" th:text="${h.cn[0]}"/>
+<div class="itemlist-entry1"> <label><span class="hidden">Delete</span><input type="checkbox" name="del" th:value="${h.cn[0]}"/> </label></div>
 <div class="itemlist-entry2"> <span class="itemaddress" th:text="${h.address}"/> </div>
 <div> <button class="editbutton" type="button">Edit</button> </div>
 <div class="itemlist-entry3a"> <span class="itemname" th:text="${h.cn[0]}"/> &middot; <span class="itemhwaddress" th:text="${h.dhcphwaddress[0]}"/> <span th:if="${h['dhcpoption']}" th:text="${h['dhcpoption']}"/><span class="itemoptions" style="visibility: hidden" th:each="l: ${h['dhcpoption']}" th:text="${l}" /> </div>
 </div>
+</fieldset>
 </li>
 </ul>
   
@@ -116,34 +165,45 @@ $(document).ready(function(){
 
 <div class="inset" style="margin-top:1em">
 <div class="newhost">
+<fieldset class="transparent-fieldset">
+<legend class="hidden">Add host 1</legend>
+<input type="hidden" name="addnum[]" class="addnum" value="1" />
 <input type="hidden" class="origname" name="origname[]" value="" />
 <label>Hostname: <input class="newname" type="text" name="names[]" id="names[]"/></label>
-<button type="button"  class="optionbox">Click to show options (not normally needed)</button>
+<button type="button" aria-hidden="true"  class="optionbox">Click to show options (not normally needed)</button>
 <br/>
 <label>Ethernet: <input type="text" name="ethernet[]" id="ethernet[]"/></label>
 <br/>
-<label>IP address: <input type="text" name="ip[]" id="ip[]"/></label> (comma separated for more than one, blank for DNS lookup)
-<textarea rows="4" cols="80" name="options[]" id="options[]" style=display:none>
+<label>IP address: <input type="text" name="ip[]" id="ip[]"/></label> (comma separated for more than one, blank for DNS lookup)<br/>
+<label class="optionlabel hidden">Options:<br/>
+<textarea rows="4" cols="80" name="options[]" id="options[]">
 </textarea>
 </label>
+</fieldset>
 </div>
 <div class="modelhost" style="display:none; margin-top:15px">
+<fieldset class="transparent-fieldset">
+<legend class="hidden">Add host 2</legend>
+<input type="hidden" name="addnum[]" class="addnum" value="2" />
 <input type="hidden" class="origname" name="origname[]" value="" />
 <label>Hostname: <input class="newname" type="text" name="names[]" id="names[]"/></label>
-<button type="button"  class="optionbox">Click to show options (not normally needed)</button>
+<button type="button" aria-hidden="true" class="optionbox">Click to show options (not normally needed)</button>
 <br/>
 <label>Ethernet: <input class="newhwaddress" type="text" name="ethernet[]" id="ethernet[]"/></label>
 <br/>
-<label>IP address: <input class="newaddress" type="text" name="ip[]" id="ip[]"/></label> (comma separated for more than one, blank for DNS lookup)
-<textarea rows="4" cols="80" class="newoptions" name="options[]" id="options[]" style=display:none>
+<label>IP address: <input class="newaddress" type="text" name="ip[]" id="ip[]"/></label> (comma separated for more than one, blank for DNS lookup)<br/>
+<label class="hidden optionlabel">Options:<br/>
+<textarea rows="4" cols="80" class="newoptions" name="options[]" id="options[]">
 </textarea>
 </label>
 </div>
-
-<input type="submit" value="Add/Delete Hosts"/>
+</fieldset>
 </div>
 </div>
+<p>
+<input type="submit" value="Submit changes" th:if="${dhcpmanager || superuser}"/>
+</p>
 </form>
-<div th:insert="~{accessibility :: footer}"></div>
+<div role="contentinfo"  th:insert="~{accessibility :: footer}"></div>
 </div>
 </html>

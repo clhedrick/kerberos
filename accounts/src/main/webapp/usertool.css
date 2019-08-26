@@ -132,3 +132,18 @@ h3 {
     margin-bottom: 1em;
     margin-left: 2em;
 }
+/* screen reader shows, but not normal browser */
+.hidden {
+    position:absolute;
+    left:-10000px;
+    top:auto;
+    width:1px;
+    height:1px;
+    overflow:hidden;
+}
+/* fieldset with no visible features */
+.transparent-fieldset {
+    border:none;
+    margin:0px;
+    padding:0px;
+}

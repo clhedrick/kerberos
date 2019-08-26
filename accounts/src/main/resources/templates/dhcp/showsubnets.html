@@ -52,15 +52,15 @@ function dolookup(event) {
 /*]]>*/
 </script>
 </head>
-<div id="masthead"></div>
-<div id="main">
+<div role="banner" id="masthead"></div>
+<div role="main" id="main">
 
-<div class="messages" th:if="${messages?.size()}">
+<div role="alert" class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
 
-<a href="../"> Account Management</a>
+<div role="navigation"><a href="../"> Account Management</a></div>
 
 <h1> DHCP Subnet Management </h1>
 
@@ -80,10 +80,15 @@ function dolookup(event) {
 <div class="inset" style="padding-top:0.5em">
 
 <ul class="itemlist">
-<li class="itemlist-row" th:each="s : ${subnets}">
-<div class="itemlist-entry1"><input type="checkbox" name="del" th:value="${s.cn[0]}"/> </div>
+<li th:each="s : ${subnets}">
+<fieldset class="transparent-fieldset">
+<div class="itemlist-row">
+<legend class="hidden" th:text="${s.cn[0]}"/>
+<div class="itemlist-entry1"><label><span class="hidden">Delete</span><input type="checkbox" name="del" th:value="${s.cn[0]}"/></label> </div>
 <div class="itemlist-entry2"> <a th:href="@{showhosts(subnet=${s.cn[0] + '/' + s.dhcpnetmask[0]})}"><span th:text="${s.cn[0] + '/' + s.dhcpnetmask[0]}"/></a></div>
 <div class="itemlist-entry3" th:if="${s['dhcpoption']}"  th:text="${s['dhcpoption']}"/>
+</div>
+</fieldset>
 </li>
 </ul>
 
@@ -106,6 +111,6 @@ function dolookup(event) {
 </div>
 </div>
 </form>
-<div th:insert="~{accessibility :: footer}"></div>
+<div role="contentinfo" th:insert="~{accessibility :: footer}"></div>
 </div>
 </html>
