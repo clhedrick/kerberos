@@ -18,3 +18,5 @@ will enable IP forwarding on the system, or that won't work. If you
 have more than one Ethernet interface you should talk with your
 networks staff before doing that.
 
+This has been tested in Ubuntu 18 and Centos 7. It should be carefully
+checked for other versions.
