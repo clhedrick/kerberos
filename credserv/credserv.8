@@ -1,6 +1,6 @@
 .TH CREDSERV 8
 .SH NAME
-credserv \- provide Kerberos credentials from keytab stored to remote client
+credserv \- provide Kerberos credentials for kgetcred or the cron PAM module
 .SH SYNOPSIS
 .B credserv
 [ -d ]
@@ -8,7 +8,14 @@ credserv \- provide Kerberos credentials from keytab stored to remote client
 .I  kgetcred
 is designed for cron jobs or services that need access to Kerberos
 credentials, but don't have an interactive user to supply them.
-Kgetcred sends a request to a credserv server. The server stores
+Kgetcred sends a request to a credserv server. Credserv generates
+Kerberos credentials for the user (if the user has authorized it)
+and returns them to the client. See below for more informatio
+about how credentials are generated. Credserv can either use a 
+keytable for the user stored in LDAP, or with proper configuration
+it can impersonate the KDC.
+.PP
+The server stores
 its data in LDAP. It uses two attributes.
 .PP
 csRutgersEduCredservRule can have multiple values. The values look like
@@ -22,12 +29,39 @@ that the credentials should be forwardable.
 .PP
 * in the host field will apply to all hosts
 .PP
-csRutgersEduCredservKeytab stores key tables. There is a separate entry
+The purpose of credserv is to generate credentials for a user and return
+it to the client. Typically this is a pam module that is handling the
+start of cron job. It has two ways to generate credentials. The safe
+one is with a key table. Credserv will store a key table for the user
+in LDAP. (LDAP had better be set so this data isn't public.) That can
+be used to generate credentials. 
+.PP
+The second approach is to impersonate the KDC. If the configuration
+contains impersonate=FILE, that file will be expected to contain the
+master key table for generating TGTs. The main advantage of impersonation
+is that it works with users that have one-time passwords. AT least with
+Refhat's IPA, user key tables don't work for these users.
+.PP
+Credserv will always attempt to generate a key table for the user and
+save it in LDAP, even if impersonation is configured. (It might be a good idea to remove this code if you're
+sure you're always going to use impersonation.)
+.PP
+The LDAP attribute csRutgersEduCredservKeytab stores key tables. There is a separate entry
 for each principal that appears in a rule. The value will be of the form
 .pp
 smith@CS.RUGTGERS.EDU=nnnnnn
 .PP
 where nnnnn is a key table encoded in base64.
+.PP
+Credserv has one additional function that is only loosely
+related to generatign user credentials: it can generate credentials
+for an anonymous user. This can be useful if you have people
+with one-time passwords. Doing kinit for a user with a one-time
+password requires an existing credential to "armor" the request.
+These anonymous credentials can be used for that. (A lot of code
+uses credentials from /etc/krb5.keytab. However that only works
+for daemons that can read /etc/krb5.keytab. Typically only root
+can read it.)
 .PP
 Because anonymous kinit isn't supported on all systems yet, and it's
 needed to armor requests for one-time passwords, this service
@@ -50,7 +84,12 @@ Where host prnicipals are used,
 credserv verifies that the hostname in the principal matches the IP
 address from which the request came.
 .PP
-Kgetcred can also register and unregister principals. Privileged
+Kgetcred is used to register and unregister principals, i.e. to
+define which users can make requests fron credserv (on which host).
+It works by talking to credserv, which then adds or removes rules
+for the user in LDAP.
+.PP
+Privileged
 users (users in the admin group; see below) may change any
 user. The protocol allows user, principal and flags to be passed.
 But unprivileged users must have user and principal match the
