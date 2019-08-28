@@ -17,7 +17,6 @@ int main(int argc, char **argv) {
   pid_t parent = getpid();
   uid_t uid = getuid();
   uid_t gid = getgid();
-  char * cmd;
   char * linkname;
   struct stat statbuf;
   int netns;
@@ -97,8 +96,6 @@ int main(int argc, char **argv) {
     }
   }
 
-  free(cmd);
-
   //    snprintf(net_path, sizeof(net_path), "%s/%s", NETNS_RUN_DIR, name);
   netns = open(linkname, O_RDONLY | O_CLOEXEC);
   if (netns < 0) {
@@ -117,13 +114,20 @@ int main(int argc, char **argv) {
   setresgid(gid, gid, gid);
   setresuid(uid, uid, uid);
   
+  // free any existing environment, since we allocated some
   clearenv();
+  // put back the user's environment
   environ = oldenviron;
 
+  // ros needs this. because we're setuid the system
+  // killed LD_LIBRARY_PATH. If you want to use sthis
+  // for things other than gazebo and ros, you'll need
+  // to find some way to configure it to have the
+  // run library path. Maybe a list of executables and
+  // paths they need
   setenv("LD_LIBRARY_PATH", "/opt/ros/melodic/lib", 1);
 
-  // free any existing environment, since we allocated some
-  
+  // now run whatever the user told us to
   execvp(argv[1], &argv[1]);
   printf("execv failed\n");
   _exit(EXIT_FAILURE);   // exec never returns
