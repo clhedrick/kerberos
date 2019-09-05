@@ -88,6 +88,20 @@ public class DhcpHostsController {
 	return ret;
     }
 
+    // from the conversion process we sometimes have an entry
+    // with two cns. One is the hostname. The other (which is
+    // used for the dn) has a number on the end to make it unique
+    public void fixCn(Map<String,List<String>> host) {
+	if (host.get("cn").size() > 1) {
+	    // this is that weird case. reset cn from dm
+	    var dn = lu.oneVal(host.get("dn"));
+	    // cn=jjj,...
+	    var i = dn.indexOf(",");
+	    var cn = dn.substring(3, i);
+	    host.put("cn", List.of(cn));
+	}
+    }
+
     @GetMapping("/dhcp/showhosts")
     public String hostsGet(@RequestParam(value="subnet", required=false) String subnet,
 			   HttpServletRequest request, HttpServletResponse response, Model model) {
@@ -173,7 +187,7 @@ public class DhcpHostsController {
 	    }
 	    
 	    // now mask is something like 128.6.*
-	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(dhcpStatements=fixed-address* " + mask + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption"});
+	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(dhcpStatements=fixed-address* " + mask + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
 	    Subject.doAs(subject, action);
 
 	    var hosts = action.data;
@@ -193,6 +207,7 @@ public class DhcpHostsController {
 				    if (subnetInfo.isInRange(address)) {
 					// only one address may match, but we should show them all when we show the host
 					host.put("address", Arrays.asList(addresses)); // save for sort
+					fixCn(host);
 					entries.add(host);
 					break; // don't add host more than once
 				    }
@@ -231,6 +246,7 @@ public class DhcpHostsController {
 			    for (var addr: addresses)
 				addrs.add(addr);
 			    host.put("address", addrs); // save for sort
+			    fixCn(host);
 			}
 		    }
 	    }
@@ -352,7 +368,50 @@ public class DhcpHostsController {
 		return loginController.loginGet("dhcp", request, response, model); 
 	    }
 
-	    if (ethernet == null || ! ethernet.matches("\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}:\\p{XDigit}\\p{XDigit}")) {
+	    if (ethernet != null) {
+		ethernet = ethernet.toLowerCase();
+		// let's assume consistent punctuation. What did they use?
+		String separator = null;
+		long count = 0;
+		if ((count = ethernet.chars().filter(ch -> ch == ':').count()) > 0)
+		    separator = ":";
+		else if ((count = ethernet.chars().filter(ch -> ch == '-').count()) > 0)
+		    separator = "-";
+		else if ((count = ethernet.chars().filter(ch -> ch == '.').count()) > 0)
+		    separator = ".";
+		else if ((count = ethernet.chars().filter(ch -> ch == ' ').count()) > 0)
+		    separator = " ";
+		// only reasonable numbers are 2 and 5, representing 3 or 6 components
+		if (count == 2 || count == 5) {
+		    // compute number of digits in each component
+		    int digits = 2;
+		    if (count == 2)
+			digits = 4;
+		    String[] pieces = ethernet.split("\\" + separator);
+		    // pad the components with 0 if necessary
+		    for (int i = 0; i <= count; i++) {
+			// if leading zeros are missing, supply them
+			if (pieces[i].length() < digits) {
+			    pieces[i] = "0000".substring(0, digits - pieces[i].length()) + pieces[i];
+			}
+		    }
+		    // we now have it without any punctuation
+		    ethernet = ethernet.join("", pieces);
+		} 
+		// for anything valid we now have 12 digits
+		if (! ethernet.matches("\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}")) {
+		    messages.add("Ethernet address must be of form xx:xx:xx:xx:xx:xx");
+		    model.addAttribute("messages", messages);
+		    continue;
+		}
+		// put it in the format dhcp wants
+		ethernet = ethernet.substring(0,2) + ":"
+		    + ethernet.substring(2,4) + ":"
+		    + ethernet.substring(4,6) + ":"
+		    + ethernet.substring(6,8) + ":"
+		    + ethernet.substring(8,10) + ":"
+		    + ethernet.substring(10,12);
+	    } else {
 		messages.add("Ethernet address must be of form xx:xx:xx:xx:xx:xx");
 		model.addAttribute("messages", messages);
 		continue;

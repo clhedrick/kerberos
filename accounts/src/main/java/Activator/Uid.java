@@ -33,11 +33,37 @@ import java.nio.channels.FileLock;
  */
 
 public class Uid {
+    public static FileLock getLock(FileChannel channel) {
+	var limit = 60; // 2 minutes, since it's 60 * 2000
+	while (true) {
+	    try {
+		FileLock lock = channel.lock();
+		return lock;
+	    } catch (java.nio.channels.OverlappingFileLockException ignore) {
+		// ignore, will try again
+	    } catch (Exception e) {
+	         throw new java.lang.IllegalArgumentException("problem locking uidtable " + e);
+	    }
+
+	    limit --;
+	    if (limit <= 0)
+		throw new java.lang.IllegalArgumentException("problem locking uidtable; OverlappingFileLockException too many times");
+	    // I think this happens onky for that exception. Other exceptions
+	    // won't be caught, and thus will trickle up
+	    try {
+		Thread.sleep(2000);
+	    } catch (java.lang.InterruptedException e) {
+		throw new java.lang.IllegalArgumentException("problem locking uidtable; some other thread interrupted our sleep");
+	    }
+
+	}	 
+    }
+
     public static long allocateUid(String netid, Config config) {
 	try (
 	     RandomAccessFile file = new RandomAccessFile(config.uidtable, "rw");
 	     FileChannel channel = file.getChannel();
-	     FileLock lock = channel.lock();
+	     FileLock lock = getLock(channel);
 	     ) {
 		String line;
 		String [] atoms = null;
