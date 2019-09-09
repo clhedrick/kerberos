@@ -11,13 +11,21 @@ yumdownloader --source dhcp
 rpm -ivh ./dhcp-*rpm
 yum-builddep dhcp
 
-cp /staff/users/hedrick/dhcp-duplicate-hwaddr.patch rpmbuild/SOURCES/
+cp /koko/sysadmin/hedrick/dhcp-duplicate-hwaddr.patch rpmbuild/SOURCES/
+cp /koko/sysadmin/hedrick/dhcp-dns-domain.patch rpmbuild/SOURCES/
 # last patch number
+LASTP=`awk '/^Patch[0-9]*:/ {n = substr($1,6,length($1)-6) + 0; if (n > m) m = n; lastp = 1}END{print n}' rpmbuild/SPECS/dhcp.spec`
 if ! grep -q "dhcp-duplicate-hwaddr.patch" rpmbuild/SPECS/dhcp.spec ; then
-  LASTP=`awk '/^Patch[0-9]*:/ {n = substr($1,6,length($1)-6) + 0; if (n > m) m = n; lastp = 1}END{print n}' rpmbuild/SPECS/dhcp.spec`
   THISP=$((LASTP+1))
   sed -i -e "/^Patch${LASTP}:/a Patch${THISP}: dhcp-duplicate-hwaddr.patch" -e "/^%patch${LASTP}/a %patch${THISP} -p1" rpmbuild/SPECS/dhcp.spec
+  LASTP=$((LASTP+1))
 fi
+if ! grep -q "dhcp-dns-domain.patch" rpmbuild/SPECS/dhcp.spec ; then
+  THISP=$((LASTP+1))
+  sed -i -e "/^Patch${LASTP}:/a Patch${THISP}: dhcp-dns-domain.patch" -e "/^%patch${LASTP}/a %patch${THISP} -p1" rpmbuild/SPECS/dhcp.spec
+  LASTP=$((LASTP+1))
+fi
+
 rpmbuild -bi rpmbuild/SPECS/dhcp.spec
 install rpmbuild/BUILDROOT/dhcp-*/usr/sbin/dhcpd /usr/sbin/dhcpd -o root -g root -m 0755
 
