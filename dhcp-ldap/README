@@ -1,0 +1,45 @@
+dhcpd getting data from freeipa
+
+checkdhcp -> /usr/libexec
+dhcpd.conf -> /etc/dhcpd.conf or /etc/dhcp/dhcpd.conf
+   depending up distribution
+serial.conf -> /etc/systemd/system/dhcpd.service.d/
+
+Note that ldap will dynamically read host information from LDAP, but
+won't see changes to subnet or other things. For that reason the
+web app that manages the data updates a serial number in 
+cn=config,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+It's stored in the dhcpcomment attribute.
+
+/usr/libexec/checkdhcp is run from cron every few minutes. It will
+restart dhcpd if the serial number changes.
+
+SETUP
+
+The LDAP system needs to have the DHCP schema added. This should
+be a one-time thing. The schema is in dhcp.ldif. This does not appear
+to be an actual ldif file. Maybe you can pass it to ldapadd, but
+I think it will need changetype:modify, attributetypes:add, and
+objectclasses:add.
+
+dhcpc.ldif sets up the configuration hierarchy, including some sample
+subnets. This is obviously Rutgers-specific, but changes shoud be
+fairly obvious.
+
+Data is maintained by the ldap web app, which is included in the
+accounts subdirectory. It should be possible to use that without the
+rest of the Rutgers account management, except that it uses the login
+screen from the group management tool, and a few utility classes.
+accounts/README says how to deploy this tool, though it assumes you're
+going to use all the pieces.
+
+BUG
+
+There's a bug in the code that's critical for us. If there's more
+than one host entry with the same Ethernet address, LDAP only
+finds the first. dhcp-duplicate-hwaddr.patch fixes it.
+
+To build dhcpd with this patch on Redhat/Centos, use builddhcp.
+It copies dhcp-duplicate-hwaddr.patch into the source area.
+You'll have to adjust it to find dhcp-duplicate-hwaddr.patch 
+whereever you have it.

@@ -1,0 +1,28 @@
+#!/bin/sh
+
+# see if dhcpd needs restart
+# a serial number is written into the dhcpComment attribute of the LDAP config
+# The systemd startup file runs this script with "startup", to save the 
+#   current value in /tmp/dhcpserial
+# This script checks to see if there's a new value. If so, restart
+
+CURRENT=`ldapsearch -x -b "cn=config,ou=dhcp,dc=cs,dc=rutgers,dc=edu" -s base dhcpcomments | grep '^dhcpcomm' | cut -d" " -f2`
+
+if test "$1" = "startup" ; then
+  echo $CURRENT > /tmp/dhcpserial
+
+elif test "$1" = "checkdns"; then
+  LINE=`host -t srv _ldap._tcp.cs.rutgers.edu | awk '{hosts = hosts " ldap://" substr($8, 1, length($8)-1)}END{gsub("/","\\\\/",hosts); print substr(hosts,11)}'`
+# for safety make sure looks like this:
+# krb2.cs.rutgers.edu ldap:\/\/krb...
+  if echo $LINE | grep '^[-0-9a-zA-Z]*.cs.rutgers.edu ldap:\\/\\/[-0-9a-zA-Z]*.cs.rutgers.edu' - >/dev/null; then
+    sed -i "s/^ldap-server.*$/ldap-servier $LINE/" /etc/dhcp/dhcpd.conf
+    logger -t dhcpcheck edited /etc/dhcp/dhcpd.conf, new servers "$LINE"
+  fi
+else
+  OLD=`cat /tmp/dhcpserial`
+  if test "$OLD" '!=' "$CURRENT" ; then
+    /usr/bin/systemctl restart dhcpd
+  fi
+fi
+
