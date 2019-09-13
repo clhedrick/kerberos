@@ -64,7 +64,7 @@ function dolookup(event) {
 
 <h1> DHCP Subnet Management </h1>
 
-<form th:action="@{/dhcp/showsubnets}" method="post">
+
 
 <div th:if="${subnets != null and subnets.size() > 0}">
 
@@ -75,6 +75,16 @@ function dolookup(event) {
 </ul>
 </div>
 
+<form action="showhosts" method="get">
+<h2>Find hosts</h2>
+
+<label>Host name: <input type="text" name="host"/></label><br/>
+<label>IP address: <input type="text" name="ip"/></label><br/>
+<label>Ethernet address: <input type="ether" name="ether"/></label> [aa:bb:cc:dd:ee:ff, or other standard format]<br/>
+<input type="submit" value="Search"/>
+</form>
+
+<form th:action="@{/dhcp/showsubnets}" method="post">
 <h2>Current subnets</h2>
 
 <div class="inset" style="padding-top:0.5em">

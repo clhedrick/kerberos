@@ -133,6 +133,9 @@ $(document).ready(function(){
 <form th:action="@{/dhcp/showhosts}" method="post">
 
 <input type="hidden" name="subnet" th:value="${subnet}"/>
+<input type="hidden" name="host" th:value="${host}"/>
+<input type="hidden" name="ip" th:value="${ip}"/>
+<input type="hidden" name="ether" th:value="${ether}"/>
 
 <div th:if="${hosts != null and hosts.size() > 0}">
 
@@ -150,7 +153,7 @@ $(document).ready(function(){
 <div class="itemlist-entry1"> <label><span class="hidden">Delete</span><input type="checkbox" name="del" th:value="${h.cn[0]}"/> </label></div>
 <div class="itemlist-entry2"> <span class="itemaddress" th:text="${h.address}"/> </div>
 <div> <button class="editbutton" type="button">Edit</button> </div>
-<div class="itemlist-entry3a"> <span class="itemname" th:text="${h.cn[0]}"/> &middot; <span class="itemhwaddress" th:text="${h.dhcphwaddress[0]}"/> <span th:if="${h['dhcpoption']}" th:text="${h['dhcpoption']}"/><span class="itemoptions" style="visibility: hidden" th:each="l: ${h['dhcpoption']}" th:text="${l}" /> </div>
+<div class="itemlist-entry3a"> <span class="itemname" th:text="${h.cn[0]}"/> &middot; <span class="itemhwaddress" th:text="${h.dhcphwaddress[0]}"/> <span th:if="${h['dhcpoption']}" th:text="${h['dhcpoption']}"/><span class="itemoptions" style="display: none" th:each="l: ${h['dhcpoption']}" th:text="${l}" /> </div>
 </div>
 </fieldset>
 </li>
@@ -202,6 +205,7 @@ $(document).ready(function(){
 </div>
 <p>
 <input type="submit" value="Submit changes" th:if="${dhcpmanager || superuser}"/>
+
 </p>
 </form>
 <div th:insert="~{accessibility :: footer}"></div>

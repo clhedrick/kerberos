@@ -82,7 +82,7 @@ public class DhcpHostsController {
     public String filtername(String s) {
 	if (s == null)
 	    return null;
-	String ret = s.replaceAll("[^-a-zA-Z.0-9]","");
+	String ret = s.replaceAll("[^-_a-zA-Z.:0-9]","");
 	if (ret.equals(""))
 	    return null;
 	return ret;
@@ -102,8 +102,57 @@ public class DhcpHostsController {
 	}
     }
 
+    public String normalizeEthernet(String ethernet) {
+	if (ethernet == null)
+	    return null;
+	ethernet = ethernet.toLowerCase();
+	// let's assume consistent punctuation. What did they use?
+	String separator = null;
+	long count = 0;
+	if ((count = ethernet.chars().filter(ch -> ch == ':').count()) > 0)
+	    separator = ":";
+	else if ((count = ethernet.chars().filter(ch -> ch == '-').count()) > 0)
+	    separator = "-";
+	else if ((count = ethernet.chars().filter(ch -> ch == '.').count()) > 0)
+	    separator = ".";
+	else if ((count = ethernet.chars().filter(ch -> ch == ' ').count()) > 0)
+	    separator = " ";
+	// only reasonable numbers are 2 and 5, representing 3 or 6 components
+	if (count == 2 || count == 5) {
+	    // compute number of digits in each component
+	    int digits = 2;
+	    if (count == 2)
+		digits = 4;
+	    String[] pieces = ethernet.split("\\" + separator);
+	    // pad the components with 0 if necessary
+	    for (int i = 0; i <= count; i++) {
+		// if leading zeros are missing, supply them
+		if (pieces[i].length() < digits) {
+		    pieces[i] = "0000".substring(0, digits - pieces[i].length()) + pieces[i];
+		}
+	    }
+	    // we now have it without any punctuation
+	    ethernet = ethernet.join("", pieces);
+	} 
+	// for anything valid we now have 12 digits
+	if (! ethernet.matches("\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}")) {
+	    return null;
+	}
+	// put it in the format dhcp wants
+	ethernet = ethernet.substring(0,2) + ":"
+	    + ethernet.substring(2,4) + ":"
+	    + ethernet.substring(4,6) + ":"
+	    + ethernet.substring(6,8) + ":"
+	    + ethernet.substring(8,10) + ":"
+	    + ethernet.substring(10,12);
+	return ethernet;
+    }
+
     @GetMapping("/dhcp/showhosts")
     public String hostsGet(@RequestParam(value="subnet", required=false) String subnet,
+			   @RequestParam(value="host", required=false) String hostname,
+			   @RequestParam(value="ip", required=false) String ipaddress,
+			   @RequestParam(value="ether", required=false) String etheraddress,
 			   HttpServletRequest request, HttpServletResponse response, Model model) {
 	// This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.
 	// This JndiAction junk is needed to execute the LDAP code in a context that's authenticated by
@@ -133,7 +182,6 @@ public class DhcpHostsController {
 	// Another way to do this would be to add a lowaddress and highattress attribute to
 	//   the subnet that is a 32-bit number, and a 32-bit address to each host.
 	//   Then we could do an LDAP search for addresses >= low and < high. 
-	var filter = "objectclass=dhcphost";
 	if (subnet != null && !subnet.isBlank()) {
 	    // user has passed subnet, parse it
 	    SubnetUtils subnetu = null;
@@ -229,8 +277,31 @@ public class DhcpHostsController {
 	    return "/dhcp/showhosts";
 	}
 
-	// no subnet arg. all hosts
-	common.JndiAction action = new common.JndiAction(new String[]{"(objectclass=dhcphost)", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements"});
+
+	
+	// no subnet arg. all hosts or a search
+	var filter = "objectclass=dhcphost";
+	if (hostname != null && !hostname.isBlank()) {
+	    var name = filtername(hostname.trim());
+	    model.addAttribute("host", name);
+	    filter = "(&(objectclass=dhcphost)(|(cn=" + name + ")(dhcpoption=host-name \"" + name + "\")))";
+	} else if (ipaddress != null && !ipaddress.isBlank()) {
+	    var name = filtername(ipaddress.trim());
+	    model.addAttribute("ip", name);
+	    filter = "(&(objectclass=dhcphost)(dhcpStatements=fixed-address " + name + "))";
+	} else if (etheraddress != null && !etheraddress.isBlank()) {
+	    var name = normalizeEthernet(etheraddress.trim());
+	    if (name == null) {
+		List<String> messages = new ArrayList<String>();
+		messages.add("Invalid Ethernet address, try aa:bb:cc:dd:ee:ff, but any standard format will work");
+		model.addAttribute("messages", messages);
+		return subnetsController.subnetsGet(request, response, model);
+	    }
+	    model.addAttribute("ether", name);
+	    filter = "(&(objectclass=dhcphost)(dhcpHWAddress=ethernet*" + name + "))";
+	}
+
+	common.JndiAction action = new common.JndiAction(new String[]{filter, conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
 	Subject.doAs(subject, action);
 
 	var hosts = action.data;
@@ -266,6 +337,9 @@ public class DhcpHostsController {
     @PostMapping("/dhcp/showhosts")
     public String subnetsSubmit(@RequestParam(value="names[]", required=false) String[] names,
 			       @RequestParam(value="subnet", required=false) String subnet,
+			       @RequestParam(value="host", required=false) String hostname,
+			       @RequestParam(value="ip", required=false) String ipaddress,
+			       @RequestParam(value="ether", required=false) String etheraddress,
 			       @RequestParam(value="ethernet[]", required=false) String[] ethernets,
 			       @RequestParam(value="ip[]", required=false) String[] ips,
 			       @RequestParam(value="origname[]", required=false) String[] orignames,
@@ -326,7 +400,7 @@ public class DhcpHostsController {
 
 	// if no name specified, nothing more to do
 	if (names == null || names.length == 0)
-	    return hostsGet(subnet, request, response, model);
+	    return hostsGet(subnet, hostname, ipaddress, etheraddress, request, response, model);
 
 	DirContext ctx = null;
 	mainloop:
@@ -368,51 +442,9 @@ public class DhcpHostsController {
 		return loginController.loginGet("dhcp", request, response, model); 
 	    }
 
-	    if (ethernet != null) {
-		ethernet = ethernet.toLowerCase();
-		// let's assume consistent punctuation. What did they use?
-		String separator = null;
-		long count = 0;
-		if ((count = ethernet.chars().filter(ch -> ch == ':').count()) > 0)
-		    separator = ":";
-		else if ((count = ethernet.chars().filter(ch -> ch == '-').count()) > 0)
-		    separator = "-";
-		else if ((count = ethernet.chars().filter(ch -> ch == '.').count()) > 0)
-		    separator = ".";
-		else if ((count = ethernet.chars().filter(ch -> ch == ' ').count()) > 0)
-		    separator = " ";
-		// only reasonable numbers are 2 and 5, representing 3 or 6 components
-		if (count == 2 || count == 5) {
-		    // compute number of digits in each component
-		    int digits = 2;
-		    if (count == 2)
-			digits = 4;
-		    String[] pieces = ethernet.split("\\" + separator);
-		    // pad the components with 0 if necessary
-		    for (int i = 0; i <= count; i++) {
-			// if leading zeros are missing, supply them
-			if (pieces[i].length() < digits) {
-			    pieces[i] = "0000".substring(0, digits - pieces[i].length()) + pieces[i];
-			}
-		    }
-		    // we now have it without any punctuation
-		    ethernet = ethernet.join("", pieces);
-		} 
-		// for anything valid we now have 12 digits
-		if (! ethernet.matches("\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}\\p{XDigit}")) {
-		    messages.add("Ethernet address must be of form xx:xx:xx:xx:xx:xx");
-		    model.addAttribute("messages", messages);
-		    continue;
-		}
-		// put it in the format dhcp wants
-		ethernet = ethernet.substring(0,2) + ":"
-		    + ethernet.substring(2,4) + ":"
-		    + ethernet.substring(4,6) + ":"
-		    + ethernet.substring(6,8) + ":"
-		    + ethernet.substring(8,10) + ":"
-		    + ethernet.substring(10,12);
-	    } else {
-		messages.add("Ethernet address must be of form xx:xx:xx:xx:xx:xx");
+	    ethernet = normalizeEthernet(ethernet);
+	    if (ethernet == null) {
+		messages.add("Invalid Ethernet address. Try format aa:bb:cc:dd:ee:ff, although other formats also work");
 		model.addAttribute("messages", messages);
 		continue;
 	    }
@@ -479,10 +511,15 @@ public class DhcpHostsController {
 		    entry.put(dhcpStatements);
 		}
 	    
+		ethernet = normalizeEthernet(ethernet);
+		if (ethernet == null) {
+		    messages.add("Invalid Ethernet address. Try format aa:bb:cc:dd:ee:ff, although other formats also work");
+		    model.addAttribute("messages", messages);
+		}
 		var etherval = "ethernet " + ethernet;
 		if (! etherval.equals(lu.oneVal(host.get("dhcphwaddress")))) {
 		    changed = true;
-		    var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", "ethernet " + ethernet);
+		    var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", etherval);
 		    entry.put(dhcpHWAddress);
 		}
 
@@ -584,7 +621,7 @@ public class DhcpHostsController {
 	try {
 	    ctx.close();
 	} catch (Exception ignore) {}	    
-	return hostsGet(subnet, request, response, model);
+	return hostsGet(subnet, hostname, ipaddress, etheraddress, request, response, model);
 
     }
 
