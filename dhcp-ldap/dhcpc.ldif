@@ -1,0 +1,88 @@
+dn: ou=dhcp,dc=cs,dc=rutgers,dc=edu
+ou: dhcp
+objectClass: top
+objectClass: organizationalUnit
+description: DHCP Servers
+aci: (target="ldap:///ou=dhcp,dc=cs,dc=rutgers,dc=edu")(targetattr=*)(version 3.0; acl "Manage DHCP Data";
+ allow (all) (groupdn="ldap:///cn=dhcp-manager,cn=groups,cn=accounts,dc=cs,dc=rutgers,dc=edu"); )
+aci: (target="ldap:///ou=dhcp,dc=cs,dc=rutgers,dc=edu")(targetattr=*)(version 3.0; acl "Read DHCP Data";
+ allow (read,search) (userdn="ldap:///anyone"); )
+
+
+dn: cn=server,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+cn: server
+objectClass: top
+objectClass: dhcpServer
+dhcpServiceDN: cn=config,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+
+dn: cn=config, ou=dhcp,dc=cs,dc=rutgers,dc=edu
+cn: config
+objectClass: top
+objectClass: dhcpService
+dhcpPrimaryDN:  cn=server,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+dhcpStatements: ddns-update-style none
+dhcpStatements: get-lease-hostnames true
+dhcpStatements: use-host-decl-names true
+dhcpStatements: default-lease-time 518400
+dhcpStatements: max-lease-time 518400
+dhcpoption domain-name "rutgers.edu"
+dhcpoption time-offset -18000
+dhcpoption domain-name-servers 128.6.1.1
+dhcpoption lpr-servers 128.6.168.240
+dhcpoption ntp-servers ntp.rutgers.edu
+dhcpoption time-servers ntp.rutgers.edu
+
+dn: cn=128.6.0.0,cn=config,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+cn: 128.6.0.0
+objectClass: top
+objectClass: dhcpSubnet
+objectClass: dhcpOptions
+dhcpNetMask: 16
+dhcpStatements: default-lease-time 600
+dhcpStatements: max-lease-time 7200
+dhcpOption: domain-name-servers 128.6.1.1
+dhcpOption: domain-name "rutgers.edu"
+
+dn: cn=172.16.0.0,cn=config,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+cn: 172.16.0.0
+objectClass: top
+objectClass: dhcpSubnet
+objectClass: dhcpOptions
+dhcpNetMask: 16
+dhcpStatements: default-lease-time 600
+dhcpStatements: max-lease-time 7200
+dhcpOption: domain-name-servers 128.6.1.1
+dhcpOption: domain-name "rutgers.edu"
+
+dn: cn=172.17.0.0,cn=config,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+cn: 172.17.0.0
+objectClass: top
+objectClass: dhcpSubnet
+objectClass: dhcpOptions
+dhcpNetMask: 16
+dhcpStatements: default-lease-time 600
+dhcpStatements: max-lease-time 7200
+dhcpOption: domain-name-servers 128.6.1.1
+dhcpOption: domain-name "rutgers.edu"
+
+dn: cn=172.21.0.0,cn=config,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+cn: 172.21.0.0
+objectClass: top
+objectClass: dhcpSubnet
+objectClass: dhcpOptions
+dhcpNetMask: 16
+dhcpStatements: default-lease-time 600
+dhcpStatements: max-lease-time 7200
+dhcpOption: domain-name-servers 128.6.1.1
+dhcpOption: domain-name "rutgers.edu"
+
+dn: cn=192.168.0.0,cn=config,ou=dhcp,dc=cs,dc=rutgers,dc=edu
+cn: 192.168.0.0
+objectClass: top
+objectClass: dhcpSubnet
+objectClass: dhcpOptions
+dhcpNetMask: 16
+dhcpStatements: default-lease-time 600
+dhcpStatements: max-lease-time 7200
+dhcpOption: domain-name-servers 128.6.1.1
+dhcpOption: domain-name "rutgers.edu"

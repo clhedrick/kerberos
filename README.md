@@ -193,4 +193,9 @@ normal password, on the same line.)
 This is also a simple example of how to write code to process
 one-time passwords in C.
 
+## dhcp-ldap
+
+Instructions for integrating the ISC dhcpd. Our accounts application
+will manage DHCP data in LDAP. This has setup instructions and a 
+patch for the LDAP server.
 

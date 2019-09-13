@@ -1,0 +1,76 @@
+--- dhcp-4.2.5/server/ldap.c.dhcp-duplicate-hwaddr	2019-09-09 10:49:57.312473643 -0400
++++ dhcp-4.2.5/server/ldap.c	2019-09-09 11:01:24.263673181 -0400
+@@ -1704,6 +1704,7 @@ find_haddr_in_ldap (struct host_decl **h
+   isc_result_t status;
+   ldap_dn_node *curr;
+   int ret;
++  int ok = 0;
+ 
+   if (ldap_method == LDAP_METHOD_STATIC)
+     return (0);
+@@ -1803,8 +1804,8 @@ find_haddr_in_ldap (struct host_decl **h
+ #endif
+         }
+     }
+-
+-  if (res && ent)
++  
++  while (res && ent)
+     {
+ #if defined (DEBUG_LDAP)
+       char *dn = ldap_get_dn (ld, ent);
+@@ -1821,6 +1822,12 @@ find_haddr_in_ldap (struct host_decl **h
+         {
+           log_fatal ("can't allocate host decl struct: %s", 
+                      isc_result_totext (status)); 
++	  // if we've been around this loop once
++	  // there will be other host references that should
++	  // be dereferenced. However since this is fatal
++	  // anyway it seems safest to ignore that and just
++	  // exit, rather than writing code that can't be
++	  // tested and won't be used.
+           ldap_msgfree (res);
+           return (0);
+         }
+@@ -1829,28 +1836,34 @@ find_haddr_in_ldap (struct host_decl **h
+       if (host->name == NULL)
+         {
+           host_dereference (&host, MDL);
+-          ldap_msgfree (res);
+-          return (0);
++	  // maybe there are other usable hosts
++          continue;
+         }
+ 
+       if (!clone_group (&host->group, root_group, MDL))
+         {
+           log_fatal ("can't clone group for host %s", host->name);
++	  // see note above on fatal error
+           host_dereference (&host, MDL);
+           ldap_msgfree (res);
+           return (0);
+         }
+ 
+       ldap_parse_options (ent, host->group, HOST_DECL, host, NULL);
+-
++      // link in previously found host, if any
++      if (ok)
++        host -> n_ipaddr = *hp;
++      else
++        host -> n_ipaddr = (struct host_decl *)0;
+       *hp = host;
+-      ldap_msgfree (res);
+-      return (1);
++      // look for the next host in the returned LDAP data
++      ent = ldap_next_entry(ld, ent);
++      // found one usable host
++      ok = 1;
+     }
+ 
+-
+   if(res) ldap_msgfree (res);
+-  return (0);
++  return (ok);
+ }
+ 
+ 
