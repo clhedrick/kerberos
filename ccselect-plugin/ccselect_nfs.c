@@ -47,8 +47,12 @@ ccselect_nfs_choose(krb5_context context, krb5_ccselect_moddata data,
 {
     char *str;
 
-    if (! krb5_unparse_name(context, server, &str)) {
-        if (strncmp(str, "nfs/") == 0) {
+    // with ubuntu 16, this gets called for the machine credentials
+    // if we let this code trigger it would try to find a credential for root
+    // rather than host/MACHINE. so only use this if euid != 0
+    if (geteuid() != 0 && ! krb5_unparse_name(context, server, &str)) {
+        // only do this for NFS, where the service principal is nfs/...
+        if (strncmp(str, "nfs/", 4) == 0) {
             char pwbuf[1024]; // for strings in the pwd struct
             struct passwd passwd;  // for the pwd struct
             struct passwd *pwd;  // the actual return value, pointer to passwd or NULL
