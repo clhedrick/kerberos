@@ -27,6 +27,8 @@ import java.util.TimeZone;
 import java.util.Calendar;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Comparator;
+import java.math.BigInteger;
 import java.text.SimpleDateFormat;
 import java.net.UnknownHostException;
 import java.net.InetAddress;
@@ -102,6 +104,15 @@ public class DhcpHostsController {
 	}
     }
 
+    public static BigInteger getIntAddress(Map<String,List<String>> entry, String property) {
+	try {
+	    var ipAddress = entry.get(property).get(0);
+	    return new BigInteger(1, InetAddress.getByName(ipAddress).getAddress());
+	} catch (Exception ignore) {
+	    return new BigInteger("0");
+	}
+    }
+
     public String normalizeEthernet(String ethernet) {
 	if (ethernet == null)
 	    return null;
@@ -147,6 +158,12 @@ public class DhcpHostsController {
 	    + ethernet.substring(10,12);
 	return ethernet;
     }
+
+    // credit to otamega
+    //    private static final Comparator<String> IpComparator = Comparator
+    //	.comparing(InetAddress::getAddress,
+    //		   Comparator.comparingInt((byte[] b) -> b.length)
+    //		   .thenComparing(b -> new BigInteger(1, b)));
 
     @GetMapping("/dhcp/showhosts")
     public String hostsGet(@RequestParam(value="subnet", required=false) String subnet,
@@ -264,7 +281,7 @@ public class DhcpHostsController {
 			}
 		}
 		// now entries is all the hosts that match the subnet specification
-		Collections.sort(entries, (g1, g2) -> g1.get("address").get(0).compareTo(g2.get("address").get(0)));
+		Collections.sort(entries, (g1, g2) -> getIntAddress(g1, "address").compareTo(getIntAddress(g2, "address")));
 
 	    }
 	    // set up model for JSTL to output
@@ -322,7 +339,7 @@ public class DhcpHostsController {
 		    }
 	    }
 	    // now entries is all the hosts that match the subnet specification
-	    Collections.sort(hosts, (g1, g2) -> g1.get("address").get(0).compareTo(g2.get("address").get(0)));
+	    Collections.sort(hosts, (g1, g2) -> getIntAddress(g1, "address").compareTo(getIntAddress(g2, "address")));
 	}
 
 	model.addAttribute("subnet", subnet);

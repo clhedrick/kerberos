@@ -112,7 +112,7 @@ public class SubnetsController {
 
 	// look at the results of the LDAP query
 	var subnets = action.data;
-	Collections.sort(subnets, (g1, g2) -> g1.get("cn").get(0).compareTo(g2.get("cn").get(0)));
+	Collections.sort(subnets, (g1, g2) -> DhcpHostsController.getIntAddress(g1,"cn").compareTo(DhcpHostsController.getIntAddress(g2, "cn")));
 
 	// set up model for JSTL to output
 	model.addAttribute("subnets", subnets);
