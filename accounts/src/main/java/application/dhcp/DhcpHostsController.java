@@ -19,6 +19,9 @@
 
 package application;
 
+// show hosts in a subnet, or based on a search, and let them be edited.
+// this is the core of the DHCP application.
+
 import java.util.List;
 import java.util.Collections;
 import java.util.Date;
@@ -95,7 +98,7 @@ public class DhcpHostsController {
     // used for the dn) has a number on the end to make it unique
     public void fixCn(Map<String,List<String>> host) {
 	if (host.get("cn").size() > 1) {
-	    // this is that weird case. reset cn from dm
+	    // this is that weird case. reset cn from dn
 	    var dn = lu.oneVal(host.get("dn"));
 	    // cn=jjj,...
 	    var i = dn.indexOf(",");
@@ -104,6 +107,9 @@ public class DhcpHostsController {
 	}
     }
 
+    // for sorting ip addresss. Take an LDAP entry, get the address attribute
+    // (which can be either "address" or "cn", so we pass the attribute as an arg).
+    // convert to a BigInteger for sorting.
     public static BigInteger getIntAddress(Map<String,List<String>> entry, String property) {
 	try {
 	    var ipAddress = entry.get(property).get(0);
@@ -113,6 +119,11 @@ public class DhcpHostsController {
 	}
     }
 
+    // users can enter ethernet addresses in all sorts of formats
+    // the usual is 00:11:22:33:44:55. But some people use
+    // 3 components, e.g. 0011.2233.4455. Separators can be
+    // : . - and even space. Figure out which of these they
+    // used and convert to the standard.
     public String normalizeEthernet(String ethernet) {
 	if (ethernet == null)
 	    return null;
@@ -159,12 +170,9 @@ public class DhcpHostsController {
 	return ethernet;
     }
 
-    // credit to otamega
-    //    private static final Comparator<String> IpComparator = Comparator
-    //	.comparing(InetAddress::getAddress,
-    //		   Comparator.comparingInt((byte[] b) -> b.length)
-    //		   .thenComparing(b -> new BigInteger(1, b)));
-
+    // lots of optional arguments for the search operation. Only one argument will
+    // normally be specified. The page has to pass the arg on in hidden INPUTs, so
+    // we'll consistently show the same data when editing.
     @GetMapping("/dhcp/showhosts")
     public String hostsGet(@RequestParam(value="subnet", required=false) String subnet,
 			   @RequestParam(value="host", required=false) String hostname,
@@ -186,15 +194,16 @@ public class DhcpHostsController {
 	    return loginController.loginGet("dhcp", request, response, model); 
 	}
 
-	// I use an API I wrote around Sun's API support.
-	// See comments on showgroup.jsp
+	// default filter is all hosts
 
-	// default filter -- all hosts
+
+	// the first code is when the user specifies a subnet. This is complex.
 	// finding all hosts in a subnet is non-trivial. For it to work, we
 	// need a fixedaddress option for all hosts. Otherwise we would have to look at all
 	//   hosts and convert hostname to ip
-	// furthermore, we can only do a text compare, which means we can't do an ldap
-	//   query for the exact range. We convert the subnet to a prefix, do an ldap search
+	// furthermore, LDAP queries only allow a text compare, which means we can't do an ldap
+	//   query for the exact range. We convert the subnet to a prefix that may be larger
+	//   than the actual subnet, do an ldap search
 	//   on that, and then test which of the results are actually in the subnet
 	// Another way to do this would be to add a lowaddress and highattress attribute to
 	//   the subnet that is a 32-bit number, and a 32-bit address to each host.
@@ -262,6 +271,7 @@ public class DhcpHostsController {
 	    //   Add an address property to make sorting easier
 	    if (hosts != null && hosts.size() > 0) {
 		for (var host: hosts) {
+		    // the address is stored as a fixed-address statement
 		    var statements = host.get("dhcpstatements");
 		    if (statements != null)
 			for (var statement: statements) {
@@ -297,6 +307,7 @@ public class DhcpHostsController {
 
 	
 	// no subnet arg. all hosts or a search
+	// Default is all hosts, but see if the user specified a search term.
 	var filter = "objectclass=dhcphost";
 	if (hostname != null && !hostname.isBlank()) {
 	    var name = filtername(hostname.trim());
@@ -327,6 +338,8 @@ public class DhcpHostsController {
 		var statements = host.get("dhcpstatements");
 		if (statements != null)
 		    for (var statement: statements) {
+			// have to get its IP address for sorting
+			// it is stored as a fixed-address statement
 			if (statement.startsWith("fixed-address")) {
 			    var addresslist = statement.substring("fixed-address".length() + 1);
 			    var addresses = addresslist.split("\\s+");
@@ -350,6 +363,15 @@ public class DhcpHostsController {
 	return "/dhcp/showhosts";	
 		
     }
+
+    // update one or more hosts
+    // subnet, host, ip, and ether are search terms. They are passed
+    // through the web page as hidden variables so that when we finally
+    // display the results we use the same host list as the original display
+    
+    // The rest are fields in the host definition that can be updated.
+    // They are all arrays, because more then one host can be updated at a time.
+    
 
     @PostMapping("/dhcp/showhosts")
     public String subnetsSubmit(@RequestParam(value="names[]", required=false) String[] names,
@@ -383,6 +405,8 @@ public class DhcpHostsController {
 	    return subnetsController.subnetsGet(request, response, model);
 	}
 
+	// first see if any hosts are being deleted
+
 	if (del != null && del.size() > 0) {
 	    Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
 	    if (subject == null) {
@@ -391,17 +415,29 @@ public class DhcpHostsController {
 		return loginController.loginGet("dhcp", request, response, model); 
 	    }
 
-	    // no filter, so no search. this is just to get a context
+	    // normally JndiAction opens a connection to LDAP, does a query, and
+	    // closes the connection. We are potentially going to do lots of LDAP
+	    // operations, so we open the connection once and keep it open.
+	    // This call has no filter, so it doesn't do a search, but it does
+	    // open the connection.
+	    // If you specify noclose, it won't be closed at the end of the operation.
+	    // Other calls to JndiAction will need to specify noclose as well,
+	    // and we'll do an explicit close at the end
 	    common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
 	    action.noclose = true;
 
 	    Subject.doAs(subject, action);
 
+	    // the whole point of this call was to open an LDAP connection.
+	    // In JNDI terms, that's a context. So save the context.
+	    // Future calls to JndiAction will insert this context and
+	    // specify noclose. Then it will be closed explicitly.
 	    var ctx = action.ctx;
 
 	    for (String d: del) {
 		var dn = "cn=" + d + ",cn=config," + conf.dhcpbase;
 		try {
+		    // this is the JNDI approach to deleting an LDAP entry
 		    ctx.destroySubcontext(dn);
 		} catch (javax.naming.NamingException e) {
 		    messages.add("Unable to delete " + d + ": " + e.toString());
@@ -416,16 +452,29 @@ public class DhcpHostsController {
 	}
 
 	// if no name specified, nothing more to do
+	// if there's a name, we have hosts to update
 	if (names == null || names.length == 0)
 	    return hostsGet(subnet, hostname, ipaddress, etheraddress, request, response, model);
 
+	// if we're here there are new hosts or hosts to be updated.
+	// so we can tell the difference, the original entry name (cn)
+	// is passed in origname when an existing entry is updated.
+	// otherwise it's a new entry
+
 	DirContext ctx = null;
 	mainloop:
+	// loop over hosts that might be updated.
+	// this is complicated because the attribute values
+	// as sent as arrays. They match. I.e. name[1] and
+	// ethernets[1] are for the same host. However
+	// the arrays can be of different length. In that
+	// case the values beyond the end of an array are
+	// effectively blank. So in the loop each attribute
+	// gets the values from the array if it exists,
+	// else null.
 	for (var newi = 0; newi < names.length; newi++) {
 
-	    // arrays get null elements if nothing there
-	    // but omit null elements if they are at the end
-	    // of the array. so if beyond the end, assume null
+	    // can't do anything if there's no entry name
 	    String name = names[newi];
 	    if (name == null || name.isBlank())
 		continue;
@@ -466,6 +515,9 @@ public class DhcpHostsController {
 		continue;
 	    }
 
+	    // there can be multiple IP addresses. If so, make sure
+	    // they're all legal and create an appropriate fixed-address statement for
+	    // the LDAP entry
 	    var addrstatement = "fixed-address";
 	    if (ip !=  null && !ip.isBlank()) {
 		var addrs = ip.split(",");
@@ -484,6 +536,9 @@ public class DhcpHostsController {
 		    addrstatement = addrstatement + " " + addr;
 		}
 	    } else {
+		// if no IP addresses are specified, use the one
+		// from the hostname
+
 		InetAddress[] addresses;
 
 		try {
@@ -504,12 +559,16 @@ public class DhcpHostsController {
 
 		common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(cn="+ filtername(origname) + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
 
+		// If there is an existing connection, use it
 		action.ctx = ctx;
+		// If we open a connection (which we will the first time, when ctx is null)
+		// don't close it, so any further queries use the same connection.
 		action.noclose = true;
 		Subject.doAs(subject, action);
 
 		var hosts = action.data;
 
+		// now save the connection for further activity
 		ctx = action.ctx;
 
 		if (hosts.size() != 1) {
@@ -521,6 +580,13 @@ public class DhcpHostsController {
 		var host = hosts.get(0);
 		var changed = false;
 		
+		// now see if anything has changed.
+		// if so set changed to true
+		// entry will be used to create an LDAP modify command
+		// only attributes in the entry will be changed.
+		// so if the new value is different from the old
+		// we set put the new value in entry
+	 
 		var entry = new BasicAttributes();
 		if (! lu.valList(host.get("dhcpstatements")).contains(addrstatement)) {
 		    changed = true;
@@ -540,7 +606,10 @@ public class DhcpHostsController {
 		    entry.put(dhcpHWAddress);
 		}
 
-		// need set so we can compare
+		// comparing old and new options is more complex, because there
+		// can be more than one and they can be in different order. We
+		// need a Set so we can compare. They might be in different order
+		// but when you compare sets, java ignores differences in order
 		var oldOptions = new HashSet<String>(lu.valList(host.get("dhcpoption")));
 		var newOptions = new HashSet<String>();
 		var lines = options.split("\n");
@@ -552,6 +621,8 @@ public class DhcpHostsController {
 		if (! oldOptions.equals(newOptions)) {
 		    changed = true;
 
+		    // if options have changed, add all of the new
+		    // ones to the entry to be used for modify
 		    var dhcpOption = new BasicAttribute("dhcpOption");
 		    for (var line: lines)
 			if (! line.trim().isBlank())
@@ -559,6 +630,7 @@ public class DhcpHostsController {
 		    entry.put(dhcpOption);
 		}
 
+		// now, if at least one thing changed, do an LDAP modify
 		if (changed) {
 		    try {
 			var dhcpOption = new BasicAttribute("dhcpOption");
@@ -570,7 +642,8 @@ public class DhcpHostsController {
 		    }
 		}
 
-		// need to rename?
+		// if name and origname are different, the entry has been renamed
+		// That means changing the "cn". 
 		if (! origname.equals(name) && name != null && !name.isBlank()) {
 		    var newdn = "cn=" + name + ",cn=config," + conf.dhcpbase;
 		    try {
@@ -592,7 +665,9 @@ public class DhcpHostsController {
 	    // no filter, so no search. this is just to get a context
 	    common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
 
+	    // use existing LDAP connection if there is one
 	    action.ctx = ctx;
+	    // don't close connection
 	    action.noclose = true;
 	    
 	    Subject.doAs(subject, action);
@@ -635,6 +710,9 @@ public class DhcpHostsController {
 	    }
 	    
 	}
+
+	// finally, we can close any LDAP connection we opened
+
 	try {
 	    ctx.close();
 	} catch (Exception ignore) {}	    
