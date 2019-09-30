@@ -324,10 +324,14 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     if (ret == 0)
       ccname = fullname;
 
-    if (firstcache)
+    if (firstcache) {
       krb5_cc_close(context, firstcache);
-    if (userprinc)
+      firstcache = NULL;
+    }
+    if (userprinc) {
       krb5_free_principal(context, userprinc);
+      userprinc = NULL;
+    }
     // fullname will be freed at the end
 
     // now put back our real uid
