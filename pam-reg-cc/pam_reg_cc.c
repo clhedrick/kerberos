@@ -305,15 +305,30 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   //
 
   if (fakename && !ccname) {
-    // KRB5CCNAME not specified, but we've been told to fake it.
-    // Generate the user's default ccname.
+    // KRB5CCNAME not specified. 
+    // Find the default cache and get its name. Verify that there's a 
+    // a principal for it, to avoid getting a handle with no actual cache
     // Need to change to the user, since the Kerberos libraries get %{uid}
     // from the current uid.
 
     setresgid(pwd->pw_gid, pwd->pw_gid, -1);
     setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
-    ccname =  krb5_cc_default_name(context);
+    // since no KRB5, it means our default ccache
+    ret = krb5_cc_default(context, &firstcache);
+    if (ret == 0) 
+      ret = krb5_cc_get_principal(context, firstcache, &userprinc);
+    if (ret == 0)
+      // we have an actual cache
+      ret = krb5_cc_get_full_name(context, firstcache, &fullname);
+    if (ret == 0)
+      ccname = fullname;
+
+    if (firstcache)
+      krb5_cc_close(context, firstcache);
+    if (userprinc)
+      krb5_free_principal(context, userprinc);
+    // fullname will be freed at the end
 
     // now put back our real uid
     setresuid(olduid, olduid, -1);
@@ -321,8 +336,9 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
     if (!ccname) {
       // no name, nothing to do
+      // this is considered normal. it's for root cron jobs, etc.
       krb5_free_context(context);
-      pam_syslog(pamh, LOG_INFO, "krb5_cc_default_name returns null");
+      pam_syslog(pamh, LOG_INFO, "no KRB5CCNAME nor default cache for uid %lud", olduid);
       return PAM_SUCCESS;  // nothing to do      
     }
 
