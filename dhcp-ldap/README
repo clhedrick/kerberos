@@ -39,6 +39,8 @@ There's a bug in the code that's critical for us. If there's more
 than one host entry with the same Ethernet address, LDAP only
 finds the first. dhcp-duplicate-hwaddr.patch fixes it.
 
+This bug should be fixed in anything more recent than Centos 7.
+
 To build dhcpd with this patch on Redhat/Centos, use builddhcp.
 It copies dhcp-duplicate-hwaddr.patch into the source area.
 You'll have to adjust it to find dhcp-duplicate-hwaddr.patch 
