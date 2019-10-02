@@ -366,13 +366,13 @@ public class User {
 	var uid = Uid.allocateUid(username, config);
 
 	var firstl = universityData.get("givenname");
-	var first = (firstl == null) ? "-" : firstl.get(0);
+	var first = (firstl == null) ? "-" : firstl.get(0).trim();
 
 	var lastl = universityData.get("sn");
-	var last = (lastl == null) ? "-" : lastl.get(0);
+	var last = (lastl == null) ? "-" : lastl.get(0).trim();
 
 	var gecosl = universityData.get("cn");
-	var gecos = (gecosl == null) ? "-" : gecosl.get(0);
+	var gecos = (gecosl == null) ? "-" : gecosl.get(0).trim();
 	
 	logger.info("ipa user-add " + username + " --uid=" + uid + " --gidnumber=" + config.defaultgid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
 	if (!test) {
