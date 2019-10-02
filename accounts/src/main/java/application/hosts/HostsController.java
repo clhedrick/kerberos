@@ -36,9 +36,11 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -334,4 +336,102 @@ public class HostsController {
 	    return "Error: can't read keytable from file".getBytes();
 	}
     }
+
+    // doesn't quite delete a host. rather, removes it from the group user-managed
+    // do this once the OS installation is finished. That prevents someone from faking
+    // your IP and stealing your key table.
+    // this is authetnciated by LDAP basic auth. It's set up in SpringSecurityConfig.java
+    // Note that it is set for this specific URL only. Everything else is done using our own
+    // login authentication.
+    @DeleteMapping("/enrollhosts")
+    @ResponseBody
+    public byte[] hostsDelete(@RequestParam(value="host", required=false) String hostname,
+			   HttpServletRequest request, HttpServletResponse response, Principal principal) {
+
+	List<String> messages;
+	final String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
+	final Logger logger = LogManager.getLogger();
+
+	System.out.println("start delete");
+
+	if (hostname == null)
+	    return "Error: you must supply a host parameter".getBytes();
+
+	int port = request.getRemotePort();
+	if (port >= 1024)
+	    return "Error: you must be root to use this".getBytes();
+
+	// check both that the hostname supplied (which should be the system's hostname) matches the
+	// ip address and the fully-qualified hostname. If things don't all agree Kerberos may not
+	// work properly.
+
+	String remoteAddr = request.getRemoteAddr();
+	InetAddress[] remoteAddrs;
+	try {
+	    remoteAddrs = InetAddress.getAllByName(hostname);
+	} catch (java.net.UnknownHostException uhe) {
+	    return ("Error: can't find host " + hostname + " in DNS").getBytes();
+	}
+	boolean foundAddr = false;
+	for (int i = 0; i < remoteAddrs.length; i++) {
+	    if (remoteAddrs[i].getHostAddress().equals(remoteAddr)) {
+		if (!hostname.equals(remoteAddrs[i].getCanonicalHostName())) {
+		    return ("Error: the hostname you supplied, " + hostname + ", doesn't agree with the full hostname for your IP address, " + remoteAddrs[i].getCanonicalHostName()).getBytes();
+		}
+		foundAddr = true;
+	    }
+	}
+	if (!foundAddr)
+	    return ("Error: the hostnae specified " + hostname + " doesn't agree with the address you're coming from, " + remoteAddr).getBytes();
+
+	// set up for LDAP operations
+	Configuration sconfig = makeServicesConfiguration(null);
+	LoginContext lc = null;
+	try {
+	    lc = new LoginContext("Groups", null, null, sconfig);
+	    lc.login();
+	} catch (LoginException le) {
+	    logger.error("Cannot create LoginContext for services. " + le.getMessage());
+	    return "Error: HostsController Can't setup authentication".getBytes();
+	} catch (SecurityException se) {
+	    logger.error("Cannot create LoginContext for services. " + se.getMessage());
+	    return "Error: HostsController Can't setup authentication".getBytes();
+	}
+
+	Subject servicesSubject = lc.getSubject();  
+	if (servicesSubject == null) {
+	    logger.error("LoginContext has empty subject");
+	    return "Error: HostsController Can't setup authentication".getBytes();
+	}
+
+	// don't check permission. We'll just try to remove it. If it isn't
+	// in the group that will fail.
+
+	// the hosts add code is in the alternative with a principal
+	// without a principal we can get a new key table, but not add the host
+
+	messages = new ArrayList<String>();
+	logger.info("ipa hostgroup-remove-member " + Config.getConfig().selfmanagedgroup + " --hosts=" + hostname);
+
+	if (docommand.docommand (new String[]{"/bin/ipa", "hostgroup-remove-member", Config.getConfig().selfmanagedgroup, "--hosts=" + hostname}, env, messages) != 0) {
+	    boolean notmember = false;
+	    String errmsg = "Error: ";
+	    for (String m:messages) {
+		// can't add to messages while we're looping over it, so set flag
+		errmsg += " " + m;
+		if (m.contains("is not a member"))
+		    notmember = true;
+	    }
+	    if (notmember)
+		return "ok".getBytes();
+	    else
+		return errmsg.getBytes();
+
+	}
+	
+	return "ok".getBytes();
+
+    }
+
+
 }

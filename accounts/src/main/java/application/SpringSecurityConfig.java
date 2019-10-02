@@ -53,9 +53,16 @@ public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
     protected void configure(HttpSecurity http) throws Exception {
         http
 	    .httpBasic().and().authorizeRequests()
-	    // use basic auth with LDAP for this one URL only
+	    // ldap user auth for request is optional
+	    // it's only used for /enrollhosts, but
+	    // it's more complex to do it just for that
+	    // than to recognize it anywhere. Of course
+	    // the code won't pay attention to it anywhere else
             .antMatchers("/enrollhosts").permitAll()
-	    .antMatchers("/**").permitAll();
+	    .antMatchers("/**").permitAll()
+	    // need to disable CSRF for DELETE to work
+	    .and()
+	    .csrf().ignoringAntMatchers("/enrollhosts/**");
     }
 
     // when basic auth is used, this specifies what it is; LDAP in this case

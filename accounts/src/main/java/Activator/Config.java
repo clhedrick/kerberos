@@ -70,6 +70,7 @@ public class Config {
     public String loginmanagerfilter = null;
     public String groupsownedfilter = null;
     public String selfmanagedfilter = null;
+    public String selfmanagedgroup = null;
     public String addhostsfilter = null;
     public String dhcpmanagerfilter = null;
     public String helpmail = null;
@@ -214,6 +215,8 @@ public class Config {
 			groupsownedfilter = atoms[1];
 		    if (atoms[0].equals("selfmanagedfilter"))
 			selfmanagedfilter = atoms[1];
+		    if (atoms[0].equals("selfmanagedgroup"))
+			selfmanagedgroup = atoms[1];
 		    if (atoms[0].equals("addhostsfilter"))
 			addhostsfilter = atoms[1];
 		    if (atoms[0].equals("dhcpmanagerfilter"))
