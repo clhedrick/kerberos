@@ -388,19 +388,19 @@ public class User {
 	var mods = new ArrayList<String>();
 
 	var needmod = false;
-	var first = lu.oneVal(universityData.get("givenname"),"-");
+	var first = lu.oneVal(universityData.get("givenname"),"-").trim();
 	var ofirst = lu.oneVal(ourData.get("givenname"));
 	if (!first.equalsIgnoreCase(ofirst)) {
 	    mods.add("--first=" + first);
 	}
 
-	var last = lu.oneVal(universityData.get("sn"),"-");
+	var last = lu.oneVal(universityData.get("sn"),"-").trim();
 	var olast = lu.oneVal(ourData.get("sn"));
 	if (!last.equalsIgnoreCase(olast)) {
 	    mods.add("--last=" + last);
 	}
 
-	var cn = lu.oneVal(universityData.get("cn"),"-");
+	var cn = lu.oneVal(universityData.get("cn"),"-").trim();
 	var ocn = lu.oneVal(ourData.get("gecos"));
 	if (!cn.equals(ocn)) {
 	    mods.add("--gecos=" + cn);
