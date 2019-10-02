@@ -17,6 +17,7 @@ installans: all
 
 install:	all	
 	cp renewd.service /etc/systemd/system/renewd.service 
+	systemctl daemon-reload
 	systemctl stop renewd
 	cp renewd /usr/sbin/renewd
 	systemctl start renewd

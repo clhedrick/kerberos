@@ -17,10 +17,9 @@ restart dhcpd if the serial number changes.
 SETUP
 
 The LDAP system needs to have the DHCP schema added. This should
-be a one-time thing. The schema is in dhcp.ldif. This does not appear
-to be an actual ldif file. Maybe you can pass it to ldapadd, but
-I think it will need changetype:modify, attributetypes:add, and
-objectclasses:add.
+be a one-time thing. The schema is in dhcp.ldif. commit dcb37ba77cb07417d125ea9cb6b3d1bfca3f13b6 
+is what was actually used. This ldif file comes from the RFC, with
+minor changes so you can just feed it to ldapmodify.
 
 dhcpc.ldif sets up the configuration hierarchy, including some sample
 subnets. This is obviously Rutgers-specific, but changes shoud be
@@ -38,6 +37,8 @@ BUG
 There's a bug in the code that's critical for us. If there's more
 than one host entry with the same Ethernet address, LDAP only
 finds the first. dhcp-duplicate-hwaddr.patch fixes it.
+
+This bug should be fixed in anything more recent than Centos 7.
 
 To build dhcpd with this patch on Redhat/Centos, use builddhcp.
 It copies dhcp-duplicate-hwaddr.patch into the source area.

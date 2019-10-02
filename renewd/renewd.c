@@ -799,7 +799,7 @@ void handle_all(krb5_context kcontext, int only_valid, time_t minleft, int do_de
       if (gssproxy_prefix && strncmp(ccname + 5, gssproxy_prefix,
 		  strlen(gssproxy_prefix)) == 0)
         key += strlen(gssproxy_prefix) + 5;
-      else if (gssproxy_prefix2 && strncmp(ccname, gssproxy_prefix2,
+      else if (gssproxy_prefix2 && strncmp(ccname + 5, gssproxy_prefix2,
 		  strlen(gssproxy_prefix2)) == 0)
         key += strlen(gssproxy_prefix2) + 5;
     }      
