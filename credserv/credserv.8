@@ -128,6 +128,18 @@ in as user and kinit as user.admin, credserv will check user.admin.
 Because full principals can't appear in groups, you'll want to use
 user.admin, not user/admin.
 .PP
+We've found it desireable to prevent certain hosts from
+gettinb credentials for users with * specified for hostname.
+In krb5.conf, in the credserv entry, you can add something like
+exceptions=128.6.12.0/24. Actually it can be a comma-separated
+list of CIDR blocks. Anything host on that subnets won't get
+credentials for users that have authorized *. This is a hack, and
+could change in the future if our requirements get more complex.
+Currently only IPv4 CIDR blocks may be given. You can also include
+an address without the / suffix. It will match only that specific
+address. These exceptions are only applied to *. If an individual
+host is authorized that will still be respected.
+.PP
 NOTE: You must make a service principal for credserv/HOST on the server
 and add it to /etc/krb5.keytab. You also need to add attributes 
 csRutgersEduCredservKeytab and csRutgersEduCredservRule to user entries.
