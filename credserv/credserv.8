@@ -27,7 +27,8 @@ forwardable. Each value indicatest that the user is permitted to
 get credentials for that principal on that host. The F option indicates
 that the credentials should be forwardable. 
 .PP
-* in the host field will apply to all hosts
+* in the host field will apply to all hosts. Netgroups can be used if
+you put @ in front of it, e.g. @netgroup.
 .PP
 The purpose of credserv is to generate credentials for a user and return
 it to the client. Typically this is a pam module that is handling the
@@ -104,12 +105,19 @@ section of /etc/krb5.conf. The most common parameters are
 credserv= {
     ldapurl=ldaps://krb1.cs.rutgers.edu,ldaps://krb2.cs.rutgers.edu
     ldapbase=cn=accounts,dc=cs,dc=rutgers,dc=edu
+    altbase=cn=alt,dc=cs,dc=rutgers,dc=edu
 }
 .fi
 .PP
 where ldapurl points to the LDAP server. If omitted you'll get
 ldaps://localhost, which may well be appropriate. ldapbase
-is the search base for user lookups.
+is the search base for user and host lookups. altbase is
+the base for netgroup lookups. The netgroup code uses
+IPA objectclasses. It would have to be modified slightly
+for other systems. Credserv does netgroup
+lookups directly in ldap, rather than using libc's netgroup code,
+because the libc code is incredibly inefficient if you have
+large or nested netgroups.
 .PP
 If you want to be able to do privileged operations, put the
 users who are authorized into a group, and then add the name of the group to
@@ -127,18 +135,6 @@ by kgetcred for the user, not the user's uid. So if you are logged
 in as user and kinit as user.admin, credserv will check user.admin.
 Because full principals can't appear in groups, you'll want to use
 user.admin, not user/admin.
-.PP
-We've found it desireable to prevent certain hosts from
-gettinb credentials for users with * specified for hostname.
-In krb5.conf, in the credserv entry, you can add something like
-exceptions=128.6.12.0/24. Actually it can be a comma-separated
-list of CIDR blocks. Anything host on that subnets won't get
-credentials for users that have authorized *. This is a hack, and
-could change in the future if our requirements get more complex.
-Currently only IPv4 CIDR blocks may be given. You can also include
-an address without the / suffix. It will match only that specific
-address. These exceptions are only applied to *. If an individual
-host is authorized that will still be respected.
 .PP
 NOTE: You must make a service principal for credserv/HOST on the server
 and add it to /etc/krb5.keytab. You also need to add attributes 

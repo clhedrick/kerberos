@@ -85,14 +85,8 @@ struct princlist {
     struct princlist *next;
 };
 
-struct addrmask {
-    unsigned int addr;
-    unsigned int mask;
-};
-
 char *admingroup = NULL;
-char *exceptionstext = NULL;
-struct addrmask *exceptionlist = NULL;
+
 
 #ifndef GETPEERNAME_ARG3_TYPE
 #define GETPEERNAME_ARG3_TYPE int
@@ -109,10 +103,6 @@ usage(char *name)
 }
 
 int impersonate(krb5_context context, krb5_principal userprinc, char *realm, krb5_ccache ocache, char *ktname);
-
-unsigned int ip2ui(char *ip);
-
-unsigned int ip2mask(char *ip);
 
 static int
 net_read(int fd, char *buf, int len)
@@ -221,7 +211,7 @@ int isrecent(krb5_ticket *ticket) {
 
 /* the actual operations */
 
-char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data, krb5_data *realm_data, struct sockaddr *peername,  struct addrmask *exceptions);
+char *getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data, krb5_data *realm_data);
 char *listcreds(krb5_context context, krb5_auth_context  auth_context, char * username, char *principal, char *myhostname, char *hostname, char *service,  krb5_data *data, char *cname);
 char *registercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket, char * flags, krb5_data *realm_data);
 char *unregistercreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *realhost, char *service, krb5_data *outdata, char *clientp, krb5_ticket *ticket);
@@ -467,18 +457,18 @@ main(int argc, char *argv[])
                 exit(3);
             }
         } else {
-            while (1) {
-                namelen = sizeof(peername_storage);
-                if ((acc = accept(sock, peername, &namelen)) == -1){
-                    mylog(LOG_ERR, "accept: %m");
-                    exit(3);
-                }
-                if (fork()) {
-                    close(acc); // in parent
-                } else {
-                    break;  // in child -- leave loop
-                }
+        while (1) {
+            namelen = sizeof(peername_storage);
+            if ((acc = accept(sock, peername, &namelen)) == -1){
+                mylog(LOG_ERR, "accept: %m");
+                exit(3);
             }
+            if (fork()) {
+                close(acc); // in parent
+            } else {
+                break;  // in child -- leave loop
+            }
+        }
         }
         // now in child
         dup2(acc, 0);
@@ -540,51 +530,12 @@ main(int argc, char *argv[])
     if (strlen(admingroup) == 0)
         admingroup = NULL;
 
-    krb5_appdefault_string(context, "credserv", &realm_data, "exceptions", "", &exceptionstext);
-    if (strlen(exceptionstext) == 0)
-        exceptionstext = NULL;
-
-    // create exceptions array from text
-    if (exceptionstext) {
-        // first count the number of tokens, so we can allocate memory
-        int count = 1;
-        char *cp;
-        int eindex = 0;
-        char *saveptr;
-
-        for (cp = exceptionstext; *cp; cp++)
-            if (*cp == ',')
-                count++;
-
-        // count pointers plus NULL and the end
-        exceptionlist = malloc(sizeof(struct addrmask) * (count + 1));
-        cp = strtok_r(exceptionstext, " ,", &saveptr);
-        eindex = 0;
-        while(cp) {
-            // ip2mask must be called first because ip2ui changes the string
-            exceptionlist[eindex].mask = ip2mask(cp);
-            exceptionlist[eindex].addr = ip2ui(cp);
-            cp = strtok_r(NULL, " ,", &saveptr);
-            eindex++;
-        }
-        exceptionlist[eindex].addr = 0;
-    }
-
-#ifdef undef
-    // debugging
-    if (exceptionlist && exceptionlist[0].addr) {
-        int eindex;
-        for (eindex = 0; exceptionlist[eindex].addr; eindex++) {
-            printf("%x %x\n", exceptionlist[eindex].mask, exceptionlist[eindex].addr);
-        }
-    }
-#endif
 
     retval = krb5_sname_to_principal(context, NULL, service,
                                      KRB5_NT_SRV_HST, &server);
     if (retval) {
         mylog(LOG_ERR, "while generating service name (%s): %s",
-              service, error_message(retval));
+               service, error_message(retval));
         exit(1);
     }
 
@@ -686,7 +637,7 @@ main(int argc, char *argv[])
         for(addrsp = addrs; addrsp != NULL; addrsp = addrsp->ai_next) {
             // first entry is canon name
             if (addrsp == addrs)
-                strncpy(hostbuf, addrsp->ai_canonname, sizeof(hostbuf)-1);            
+                strncpy(hostbuf, addrsp->ai_canonname, sizeof(hostbuf) - 1);            
             if (compare_addrs(addrsp->ai_addr, peername)) {
                 found = 1;
                 break;
@@ -714,7 +665,7 @@ main(int argc, char *argv[])
 
     // do the real operations
     if (op == 'G') 
-        errmsg = getcreds(context, auth_context, username, principal, myhostname, realhost, service, &data, &realm_data, peername, exceptionlist);
+        errmsg = getcreds(context, auth_context, username, principal, myhostname, realhost, service, &data, &realm_data);
     else if (op == 'L') 
         errmsg = listcreds(context, auth_context, username, principal, myhostname, realhost, service, &data, cname);
     else if (op == 'R') 
@@ -739,7 +690,7 @@ main(int argc, char *argv[])
 
         xmitlen = htons(data.length);
         if ((retval = krb5_net_write(context, 0, (char *)&xmitlen,
-                                     sizeof(xmitlen))) < 0) {
+                                 sizeof(xmitlen))) < 0) {
             mylog(LOG_ERR, "%m: while writing len to client");
             exit(1);
         }
@@ -761,7 +712,7 @@ main(int argc, char *argv[])
 
         xmitlen = htons(strlen(errmsg));
         if ((retval = krb5_net_write(context, 0, (char *)&xmitlen,
-                                     sizeof(xmitlen))) < 0) {
+                                 sizeof(xmitlen))) < 0) {
             mylog(LOG_ERR, "%m: while writing len to client");
             exit(1);
         }
@@ -791,7 +742,7 @@ main(int argc, char *argv[])
 
 // returns NULL if OK, else error message
 char *
-getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data, krb5_data *realm_data, struct sockaddr *peername, struct addrmask *exceptions ) {
+getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *principal, char *myhostname, char *hostname, char *service, krb5_data *data, krb5_data *realm_data) {
     krb5_error_code r;
     krb5_ccache ccache;
     krb5_principal serverp = 0;
@@ -874,58 +825,17 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
                 // first item is host
                 ch = strchr(line, ':');
                 if (!ch)
-                    continue;
+                continue;
                 *ch = '\0';
                 // line - ch is host; verify right host
-                if (strcmp(line,"*") == 0) {
-                    // there's a wildcard, make sure peer isn't on the exceptions list
-                    if (exceptions && exceptions[0].addr) {
-                        int ei;
-                        unsigned int peeraddr;
-
-                        // I've only implemented the CIDR parsing for V4
-                        // however we typically get the address in V6 format
-                        // if it's really a V6 address we don't check it, but if
-                        // it's V4 in V6, check against our exceptions list
-
-                        if (peername->sa_family == AF_INET6) {
-                            struct sockaddr_in6 *aa2 = (struct sockaddr_in6 *)peername;
-                            // prefix for v4 in v6
-                            unsigned char v4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255};
-                            int ii;
-                            int isv4 = 1;
-                            
-                            // if it's not v4 in v6, can't match our mask
-                            for (ii = 0; ii < 12; ii++)
-                                if (aa2->sin6_addr.s6_addr[ii] != v4[ii])
-                                    isv4 = 0;
-
-                            if (isv4)
-                                peeraddr = aa2->sin6_addr.s6_addr[12] << 24 |
-                                    aa2->sin6_addr.s6_addr[13] << 16 |
-                                    aa2->sin6_addr.s6_addr[14] << 8 |
-                                    aa2->sin6_addr.s6_addr[15];
-                            else
-                                peeraddr = 0;
-                        } else
-                            // an actual v4 address. this one is easy
-                            peeraddr =  ntohl(((struct sockaddr_in *)peername)->sin_addr.s_addr);
-
-                        // now peeraddr is a V4 address or 0. if it's V4, check it
-                        if (peeraddr) {
-                            for (ei = 0; exceptions[ei].addr; ei++) {
-                                if ((peeraddr & exceptions[ei].mask) == (exceptions[ei].addr & exceptions[ei].mask)) {
-                                    // C doesn't let you continue an outer loop
-                                    goto nextrule;
-                                }
-                            }
-                        }
-                                               
-                    }
-                    
+                if (line[0] == '@') {
+                    // @netgroup
+                    if (!ldap_innetgroup(context, ld, default_realm, hostname, line+1))
+                        continue;
+                } else {
+                    if (strcmp(line, hostname) != 0 && strcmp(line, "*") != 0)
+                        continue;
                 }
-                if (strcmp(line, hostname) != 0 && strcmp(line, "*") != 0)
-                    continue;
 
                 princp = ch+1;
                 // next item is principal
@@ -944,16 +854,12 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
                 else
                     flags = "";
                 break;
-            // when need to continue inside an inner loop
-            nextrule:
-                ;
             }
             
         }
 
-        if (!found) {
+        if (!found)
             return NOKEYTAB_ERR;            
-        }
 
     } // end code for non-anonymous. now all users
 
