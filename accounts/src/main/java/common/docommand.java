@@ -140,7 +140,7 @@ public class docommand {
 			 out.println(StringEscapeUtils.escapeHtml4(line) + "<br/>");
 		     if (outlist != null)
 			 outlist.add(line);
-		     line = reader.readLine();
+		     line = reader2.readLine();
 		 }
 	     }
 	 catch(IOException e1) {

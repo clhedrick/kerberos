@@ -27,6 +27,12 @@ import java.util.TimeZone;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.text.SimpleDateFormat;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.charset.Charset;
+import java.io.PrintWriter;
+import java.io.IOException;
+import javax.naming.NamingException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -82,6 +88,57 @@ public class SubnetsController {
 	return ret;
     }
 
+    public boolean checkSubnetEntry(List<String>messages, BasicAttribute cn, String netmask, BasicAttribute dhcpOption) {
+	Logger logger = null;
+	logger = LogManager.getLogger();
+	var charset = Charset.forName("US-ASCII");
+	Path temppath = null;
+	try {
+	    temppath = Files.createTempFile("dhcpcheck", null);
+	} catch (IOException x) {
+	    messages.add("Can't create temp file " + x);
+	    logger.error("Can't create temp file " + x);
+	    return false;
+	}
+
+	try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(temppath, charset))) {
+	    writer.println("subnet " + (String)cn.get() + " netmask " + netmask + "{");
+	    var e = dhcpOption.getAll();
+	    try {
+		while (e.hasMore()) {
+		    var value = (String) e.next();
+		    if (value.endsWith(";"))
+			writer.println("option " + value);
+		    else
+			writer.println("option " + value + ";");
+		}
+	    } catch (Exception x) {
+		messages.add("Error writing temp file: " + x);
+		logger.error("Error writing temp file: " + x);
+		return false;
+	    } finally {
+		e.close();
+	    }
+	    writer.println("}");
+	} catch (IOException x) {
+	    messages.add("Error writing temp file: " + x);
+	    logger.error("Error writing temp file: " + x);
+	    return false;
+	} catch (NamingException x) {
+	    messages.add("Error writing temp file: " + x);
+	    logger.error("Error writing temp file: " + x);
+	    return false;
+	}
+	var errout = new ArrayList<String>();
+	if (docommand.docommand (new String[]{"/usr/sbin/dhcpd", "-t", "-cf", temppath.toString()},
+				 new String[]{"PATH=/sbin:/bin:/usr/sbin:/usr/bin","HOME=/tmp"}, errout) != 0) {
+	    messages.add("There is a problem with one of the options you specified");
+	    messages.addAll(errout);
+	    return false;
+	}
+	return true;
+    }    
+    
     @GetMapping("/dhcp/showsubnets")
     public String subnetsGet(HttpServletRequest request, HttpServletResponse response, Model model) {
 	// This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.
@@ -301,6 +358,12 @@ public class SubnetsController {
 	entry.put(cn);
 	entry.put(dhcpNetMask);
 	entry.put(dhcpOption);
+
+	if (!checkSubnetEntry(messages, cn, netmask, dhcpOption)) {
+	    messages.add("There is a problem with the options you specified, the DHCP server rejects them.");
+	    model.addAttribute("messages", messages);
+	    return subnetsGet(request, response, model); 
+	}
 
 	var dn = "cn=" + net + ",cn=config," + conf.dhcpbase;
 	try {
