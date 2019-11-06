@@ -113,6 +113,7 @@ public class SubnetsController {
 			writer.println("option " + value + ";");
 		}
 	    } catch (Exception x) {
+		try {Files.deleteIfExists(temppath);}catch(Exception ignore){}
 		messages.add("Error writing temp file: " + x);
 		logger.error("Error writing temp file: " + x);
 		return false;
@@ -121,21 +122,25 @@ public class SubnetsController {
 	    }
 	    writer.println("}");
 	} catch (IOException x) {
+	    try {Files.deleteIfExists(temppath);}catch(Exception ignore){}
 	    messages.add("Error writing temp file: " + x);
 	    logger.error("Error writing temp file: " + x);
 	    return false;
 	} catch (NamingException x) {
+	    try {Files.deleteIfExists(temppath);}catch(Exception ignore){}
 	    messages.add("Error writing temp file: " + x);
 	    logger.error("Error writing temp file: " + x);
 	    return false;
-	}
+	} 
 	var errout = new ArrayList<String>();
 	if (docommand.docommand (new String[]{"/usr/sbin/dhcpd", "-t", "-cf", temppath.toString()},
 				 new String[]{"PATH=/sbin:/bin:/usr/sbin:/usr/bin","HOME=/tmp"}, errout) != 0) {
+	    try {Files.deleteIfExists(temppath);}catch(Exception ignore){}
 	    messages.add("There is a problem with one of the options you specified");
 	    messages.addAll(errout);
 	    return false;
 	}
+	try {Files.deleteIfExists(temppath);}catch(Exception ignore){}
 	return true;
     }    
     
