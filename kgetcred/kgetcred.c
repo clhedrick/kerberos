@@ -647,6 +647,8 @@ int main(int argc, char *argv[])
     // if the first host is down
     if (!lasthostused && read_lasthost(lasthost, sizeof(lasthost)) == 0) {
         serverhost = lasthost;
+        if (debug)
+            mylog(LOG_DEBUG, "from last, host %s<", serverhost);
         lasthostused = 1;
     } else if (serverhostlist && *serverhostlist) {
         if (!(serverhost = strsep(&serverhostlist, ",")))
@@ -663,15 +665,19 @@ int main(int argc, char *argv[])
         // we don't want to try last host a second time
         if (lasthostused && strcmp(lasthost, serverhost) == 0)
             continue;
+
+        if (debug)
+            mylog(LOG_DEBUG, "from config, host %s<", serverhost);
+
     } else if (serverhostarray) {
         serverhost = serverhostarray[serverhostindex++];
         if (!serverhost)
             break;
         if (lasthostused && strcmp(lasthost, serverhost) == 0)
             continue;
+        if (debug)
+            mylog(LOG_DEBUG, "from DNS, host %s<", serverhost);
     }
-
-    serverhost = "krb1.cs.rutgers.edu";
 
     memset(&aihints, 0, sizeof(aihints));
     aihints.ai_socktype = SOCK_STREAM;
@@ -742,6 +748,9 @@ int main(int argc, char *argv[])
             sock = -1;
             continue;
         }
+        if (debug)
+            mylog(LOG_DEBUG, "%s: connected", mbuf);
+
         /* connected, yay! */
     }
 
@@ -794,12 +803,25 @@ int main(int argc, char *argv[])
 
     // have the socket, ask Kerberos to make a secure connection
 
+    if (debug) {
+        char *printname, *printname2;
+        if (krb5_unparse_name(context, server, &printname) == 0 && krb5_unparse_name(context, client, &printname2) == 0) {
+            mylog(LOG_DEBUG, "about to do sendauth from %s to %s", printname2, printname);
+            krb5_free_unparsed_name(context, printname);
+            krb5_free_unparsed_name(context, printname2);
+        }
+    }
+
     retval = krb5_sendauth(context, &auth_context, (krb5_pointer) &sock,
                            SAMPLE_VERSION, client, server,
                            AP_OPTS_MUTUAL_REQUIRED,
                            &cksum_data,
                            NULL,
                            ccache, &err_ret, &rep_ret, NULL);
+
+    if (debug && retval) {
+        mylog(LOG_DEBUG, "sendauth failed");
+    }
 
     // for G operation, we are going to need to generate credentials
     // from data that's returned. Destroy and deallocate the temporary

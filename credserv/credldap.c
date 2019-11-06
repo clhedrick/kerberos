@@ -1,8 +1,29 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 
 /* ldap using gssapi, and ldap utility code for credserv */
-/*                                                                                                            * Copyright 2017 by Rutgers, the State University of New Jersey                                              * All Rights Reserved.                                                                                       *                                                                                                            * Export of this software from the United States of America may                                              *   require a specific license from the United States Government.                                            *   It is the responsibility of any person or organization contemplating                                     *   export to obtain such a license before exporting.                                                        *                                                                                                            * WITHIN THAT CONSTRAINT, permission to use, copy, modify, and                                               * distribute this software and its documentation for any purpose and                                         * without fee is hereby granted, provided that the above copyright                                           * notice appear in all copies and that both that copyright notice and                                        * this permission notice appear in supporting documentation, and that                                        * the name of Rutgers not be used in advertising or publicity pertaining                                     * to distribution of the software without specific, written prior                                            * permission.  Furthermore if you modify this software you must label                                        * your software as modified software and not distribute it in such a                                         * fashion that it might be confused with the original Rutgers software.                                      * Rutgers makes no representations about the suitability of                                                  * this software for any purpose.  It is provided "as is" without express                                     * or implied warranty.                                                                                       */
-
+/*                                                                                                            
+ * Copyright 2017 by Rutgers, the State University of New Jersey
+ * All Rights Reserved.
+ *
+ * Export of this software from the United States of America may
+ *   require a specific license from the United States Government.
+ *   It is the responsibility of any person or organization contemplating
+ *   export to obtain such a license before exporting.
+ *
+ * WITHIN THAT CONSTRAINT, permission to use, copy, modify, and 
+ * distribute this software and its documentation for any purpose and
+ * without fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright notice and
+ * this permission notice appear in supporting documentation, and that
+ * the name of Rutgers not be used in advertising or publicity pertaining 
+ * to distribution of the software without specific, written prior
+ * permission.  Furthermore if you modify this software you must label
+ * your software as modified software and not distribute it in such a
+ * fashion that it might be confused with the original Rutgers software.
+ * Rutgers makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is" without express
+ * or implied warranty.
+ */
 
 /*
  * If you use this code for another application, not that it is not currently
@@ -141,7 +162,7 @@ int desired_version = LDAP_VERSION3;
 // these are passed as arguments from credserv in real usage
 char *grealm = "CS.RUTGERS.EDU";
 char *gservice = "credserv";
-char *ghostname = "krb1.cs.rutgers.edu";
+char *ghostname = "krb2.cs.rutgers.edu";
 char *targetuser = "hedrick";
 
 // a fairly generic ldap open with GSSAPI
@@ -400,6 +421,128 @@ void freeLdapData(struct berval **rules, struct berval **keytab, char *dn) {
         ldap_memfree(dn);
 }
 
+// get uniqueid of netgroup; returns malloced string or NULL;
+char *getnetgroup(krb5_context context, LDAP *ld, char *realm, char* netgroup) {
+    char* filter;
+    LDAPMessage* msg;
+    BerElement* ber;
+    LDAPMessage *entry;
+    char* attr;
+    char *base;
+    krb5_data realm_data;
+    struct berval **members;
+    char *retval = NULL;
+
+    realm_data.data = realm;
+    realm_data.length = strlen(realm);
+
+    krb5_appdefault_string(context, "credserv", &realm_data, "altbase", "", &base);
+
+    asprintf(&filter, "(&(objectclass=ipanisnetgroup)(cn=%s))", netgroup);
+
+    if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
+        mylog(LOG_ERR, "ldap_search_s failed");
+        free(filter);
+        return NULL;
+    }
+    free(filter);
+
+    entry = ldap_first_entry(ld, msg);
+    if (entry == NULL) {
+        mylog(LOG_ERR, "no ldap entry for netgroup %s", netgroup);
+        return NULL;
+    }
+
+    for (attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
+        if (strcasecmp(attr, "ipaUniqueID") == 0) {
+            members = ldap_get_values_len(ld, entry, attr);
+            if (members[0]) {
+                asprintf(&retval, "%s", members[0]->bv_val);
+            }
+        }
+        ldap_memfree(attr);
+    }
+    if (ber)
+        ber_free(ber, 0);
+    ldap_msgfree(msg);
+
+    return retval;
+
+}
+
+// return 1 if true, netgroup is uniqueid
+int hostinnetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char* netgroup) {
+    char* filter;
+    LDAPMessage* msg;
+    BerElement* ber;
+    LDAPMessage *entry;
+    char* attr;
+    char *base;
+    krb5_data realm_data;
+    struct berval **members;
+    int retval = 0;
+    char *target;
+    int targetlen;
+
+    realm_data.data = realm;
+    realm_data.length = strlen(realm);
+
+    krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
+
+    asprintf(&filter, "(&(objectclass=ipahost)(cn=%s))", host);
+
+    if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
+        mylog(LOG_ERR, "ldap_search_s failed");
+        free(filter);
+        return 0;
+    }
+    free(filter);
+
+    entry = ldap_first_entry(ld, msg);
+    if (entry == NULL) {
+        mylog(LOG_ERR, "no ldap entry for netgroup %s", netgroup);
+        return 0;
+    }
+
+    asprintf(&target, "ipaUniqueID=%s,", netgroup);
+    targetlen = strlen(target);
+    for (attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
+        if (strcasecmp(attr, "memberOf") == 0) {
+            int i;
+            members = ldap_get_values_len(ld, entry, attr);
+            // memberOf: ipaUniqueID=18a4485c-c405-11e7-98e0-000c29dbd083,cn=ng,cn=alt,dc=cs,dc=rutgers,dc=edu
+            for (i = 0; members[i]; i++) {
+                char *member = members[i]->bv_val;
+                if (strncasecmp(member, target, targetlen) == 0) {
+                    retval = 1;
+                    break;
+                }
+            }
+        }
+        ldap_memfree(attr);
+    }
+    free(target);
+    if (ber)
+        ber_free(ber, 0);
+    ldap_msgfree(msg);
+
+    return retval;
+
+}
+
+int ldap_innetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char* netgroup) {
+    int retval;
+
+    char *ngunique = getnetgroup(context, ld, realm, netgroup);
+    if (!ngunique)
+        return 0;
+    
+    retval = hostinnetgroup(context, ld, realm, host, ngunique);
+
+    free(ngunique);
+    return (retval);
+}
+
 // add a credserv authorization rule into ldap
 
 int addRule(LDAP *ld, char *dn, char *rule) {
@@ -573,6 +716,7 @@ int main(int argc, char *argv[]) {
     char *foovalues[] = {"foobar", NULL};
     LDAPMod foo;
     LDAPMod *mods[2];
+    char *ngunique;
 
     retval = krb5_init_context(&context);
     if (retval) {
@@ -582,7 +726,15 @@ int main(int argc, char *argv[]) {
 
     unsetenv("KRB5CCNAME");
 
+    printf("%s %s %s\n", gservice, ghostname, grealm);
     ld = krb_ldap_open(context, gservice, ghostname, grealm);
+
+    printf("%d\n", ldap_innetgroup(context, ld, grealm, argv[2], argv[1]));
+
+    ngunique = getnetgroup(context, ld, "CS.RUTGERS.EDU", argv[1]);
+    printf("nguhique %s\n", ngunique);
+    
+    printf("ingroup %d\n", hostinnetgroup(context, ld, "CS.RUTGERS.EDU", argv[2], ngunique));
 
 #ifdef undef    
     if (getLdapData(context, ld, grealm, targetuser, &rules, &keytab, &dn) == 0) {

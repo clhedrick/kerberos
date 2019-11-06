@@ -22,3 +22,16 @@ strengthcheck.sqlite then has to be copied to /usr/local/etc. The -l 10
 option causes it to omit passwords shorter than 10 chars, since those
 will never match.
 
+Current configuration in /etc/krb5.conf
+[appdefaults]
+  krb5-strength = {
+    password_dictionary        = /usr/share/cracklib/pw_dict
+    password_dictionary_sqlite = /usr/local/etc/strengthcheck.sqlite
+  }
+
+[plugins]
+  pwqual = {
+    module = strength:/usr/local/libexec/strength.so
+    disable = dict
+ }
+

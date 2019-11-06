@@ -637,7 +637,7 @@ main(int argc, char *argv[])
         for(addrsp = addrs; addrsp != NULL; addrsp = addrsp->ai_next) {
             // first entry is canon name
             if (addrsp == addrs)
-                strncpy(hostbuf, addrsp->ai_canonname, sizeof(hostbuf));            
+                strncpy(hostbuf, addrsp->ai_canonname, sizeof(hostbuf) - 1);            
             if (compare_addrs(addrsp->ai_addr, peername)) {
                 found = 1;
                 break;
@@ -828,8 +828,14 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
                 continue;
                 *ch = '\0';
                 // line - ch is host; verify right host
-                if (strcmp(line, hostname) != 0 && strcmp(line, "*") != 0)
-                    continue;
+                if (line[0] == '@') {
+                    // @netgroup
+                    if (!ldap_innetgroup(context, ld, default_realm, hostname, line+1))
+                        continue;
+                } else {
+                    if (strcmp(line, hostname) != 0 && strcmp(line, "*") != 0)
+                        continue;
+                }
 
                 princp = ch+1;
                 // next item is principal

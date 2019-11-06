@@ -27,7 +27,8 @@ forwardable. Each value indicatest that the user is permitted to
 get credentials for that principal on that host. The F option indicates
 that the credentials should be forwardable. 
 .PP
-* in the host field will apply to all hosts
+* in the host field will apply to all hosts. Netgroups can be used if
+you put @ in front of it, e.g. @netgroup.
 .PP
 The purpose of credserv is to generate credentials for a user and return
 it to the client. Typically this is a pam module that is handling the
@@ -104,12 +105,19 @@ section of /etc/krb5.conf. The most common parameters are
 credserv= {
     ldapurl=ldaps://krb1.cs.rutgers.edu,ldaps://krb2.cs.rutgers.edu
     ldapbase=cn=accounts,dc=cs,dc=rutgers,dc=edu
+    altbase=cn=alt,dc=cs,dc=rutgers,dc=edu
 }
 .fi
 .PP
 where ldapurl points to the LDAP server. If omitted you'll get
 ldaps://localhost, which may well be appropriate. ldapbase
-is the search base for user lookups.
+is the search base for user and host lookups. altbase is
+the base for netgroup lookups. The netgroup code uses
+IPA objectclasses. It would have to be modified slightly
+for other systems. Credserv does netgroup
+lookups directly in ldap, rather than using libc's netgroup code,
+because the libc code is incredibly inefficient if you have
+large or nested netgroups.
 .PP
 If you want to be able to do privileged operations, put the
 users who are authorized into a group, and then add the name of the group to
