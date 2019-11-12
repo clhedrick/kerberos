@@ -127,6 +127,12 @@ that should no longer be in the group, and then click on the "Confirm membership
 </div>
 </div>
 
+<div th:unless="${needsreview or group['businesscategory'] != null and group['businesscategory'].contains('suspended')}">
+  <div th:if="${group['businesscategory'] != null and group['businesscategory'].contains('login')}" style="padding:0.25em; color:#888">
+    To confirm membership before it is required (not a typical thing to do): <button class="confirmButton"> Confirm membership </button>
+  </div>
+</div>
+
 <h2 style="margin-top:1.5em">Owners</h2>
 <div class="inset" style="margin-top:0.5em">
 <p> An owner is someone who can make changes to the group. This allows you to
