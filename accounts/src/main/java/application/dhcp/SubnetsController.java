@@ -220,6 +220,7 @@ public class SubnetsController {
 
     @PostMapping("/dhcp/showsubnets")
     public String subnetsSubmit(@RequestParam(value="name", required=false) String name,
+			       @RequestParam(value="origname", required=false) String origname,
 			       @RequestParam(value="routers", required=false) String routers,
 			       @RequestParam(value="options", required=false) String options,
 			       @RequestParam(value="del", required=false) List<String>del,
@@ -283,6 +284,14 @@ public class SubnetsController {
 	// if no name specified, nothing more to do
 	if (name == null || "".equals(name.trim()))
 	    return subnetsGet(request, response, model);
+
+	// if we're here there is a new subnet or a subnet to be updated.
+	// so we can tell the difference, the original entry name (cn)
+	// is passed in origname when an existing entry is updated.
+	// otherwise it's a new entry. Note that it makes no sense to
+	// rename a subnet, so we actually ignore the value of origname
+
+	var isUpdate = origname != null && !origname.isBlank();
 
 	name = name.trim();
 
@@ -351,16 +360,21 @@ public class SubnetsController {
 	    }
 	}
 
-	if (! haveOptions.contains("broadcast-address"))
-	    dhcpOption.add("broadcast-address " + broadcast);
-	if (! haveOptions.contains("routers"))
-	    dhcpOption.add("routers " + router);
-	if (! haveOptions.contains("subnet-mask"))
-	    dhcpOption.add("subnet-mask " + netmask);
+	if (!isUpdate) {
+	    if (! haveOptions.contains("broadcast-address"))
+		dhcpOption.add("broadcast-address " + broadcast);
+	    if (! haveOptions.contains("routers"))
+		dhcpOption.add("routers " + router);
+	    if (! haveOptions.contains("subnet-mask"))
+		dhcpOption.add("subnet-mask " + netmask);
+	}
 
 	var entry = new BasicAttributes();
-	entry.put(oc);
-	entry.put(cn);
+	if (!isUpdate) {
+	    // we don't ever change object class or cn
+	    entry.put(oc);
+	    entry.put(cn);
+	}
 	entry.put(dhcpNetMask);
 	entry.put(dhcpOption);
 
@@ -372,13 +386,17 @@ public class SubnetsController {
 
 	var dn = "cn=" + net + ",cn=config," + conf.dhcpbase;
 	try {
-	    var newctx = ctx.createSubcontext(dn, entry);
-	    newctx.close();
+	    if (isUpdate) {
+		ctx.modifyAttributes(dn, DirContext.REPLACE_ATTRIBUTE, entry);
+	    } else {
+		var newctx = ctx.createSubcontext(dn, entry);
+		newctx.close();
+	    }
 	} catch (Exception e) {
 	    try {
 		ctx.close();
 	    } catch (Exception ignore) {}
-	    messages.add("Can't create new entry: " + e.toString());
+	    messages.add((isUpdate ? "Can't modify entry: " : "Can't create new entry: ") + e.toString());
 	    model.addAttribute("messages", messages);
 	    return subnetsGet(request, response, model); 
 	}

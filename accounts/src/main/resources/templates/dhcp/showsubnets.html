@@ -42,12 +42,32 @@ function dolookup(event) {
   window.location.href = "showgroup?name=" + $("#lookup").val();
 }
 
-//$(document).ready(function(){
-//    $(".deleteButton").click(deletegroup);
-//    $(".deleteButton").keypress(deleteKeyPress);
-//    $("#submit").click(validateSubmit);
-//    $("#dolookup").click(dolookup);
-//    });
+function showedit(event) {
+  var thisentry = $(this).closest('.itemlist-row');
+  // find the model and insert data
+  var editentry = $('#newform');
+  var name = thisentry.find('.subnetname').text();
+  // need original list, not text version
+  var optindex = thisentry.find('.sindex').text();
+  var options = /*[[${subnets}]]*/ [];
+  options = options[optindex]['dhcpoption'];
+  if (!options)
+    options = []
+
+  editentry.find('.name').val(name);
+  editentry.find('.origname').val(name);
+  var optarea = '\n';
+  var i;
+  for (i = 0; i < options.length; i++) {
+     optarea = optarea + options[i] + '\n';
+  }
+  editentry.find('.options').val(optarea.substring(1));
+  editentry.find('.name').focus();
+}
+
+$(document).ready(function(){
+    $(".editbutton").click(showedit);
+    });
 
 /*]]>*/
 </script>
@@ -90,13 +110,15 @@ function dolookup(event) {
 <div class="inset" style="padding-top:0.5em">
 
 <ul class="itemlist">
-<li th:each="s : ${subnets}">
+<li th:each="s,status : ${subnets}">
 <fieldset class="transparent-fieldset">
 <div class="itemlist-row">
+<div style="display:none" class="sindex" th:text="${status.index}"/>
 <legend class="hidden" th:text="${s.cn[0]}"/>
+<div> <button class="editbutton" type="button">Edit</button> </div>
 <div class="itemlist-entry1"><label><span class="hidden">Delete</span><input type="checkbox" name="del" th:value="${s.cn[0]}"/></label> </div>
-<div class="itemlist-entry2"> <a th:href="@{showhosts(subnet=${s.cn[0] + '/' + s.dhcpnetmask[0]})}"><span th:text="${s.cn[0] + '/' + s.dhcpnetmask[0]}"/></a></div>
-<div class="itemlist-entry3" th:if="${s['dhcpoption']}"  th:text="${s['dhcpoption']}"/>
+<div class="itemlist-entry2"> <a th:href="@{showhosts(subnet=${s.cn[0] + '/' + s.dhcpnetmask[0]})}"><span class="subnetname" th:text="${s.cn[0] + '/' + s.dhcpnetmask[0]}"/></a></div>
+<div class="itemlist-entry3 option" th:if="${s['dhcpoption']}"  th:text="${s['dhcpoption']}"/>
 </div>
 </fieldset>
 </li>
@@ -107,17 +129,18 @@ function dolookup(event) {
 
 <div th:if="${dhcpmanager || superuser}">
 
-<h2 style="margin-top:2em"> Add Subnet </h2>
+<h2 style="margin-top:2em"> Add or Modify Subnet </h2>
 
-<div class="inset" style="margin-top:1em">
-<label>Subnet n.n.n.n/b: <input type="text" name="name" id="name"/></label>
+<div class="inset" style="margin-top:1em" id="newform">
+<input type="hidden" name="origname" class="origname"/>
+<label>Subnet n.n.n.n/b: <input type="text" name="name" class="name"/></label>
 <br/>
 <label>Routers: <input type="text" name="routers" id="routers"/></label> [default is first address in the subnet]<br/>
 <label>Options: [not normally needed. We generate broadcast-address, routers, subnet-mask, but you can override them.]</br>
-<textarea rows="4" cols="80" name="options" id="options">
+<textarea rows="4" cols="80" name="options" class="options">
 </textarea>
 </label><br/>
-<input type="submit" value="Add/Delete Subnets"/>
+<input type="submit" value="Add/Update/Delete Subnets"/>
 </div>
 </div>
 </form>
