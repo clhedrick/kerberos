@@ -311,6 +311,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     // Need to change to the user, since the Kerberos libraries get %{uid}
     // from the current uid.
 
+    char *prop = NULL;
+
     setresgid(pwd->pw_gid, pwd->pw_gid, -1);
     setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
@@ -344,6 +346,13 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       krb5_free_context(context);
       pam_syslog(pamh, LOG_INFO, "no KRB5CCNAME nor default cache for uid %lud", olduid);
       return PAM_SUCCESS;  // nothing to do      
+    }
+
+    // have to put it in KRB5CCNAME
+    if (asprintf(&prop, "%s=%s", "KRB5CCNAME", ccname) > 0) {
+      pam_putenv(pamh, prop);
+      if (prop)
+	free(prop);
     }
 
     pam_syslog(pamh, LOG_INFO, "registering default ccname for this user %s", ccname);    
