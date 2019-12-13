@@ -55,7 +55,7 @@ ccselect_nfs_choose(krb5_context context, krb5_ccselect_moddata data,
         if (strncmp(str, "nfs/", 4) == 0) {
             char pwbuf[1024]; // for strings in the pwd struct
             struct passwd passwd;  // for the pwd struct
-            struct passwd *pwd;  // the actual return value, pointer to passwd or NULL
+            struct passwd *pwd = NULL;  // the actual return value, pointer to passwd or NULL
             krb5_principal princ = NULL;
 
             krb5_free_unparsed_name(context, str);
