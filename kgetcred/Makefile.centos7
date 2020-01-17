@@ -20,6 +20,14 @@ install: all
 	cp kgetcred.1 /usr/share/man/man1
 	cp pam_kgetcred.8 /usr/share/man/man8
 
+installans: all
+	install --owner=root --group=root --mode=04755 kgetcred /config/kerberos-ansible/kerberos-files/usr/bin/kgetcred
+	install --owner=root --group=root --mode=0755 pam_kgetcred.so /config/kerberos-ansible/kerberos-files/copy/usr/lib64/security/pam_kgetcred.so
+	rm /config/kerberos-ansible/kerberos-files/copy.SLES.12/lib64/security/pam_kgetcred.so
+	ln -s /usr/lib64/security/pam_kgetcred.so /config/kerberos-ansible/kerberos-files/copy.SLES.12/lib64/security/pam_kgetcred.so
+	install --owner=root --group=root --mode=0644 kgetcred.1 /config/kerberos-ansible/kerberos-files/copy/usr/share/man/man1/kgetcred.1
+	install --owner=root --group=root --mode=0644 pam_kgetcred.8 /config/kerberos-ansible/kerberos-files/copy/usr/share/man/man8/pam_kgetcred.8
+
 installu14: all
 	cp kgetcred /usr/bin/kgetcred
 	chmod u+s /usr/bin/kgetcred

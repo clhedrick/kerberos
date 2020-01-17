@@ -62,7 +62,6 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
     data_eq(princ->data[1], *realm);
 }
 
-
 // find priority of a cache. It's the end time for the tgt, if any
 static uint32_t
 cache_priority(krb5_context context, krb5_ccache cache, krb5_principal princ) {
