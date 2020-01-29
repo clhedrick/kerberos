@@ -28,13 +28,15 @@ rules, and designed to be portable to other environments. It might be useful for
 elsewhere, though it would need minor changes. (If someone else actually
 wants to use it, I'd be happy to work with them.)
 
-Assumptions: user roles and course registration are avaiable in LDAP, with
-additional role information in an SQL database. Specific queries are 
-defined in the configuraiton file. You'd probably have to adjust Java code
+It also has support to manage DHCP entries in LDAP. Our customizations to the IPA command allow this data to be managed from the commandline using "ipa" as well as the web app. The IPA command doesn't support every aspect of the DHCP schema, but it supports the most common features. The web app supp9orts only what we actually use, which is a subset.
+
+Assumptions: user roles and course registration are avaiable in a University LDAP server, with
+additional role information in an SQL database run by our department. Specific queries are 
+defined in the configuraiton file, so the data you're interested in could be different. You'd probably have to adjust Java code
 slightly depending upon the format of our course identifiers.
 
 It can be set to require people responsible for groups to review 
-membership annually.
+membership periodically (we're doing it annually).
 
 ## credserv and kgetcred
 
@@ -44,8 +46,12 @@ are two issues with this (1) security; if someone can get your key table, they c
 be you anywhere at any time, and you'll probably never know it (2) at least with
 IPA, users with two factor authentication can't use key tables.
 
-We use a Kerberized client-server application. Credserv is the server. Kgetcred
-will get Kerberos credentials for a specified user. It must be called by root.
+We use a Kerberized client-server application. Credserv is the server. Kgetcred is the client. Kgetcred is intended to be called
+at the beginning of the cron job to get credentials and put them in KRB5CCNAME. However the same code is available in a pam module.
+If you use that, users won't need to call kgetcred themselves. Kgetcred also has options that let the user authorized systems that 
+can do this.
+
+Kgetcred will get Kerberos credentials for a specified user and put them in the cache defined by KRB5CCNAME. It must be called by root.
 The user must register that they want root to be able to get credentials for them
 on specific machine. The credentials are by default not forwardable and have the IP
 address of that machine built in. This provides a much more controlled approach than
@@ -80,7 +86,7 @@ files via NFS is removed within 10 min.)
 
 We're trying to simplify the way this is done, so renewd and pam_reg_cc
 are likely to change. The code in both is specific to the credential
-cache mechanism. There's a library in common that has all the code that
+cache mechanism, e.g, temp file, KEYRING, KCM. There's a library in common that has all the code that
 depends upon the mechanism. It should be possible to add a new one
 just by changing that library. Currently only types used on Linux are
 supported.
