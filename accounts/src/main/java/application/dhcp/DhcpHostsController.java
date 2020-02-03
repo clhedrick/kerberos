@@ -439,6 +439,7 @@ public class DhcpHostsController {
 		try {
 		    // this is the JNDI approach to deleting an LDAP entry
 		    ctx.destroySubcontext(dn);
+		    logger.info("DHCP: deleted entry " + d);
 		} catch (javax.naming.NamingException e) {
 		    messages.add("Unable to delete " + d + ": " + e.toString());
 		    model.addAttribute("messages", messages);
@@ -556,6 +557,7 @@ public class DhcpHostsController {
 
 	    if (origname != null && !origname.isBlank()) {
 		// edit existing item
+		var logmsg = "";
 
 		common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(cn="+ filtername(origname) + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
 
@@ -593,6 +595,7 @@ public class DhcpHostsController {
 		    var dhcpStatements = new BasicAttribute("dhcpStatements", addrstatement);
 		    entry.put(dhcpStatements);
 		}
+		logmsg += " " + addrstatement;
 	    
 		ethernet = normalizeEthernet(ethernet);
 		if (ethernet == null) {
@@ -605,6 +608,7 @@ public class DhcpHostsController {
 		    var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", etherval);
 		    entry.put(dhcpHWAddress);
 		}
+		logmsg += " " + etherval;
 
 		// comparing old and new options is more complex, because there
 		// can be more than one and they can be in different order. We
@@ -615,8 +619,10 @@ public class DhcpHostsController {
 		var lines = options.split("\n");
 
 		for (var line: lines)
-		    if (! line.trim().isBlank())
+		    if (! line.trim().isBlank()) {
 			newOptions.add(line.trim());
+			logmsg += " " + line.trim();
+		    }
 
 		if (! oldOptions.equals(newOptions)) {
 		    changed = true;
@@ -635,6 +641,7 @@ public class DhcpHostsController {
 		    try {
 			var dhcpOption = new BasicAttribute("dhcpOption");
 			ctx.modifyAttributes(lu.oneVal(host.get("dn")), DirContext.REPLACE_ATTRIBUTE, entry);
+			logger.info("DHCP modified entry " + origname + ":" + logmsg);
 		    } catch (Exception e) {
 			messages.add("Unable to change " + filtername(origname) + ": " + e.toString());
 			model.addAttribute("messages", messages);
@@ -648,6 +655,7 @@ public class DhcpHostsController {
 		    var newdn = "cn=" + name + ",cn=config," + conf.dhcpbase;
 		    try {
 			ctx.rename(lu.oneVal(host.get("dn")), newdn);
+			logger.info("DHCP: renamed entry " + origname + " to " + name);
 		    } catch (Exception e) {
 			messages.add("Unable to rename " + filtername(origname) + " to " + name + ": " + e.toString());
 			model.addAttribute("messages", messages);
@@ -674,6 +682,8 @@ public class DhcpHostsController {
 	    
 	    ctx = action.ctx;
 
+	    var logmsg = "";
+
 	    var oc = new BasicAttribute("objectClass");
 	    oc.add("top");
 	    oc.add("dhcpHost");
@@ -681,6 +691,7 @@ public class DhcpHostsController {
 	    var cn = new BasicAttribute("cn", name);
 	    var dhcpHWAddress = new BasicAttribute("dhcpHWAddress", "ethernet " + ethernet);
 	    var dhcpStatements = new BasicAttribute("dhcpStatements", addrstatement);
+	    logmsg += " " + addrstatement + " ethernet " + ethernet;
 	    
 	    var entry = new BasicAttributes();
 	    entry.put(oc);
@@ -691,8 +702,10 @@ public class DhcpHostsController {
 	    if (options != null && ! options.isBlank()) {
 		var dhcpOption = new BasicAttribute("dhcpOption");
 		var lines = options.split("\n");
-		for (var line: lines)
+		for (var line: lines) {
 		    dhcpOption.add(line.trim());
+		    logmsg += " " + line.trim();
+		}
 		entry.put(dhcpOption);
 	    }
 
@@ -700,6 +713,7 @@ public class DhcpHostsController {
 	    try {
 		var newctx = ctx.createSubcontext(dn, entry);
 		newctx.close();
+		logger.info("DHCP: added enty " + name + ":" + logmsg);
 	    } catch (Exception e) {
 		try {
 		    ctx.close();
