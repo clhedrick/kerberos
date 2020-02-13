@@ -111,7 +111,7 @@ public class docommand {
 
 	 try (
 	      BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
-	      BufferedReader reader2 = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+      BufferedReader reader2 = new BufferedReader(new InputStreamReader(p.getErrorStream()));
 	      ) {
 		 retval = p.waitFor();
 
@@ -120,12 +120,14 @@ public class docommand {
 		     return 0;
 		 }
 
-		 logger.error("command returned " + retval + ": " + Arrays.toString(command));
+		 if (outlist == null)
+		     logger.error("command returned " + retval + ": " + Arrays.toString(command));
 
 		 String line=reader.readLine();
 	       
 		 while (line != null) {    
-		     logger.error(line);
+		     if (outlist == null)
+			 logger.error(line);
 		     if (out != null)
 			 out.println(StringEscapeUtils.escapeHtml4(line) + "<br/>");
 		     if (outlist != null)
@@ -135,7 +137,8 @@ public class docommand {
 		 
 		 line=reader2.readLine();
 		 while (line != null) {    
-		     logger.error(line);
+		     if (outlist == null)
+			 logger.error(line);
 		     if (out != null)
 			 out.println(StringEscapeUtils.escapeHtml4(line) + "<br/>");
 		     if (outlist != null)
