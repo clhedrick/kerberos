@@ -641,7 +641,7 @@ public class DhcpHostsController {
 		    try {
 			var dhcpOption = new BasicAttribute("dhcpOption");
 			ctx.modifyAttributes(lu.oneVal(host.get("dn")), DirContext.REPLACE_ATTRIBUTE, entry);
-			logger.info("DHCP modified entry " + origname + ":" + logmsg);
+			logger.info("DHCP: modified entry " + origname + ":" + logmsg);
 		    } catch (Exception e) {
 			messages.add("Unable to change " + filtername(origname) + ": " + e.toString());
 			model.addAttribute("messages", messages);
