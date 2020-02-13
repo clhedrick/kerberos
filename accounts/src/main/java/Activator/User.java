@@ -832,9 +832,18 @@ public class User {
 			// remove from groups if needed
 			for (var removegroup: removeGroups) {
 			    logger.info("ipa group-remove-member " + removegroup + " --users=" + username);
+			    var outList = new ArrayList<String>();
 			    if (!test) {
-				if (docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", removegroup, "--users=" + username}, env) != 0)
-				    ok = false;
+				var retval = docommand.docommand (new String[]{"/bin/ipa", "group-remove-member", removegroup, "--users=" + username}, env, outList);
+				if (retval != 0) {
+				    if (! outList.stream().anyMatch(s -> s.contains("This entry is not a member"))) {
+					ok = false;
+					// if user is a member of a subgroup, the remove will fail. Print a special error
+					logger.error("command returned " + retval + ": ipa group-remove-member " + removegroup + " --users=" + username);
+					outList.stream().forEach(s -> logger.error(s));
+				    } else
+					logger.info("Can't remove " + username + " from " + removegroup + " because they are in a subgroup. This is typically not an error");
+				}
 			    }
 			}
 	    
