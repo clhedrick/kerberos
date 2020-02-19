@@ -27,6 +27,8 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.Calendar;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -62,6 +64,7 @@ import common.JndiAction;
 import common.docommand;
 import Activator.Config;
 import Activator.User;
+import Activator.Mail;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -102,7 +105,7 @@ public class GroupController {
 	    Subject.doAs(subject, action);
 	    if (action.val == null || action.val.size() == 0) {
 		if (!createOk) {
-		    messages.add("User " + name + " isn't in our system.");
+		    messages.add(String.format("User %s isn't in our system.", name));
 		    return "fail";
 		}
 		
@@ -113,13 +116,36 @@ public class GroupController {
 		// can't create an account without university data, but in cleanup I guess it could happen
 		// so create empty data
 		if (universityDataList == null || universityDataList.size() == 0) {
-		    messages.add(name + ": Can only add a netid that is in the University's data");
+		    messages.add(String.format("%s: Can only add a netid that is in the University's data", name));
 		    return "fail";
 		}
 		universityData = universityDataList.get(0);
 		String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
 		if (!User.createUser(name, conf, universityData, false, logger, env))
 		    return "fail";
+		// notify users
+		// replace %u with uid
+		var message = "";
+		try {
+		    message = new String(Files.readAllBytes(Paths.get(conf.createtemplate)));
+		} catch (Exception e) {
+		    // no template, no message
+		    messages.add(String.format("Please ask the user to go to %s and use the set password function.", conf.reviewurl));
+		    return null;
+		}
+		message = message.replaceAll("%u", name);
+		// first line is subject, so separate into subject and message
+		var parts = message.split("\n", 2);
+		// default address
+		var toaddress = name + "@" + conf.defaultmaildomain;
+		logger.info("Sending notification of account creation for " + name + " to " + toaddress);
+		// for testing, can put a test address in conf file. It will
+		// get all email rather than actual user
+		if (!Mail.sendMail(conf.fromaddress, (conf.testaddress == null ? toaddress
+						      : conf.testaddress), parts[0], parts[1])) {
+		    messages.add("Attempt to send mail to " + toaddress + " failed. Please ask the user to go to " + conf.reviewurl + " and use the set password function.");
+		    return null;
+		}
 	    }
 	    return null;
 	    

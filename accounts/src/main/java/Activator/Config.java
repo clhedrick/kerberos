@@ -55,6 +55,7 @@ public class Config {
     public String warningdir = "/var/lib/activator";
     public String warningtemplate = "/etc/activator.template";
     public String unwarntemplate = "/etc/activator.untemplate";
+    public String createtemplate = "/etc/activator.create";
     public int warningdays = 60;
     public String fromaddress = null;
     public String reservedgroups = null;
@@ -180,6 +181,8 @@ public class Config {
 			warningtemplate = atoms[1];
 		    if (atoms[0].equals("unwarntemplate"))
 			unwarntemplate = atoms[1];
+		    if (atoms[0].equals("createtemplate"))
+			createtemplate = atoms[1];
 		    if (atoms[0].equals("warningdays")) {
 			try {
 			    warningdays = Integer.parseInt(atoms[1]);
