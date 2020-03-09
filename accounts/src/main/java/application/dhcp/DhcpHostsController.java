@@ -71,6 +71,7 @@ import common.JndiAction;
 import common.docommand;
 import application.SubnetsController;
 import Activator.Config;
+import Activator.Db;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.commons.net.util.SubnetUtils;
@@ -170,6 +171,10 @@ public class DhcpHostsController {
 	return ethernet;
     }
 
+    public String hostsGet(Integer ifid, HttpServletRequest request, HttpServletResponse response, Model model) {
+	return hostsGet(null, null, null, null, ifid, request, response, model);
+    }
+
     // lots of optional arguments for the search operation. Only one argument will
     // normally be specified. The page has to pass the arg on in hidden INPUTs, so
     // we'll consistently show the same data when editing.
@@ -178,6 +183,7 @@ public class DhcpHostsController {
 			   @RequestParam(value="host", required=false) String hostname,
 			   @RequestParam(value="ip", required=false) String ipaddress,
 			   @RequestParam(value="ether", required=false) String etheraddress,
+			   @RequestParam(value="ifid", required=false) Integer ifid,
 			   HttpServletRequest request, HttpServletResponse response, Model model) {
 	// This module uses Kerberized LDAP. The credentials are part of a Subject, which is stored in the session.
 	// This JndiAction junk is needed to execute the LDAP code in a context that's authenticated by
@@ -191,7 +197,7 @@ public class DhcpHostsController {
 	    List<String> messages = new ArrayList<String>();
 	    messages.add("Session has expired");
 	    model.addAttribute("messages", messages);
-	    return loginController.loginGet("dhcp", request, response, model); 
+	    return loginController.loginGet("dhcp", ifid, request, response, model); 
 	}
 
 	// default filter is all hosts
@@ -296,11 +302,13 @@ public class DhcpHostsController {
 	    }
 	    // set up model for JSTL to output
 
+	    model.addAttribute("ifid", ifid);
 	    model.addAttribute("hosts", entries);
 	    model.addAttribute("subnet", subnet);
 	    model.addAttribute("dhcpmanager", (privs.contains("dhcpmanager")));
 	    model.addAttribute("superuser", (privs.contains("superuser")));
 
+	    // hmmm. the model is actually ignored
 	    return "/dhcp/showhosts";
 	}
 
@@ -309,7 +317,9 @@ public class DhcpHostsController {
 	// no subnet arg. all hosts or a search
 	// Default is all hosts, but see if the user specified a search term.
 	var filter = "objectclass=dhcphost";
-	if (hostname != null && !hostname.isBlank()) {
+	if (ifid != null) {
+	    filter = "(&(objectclass=dhcphost)(dhcpcomments=" + ifid.toString() + "))";
+	} else if (hostname != null && !hostname.isBlank()) {
 	    var name = filtername(hostname.trim());
 	    model.addAttribute("host", name);
 	    filter = "(&(objectclass=dhcphost)(|(cn=" + name + ")(dhcpoption=host-name \"" + name + "\")))";
@@ -333,6 +343,73 @@ public class DhcpHostsController {
 	Subject.doAs(subject, action);
 
 	var hosts = action.data;
+	// if we came from inventory and didn't find anything linked
+	// to this interface, try to find it
+	if ((hosts == null || hosts.size() == 0) && ifid != null) {
+	    var db = new Db();
+	    db.openDb(conf);
+	    var ether = db.findEtherForIf(ifid, conf);
+	    if (ether == null || ether.isBlank()) {
+		List<String> messages = new ArrayList<String>();
+		messages.add("no ethernet address for inventory entry. No way to handle this");
+		model.addAttribute("messages", messages);
+		return "/dhcp/showhosts";
+	    }
+	    db.closeDb();
+	    filter = "(&(objectclass=dhcphost)(dhcpHWAddress=ethernet*" + ether.toLowerCase() + "))";
+	    common.JndiAction ifaction = new common.JndiAction(new String[]{filter, conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dhcpcomments", "dn"});
+	    ifaction.noclose = true; // so we can do modify
+
+	    Subject.doAs(subject, ifaction);
+	    var ctx = ifaction.ctx;
+
+	    hosts = ifaction.data;
+	    if (hosts != null && hosts.size() == 1) {
+		// found just one host with this ether. link it to inventory
+		var host = hosts.get(0);
+		List<String> messages = new ArrayList<String>();
+
+		var comment = new BasicAttribute("dhcpcomments", ifid.toString());
+		var entry = new BasicAttributes();
+		entry.put(comment);
+
+		var op = DirContext.ADD_ATTRIBUTE;
+		if (lu.hasVal(host.get("dhcpcomments")))
+		    op = DirContext.REPLACE_ATTRIBUTE;
+		try {
+		    ctx.modifyAttributes(lu.oneVal(host.get("dn")), op, entry);
+		} catch (javax.naming.NamingException e) {
+		    messages.add("Unable to link this DHCP entry to the inventory entry: " + e.toString());
+		    model.addAttribute("messages", messages);
+		}
+
+		// go ahead and display entry
+		// user can modify it if necessary
+
+		messages.add("We found exactly one DHCP entry with this ethernet address. We've linked it to this inventory entry, so its data will show there after the next nightly update.");
+		model.addAttribute("messages", messages);
+
+	    } else if (hosts != null && hosts.size() >= 1) {
+		List<String> messages = new ArrayList<String>();
+		messages.add("More than one DHCP entry has the Ethernet address specified. Please edit and save the one for the inventory entry you came from. That will link the DHCP entry with this inventory entry. Its data will show in inventory after the next nightly update. It's OK to leave the other entries if they're valid, but the one you pick will have its hostname and IP displayed in the inventory.");
+		model.addAttribute("messages", messages);
+		// add this so we'll link it
+		model.addAttribute("ifid", ifid);
+	    } else if (hosts == null || hosts.size() == 0) {
+		List<String> messages = new ArrayList<String>();
+		messages.add("We haven't found anything in DHCP with this Ethernet address. If you add one, it will be linked to this inventory entry. Its data will show in inventory after the next nightly update.");
+		model.addAttribute("messages", messages);
+
+		// nothing found. will display add screen
+		// prefill ethernet address
+		model.addAttribute("newether", ether);
+		// send the ifid so it will link up when added
+		model.addAttribute("ifid", ifid);
+	    }
+	    try {
+		ctx.close();
+	    } catch (Exception e) {}
+	}
 	if (hosts != null && hosts.size() > 0) {
 	    for (var host: hosts) {
 		var statements = host.get("dhcpstatements");
@@ -379,6 +456,7 @@ public class DhcpHostsController {
 			       @RequestParam(value="host", required=false) String hostname,
 			       @RequestParam(value="ip", required=false) String ipaddress,
 			       @RequestParam(value="ether", required=false) String etheraddress,
+			       @RequestParam(value="ifid", required=false) Integer ifid,
 			       @RequestParam(value="ethernet[]", required=false) String[] ethernets,
 			       @RequestParam(value="ip[]", required=false) String[] ips,
 			       @RequestParam(value="origname[]", required=false) String[] orignames,
@@ -412,7 +490,7 @@ public class DhcpHostsController {
 	    if (subject == null) {
 		messages.add("Session has expired");
 		model.addAttribute("messages", messages);
-		return loginController.loginGet("dhcp", request, response, model); 
+		return loginController.loginGet("dhcp", ifid, request, response, model); 
 	    }
 
 	    // normally JndiAction opens a connection to LDAP, does a query, and
@@ -455,7 +533,7 @@ public class DhcpHostsController {
 	// if no name specified, nothing more to do
 	// if there's a name, we have hosts to update
 	if (names == null || names.length == 0)
-	    return hostsGet(subnet, hostname, ipaddress, etheraddress, request, response, model);
+	    return hostsGet(subnet, hostname, ipaddress, etheraddress, ifid, request, response, model);
 
 	// if we're here there are new hosts or hosts to be updated.
 	// so we can tell the difference, the original entry name (cn)
@@ -506,7 +584,7 @@ public class DhcpHostsController {
 	    if (subject == null) {
 		messages.add("Session has expired");
 		model.addAttribute("messages", messages);
-		return loginController.loginGet("dhcp", request, response, model); 
+		return loginController.loginGet("dhcp", ifid, request, response, model); 
 	    }
 
 	    ethernet = normalizeEthernet(ethernet);
@@ -636,6 +714,12 @@ public class DhcpHostsController {
 		    entry.put(dhcpOption);
 		}
 
+		if (ifid != null) {
+		    var comments = new BasicAttribute("dhcpComments", ifid.toString());
+		    entry.put(comments);
+		    changed = true;
+		}
+
 		// now, if at least one thing changed, do an LDAP modify
 		if (changed) {
 		    try {
@@ -699,6 +783,11 @@ public class DhcpHostsController {
 	    entry.put(dhcpHWAddress);
 	    entry.put(dhcpStatements);
 
+	    if (ifid != null) {
+		var comment = new BasicAttribute("dhcpComments", ifid.toString());
+		entry.put(comment);
+	    }
+
 	    if (options != null && ! options.isBlank()) {
 		var dhcpOption = new BasicAttribute("dhcpOption");
 		var lines = options.split("\n");
@@ -730,7 +819,7 @@ public class DhcpHostsController {
 	try {
 	    ctx.close();
 	} catch (Exception ignore) {}	    
-	return hostsGet(subnet, hostname, ipaddress, etheraddress, request, response, model);
+	return hostsGet(subnet, hostname, ipaddress, etheraddress, ifid, request, response, model);
 
     }
 

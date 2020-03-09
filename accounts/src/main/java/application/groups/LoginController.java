@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.beans.factory.annotation.Autowired;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.security.auth.*;
@@ -50,9 +51,13 @@ import common.JndiAction;
 import common.utils;
 import Activator.Config;
 import Activator.Match;
+import application.DhcpHostsController;
 
 @Controller
 public class LoginController {
+
+    @Autowired
+    private DhcpHostsController hostsController;
 
     // call skinit command in a fork to take the user's password and
     // generate a Kerberos credential file, /tmp/krb5cc_USER_PID.
@@ -162,11 +167,14 @@ public class LoginController {
         } 
     } 
 
-
-
+    public String loginGet(String app, HttpServletRequest request, HttpServletResponse response, Model model) {
+	return loginGet(app, null, request, response, model);
+    }
 
     @GetMapping("/groups/login")
     public String loginGet(@RequestParam(value="app", required=false) String app,
+			   // have to pass this through for dhcp
+			   @RequestParam(value="ifid", required=false) Integer ifid,
 			   HttpServletRequest request, HttpServletResponse response, Model model) {
 	model.addAttribute("app", (app == null) ? "" : app);
 	try {
@@ -175,18 +183,27 @@ public class LoginController {
 		    response.sendRedirect("../users/showuser");
 		if ("hosts".equals(model.asMap().get("app")))
 		    response.sendRedirect("../hosts/showhosts");
-		if ("dhcp".equals(model.asMap().get("app")))
-		    response.sendRedirect("../dhcp/showsubnets");
-		else
+		if ("dhcp".equals(model.asMap().get("app"))) {
+		    // if ifid is set, this is a login from the inventory app
+		    // want to search for the interface with this id
+		    if (ifid != null)
+			return hostsController.hostsGet(ifid, request, response, model);
+		    else 
+			response.sendRedirect("../dhcp/showsubnets");
+		} else {
 		    response.sendRedirect("showgroups");
+		}
 	    }
 	} catch (Exception e){
 	}
+	// need to pass this through for the inventory entrypoint
+	model.addAttribute("ifid", ifid);
         return "groups/login";
     }
 
     @PostMapping("/groups/login")
     public String loginSubmit(@RequestParam(value="app", required=false) String app,
+			      @RequestParam(value="ifid", required=false) Integer ifid,
 			      @RequestParam(value="user", required=false) String user,
 			      @RequestParam(value="pass", required=false) String pass,
 			      HttpServletRequest request, HttpServletResponse response,
@@ -200,7 +217,7 @@ public class LoginController {
 	String password = filterpass(pass);
 
 	if (!username.equals(user)) {
-	    return loginGet(app, request, response, model);
+	    return loginGet(app, ifid, request, response, model);
 	}
 
 	// make credentials cache. This calls skinit in a process,
@@ -212,7 +229,7 @@ public class LoginController {
 	String cc = makeCC (username, password, messages);
 	if (cc == null) {
 	    // should have gotten error message already
-	    return loginGet(app, request, response, model);
+	    return loginGet(app, ifid, request, response, model);
 	}
 
 	// Do the Java login. Output is a Subject. With the arguments we're using
@@ -233,16 +250,16 @@ public class LoginController {
 	    lc.login();
 	} catch (LoginException le) {
 	    messages.add("Cannot create LoginContext. " + le.getMessage());
-	    return loginGet(app, request, response, model);
+	    return loginGet(app, ifid, request, response, model);
 	} catch (SecurityException se) {
 	    messages.add("Cannot create LoginContext. " + se.getMessage());
-	    return loginGet(app, request, response, model);
+	    return loginGet(app, ifid, request, response, model);
 	}
 
 	Subject subj = lc.getSubject();  
 	if (subj == null) {
 	    messages.add("Login failed");
-	    return loginGet(app, request, response, model);
+	    return loginGet(app, ifid, request, response, model);
 	}
 
 	// check group privs
@@ -257,7 +274,7 @@ public class LoginController {
 	// has to have data in our LDAP or login can't have worked
 	if (action.val.size() == 0) {
 	    messages.add("Login failed");
-	    return loginGet(app, request, response, model);
+	    return loginGet(app, ifid, request, response, model);
 	}
 
 	var ourData = action.data.get(0);
@@ -292,12 +309,17 @@ public class LoginController {
 	    } else if ("hosts".equals(app)) {
 		response.sendRedirect("../hosts/showhosts");
 	    } else if ("dhcp".equals(app)) {
-		response.sendRedirect("../dhcp/showsubnets");
+		// if ifid is set, this is a login from the inventory app
+		// want to search for the interface with this id
+		if (ifid != null)
+		    return hostsController.hostsGet(ifid, request, response, model);
+		else
+		    response.sendRedirect("../dhcp/showsubnets");
 	    } else
 		response.sendRedirect("showgroups");
 	} catch (Exception e) {
 	    messages.add("Unable to redirect to main application: " + e);
-	    return loginGet(app, request, response, model);
+	    return loginGet(app, ifid, request, response, model);
 	}
 
 	// shouldn't happen

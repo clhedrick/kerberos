@@ -84,6 +84,37 @@ public class Db {
 
     }
 
+    public String findEtherForIf(Integer ifid, Config config) {
+	ResultSet rs = null;
+	PreparedStatement pst = null;
+
+	String ether = null;
+
+	try {
+	    pst = conn.prepareStatement("select hw_address from netmanager.hardware_interfaces where interface_id = ?");
+	    pst.setInt(1,ifid);
+	    rs = pst.executeQuery();
+
+	    if (rs.next()) {
+		ether = rs.getString(1);
+		if (rs.next()) {
+		    throw new java.lang.IllegalArgumentException("Two entries in inventory database with the same interface ID " + ifid);
+		}
+	    }
+
+	} catch (Throwable t ) {
+	    throw new java.lang.IllegalArgumentException("Error in fetching ethernet address " + t);
+	} finally {
+	    if(rs != null)
+		try {rs.close();} catch (Exception ignore) {}
+	    if(pst != null)
+		try {pst.close();} catch (Exception ignore) {}
+	}
+
+	return ether;
+
+    }
+
     public static void main( String[] argarray) {
 
 	Config config = new Config();

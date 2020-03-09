@@ -130,13 +130,16 @@ $(document).ready(function(){
 
 <h1> DHCP Host Management </h1>
 
+
+
 <form th:action="@{/dhcp/showhosts}" method="post">
 
 <input type="hidden" name="subnet" th:value="${subnet}"/>
 <input type="hidden" name="host" th:value="${host}"/>
 <input type="hidden" name="ip" th:value="${ip}"/>
 <input type="hidden" name="ether" th:value="${ether}"/>
-
+<input type="hidden" name="ifid" th:if="${ifid}" th:value="${ifid}"/>
+      
 <div th:if="${hosts != null and hosts.size() > 0}">
 
 <h2>Current hosts</h2>
@@ -175,7 +178,7 @@ $(document).ready(function(){
 <label>Hostname: <input class="newname" type="text" name="names[]" id="names[]"/></label>
 <button type="button" aria-hidden="true"  class="optionbox">Click to show options (not normally needed)</button>
 <br/>
-<label>Ethernet: <input type="text" name="ethernet[]" id="ethernet[]"/></label>
+<label>Ethernet: <input type="text" name="ethernet[]" id="ethernet[]" th:value="${newether}"/></label>
 <br/>
 <label>IP address: <input type="text" name="ip[]" id="ip[]"/></label> (comma separated for more than one, blank for DNS lookup)<br/>
 <label class="optionlabel hidden">Options:<br/>
