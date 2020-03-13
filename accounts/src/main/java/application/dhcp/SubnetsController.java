@@ -19,6 +19,7 @@
 
 package application;
 
+import org.ietf.jgss.GSSCredential;
 import java.util.List;
 import java.util.Collections;
 import java.util.Date;
@@ -160,12 +161,13 @@ public class SubnetsController {
 	    model.addAttribute("messages", messages);
 	    return loginController.loginGet("dhcp", request, response, model); 
 	}
+	GSSCredential gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
 
 	// I use an API I wrote around Sun's API support.
 	// See comments on showgroup.jsp
 
 	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
-	common.JndiAction action = new common.JndiAction(new String[]{"objectclass=dhcpsubnet", conf.dhcpbase, "cn", "dhcpnetmask", "dhcpoption"});
+	common.JndiAction action = new common.JndiAction(gssapi, new String[]{"objectclass=dhcpsubnet", conf.dhcpbase, "cn", "dhcpnetmask", "dhcpoption"});
 
 	// save context for lookup
 	action.noclose = true;
@@ -252,9 +254,10 @@ public class SubnetsController {
 		model.addAttribute("messages", messages);
 		return loginController.loginGet("dhcp", request, response, model); 
 	    }
-
+	    GSSCredential gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
+	    
 	    // no filter, so no search. this is just to get a context
-	    common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
+	    common.JndiAction action = new common.JndiAction(gssapi, new String[]{null, conf.dhcpbase});
 	    action.noclose = true;
 
 	    Subject.doAs(subject, action);
@@ -322,9 +325,10 @@ public class SubnetsController {
 	    model.addAttribute("messages", messages);
 	    return loginController.loginGet("dhcp", request, response, model); 
 	}
+	GSSCredential gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
 
 	// no filter, so no search. this is just to get a context
-	common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
+	common.JndiAction action = new common.JndiAction(gssapi, new String[]{null, conf.dhcpbase});
 	action.noclose = true;
 
 	Subject.doAs(subject, action);

@@ -22,6 +22,7 @@ package application;
 // show hosts in a subnet, or based on a search, and let them be edited.
 // this is the core of the DHCP application.
 
+import org.ietf.jgss.GSSCredential;
 import java.util.List;
 import java.util.Collections;
 import java.util.Date;
@@ -199,6 +200,7 @@ public class DhcpHostsController {
 	    model.addAttribute("messages", messages);
 	    return loginController.loginGet("dhcp", ifid, request, response, model); 
 	}
+	GSSCredential  gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
 
 	// default filter is all hosts
 
@@ -267,7 +269,7 @@ public class DhcpHostsController {
 	    }
 	    
 	    // now mask is something like 128.6.*
-	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(dhcpStatements=fixed-address* " + mask + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
+	    common.JndiAction action = new common.JndiAction(gssapi, new String[]{"(&(objectclass=dhcphost)(dhcpStatements=fixed-address* " + mask + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
 	    Subject.doAs(subject, action);
 
 	    var hosts = action.data;
@@ -339,7 +341,7 @@ public class DhcpHostsController {
 	    filter = "(&(objectclass=dhcphost)(dhcpHWAddress=ethernet*" + name + "))";
 	}
 
-	common.JndiAction action = new common.JndiAction(new String[]{filter, conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
+	common.JndiAction action = new common.JndiAction(gssapi, new String[]{filter, conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
 	Subject.doAs(subject, action);
 
 	var hosts = action.data;
@@ -357,7 +359,7 @@ public class DhcpHostsController {
 	    }
 	    db.closeDb();
 	    filter = "(&(objectclass=dhcphost)(dhcpHWAddress=ethernet*" + ether.toLowerCase() + "))";
-	    common.JndiAction ifaction = new common.JndiAction(new String[]{filter, conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dhcpcomments", "dn"});
+	    common.JndiAction ifaction = new common.JndiAction(gssapi, new String[]{filter, conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dhcpcomments", "dn"});
 	    ifaction.noclose = true; // so we can do modify
 
 	    Subject.doAs(subject, ifaction);
@@ -487,6 +489,8 @@ public class DhcpHostsController {
 
 	if (del != null && del.size() > 0) {
 	    Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
+	    GSSCredential gssapi = (GSSCredential) request.getSession().getAttribute("gssapi");
+	    
 	    if (subject == null) {
 		messages.add("Session has expired");
 		model.addAttribute("messages", messages);
@@ -501,7 +505,7 @@ public class DhcpHostsController {
 	    // If you specify noclose, it won't be closed at the end of the operation.
 	    // Other calls to JndiAction will need to specify noclose as well,
 	    // and we'll do an explicit close at the end
-	    common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
+	    common.JndiAction action = new common.JndiAction(gssapi, new String[]{null, conf.dhcpbase});
 	    action.noclose = true;
 
 	    Subject.doAs(subject, action);
@@ -581,6 +585,8 @@ public class DhcpHostsController {
 		origname = orignames[newi];
 
 	    Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
+	    GSSCredential gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
+	    
 	    if (subject == null) {
 		messages.add("Session has expired");
 		model.addAttribute("messages", messages);
@@ -637,7 +643,7 @@ public class DhcpHostsController {
 		// edit existing item
 		var logmsg = "";
 
-		common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=dhcphost)(cn="+ filtername(origname) + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
+		common.JndiAction action = new common.JndiAction(gssapi, new String[]{"(&(objectclass=dhcphost)(cn="+ filtername(origname) + "))", conf.dhcpbase, "cn", "dhcphwaddress", "dhcpstatements", "dhcpoption", "dn"});
 
 		// If there is an existing connection, use it
 		action.ctx = ctx;
@@ -755,7 +761,7 @@ public class DhcpHostsController {
 	    // not edit, so adding new item
 
 	    // no filter, so no search. this is just to get a context
-	    common.JndiAction action = new common.JndiAction(new String[]{null, conf.dhcpbase});
+	    common.JndiAction action = new common.JndiAction(gssapi, new String[]{null, conf.dhcpbase});
 
 	    // use existing LDAP connection if there is one
 	    action.ctx = ctx;

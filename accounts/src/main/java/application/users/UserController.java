@@ -165,7 +165,7 @@ public class UserController {
 	    //ipatokenRadiusUserName: hedrick
 	    //ipatokenRadiusConfigLink: cn=ldap-proxy,cn=radiusproxy,dc=cs,dc=rutgers,dc=edu
 
-	    common.JndiAction action = new common.JndiAction(new String[]{"(uid=" + user + ")", "", "cn", "ipatokenradiusconfiglink", "ipatokenradiususername", "dn", "businesscategory"});
+	    common.JndiAction action = new common.JndiAction(null, new String[]{"(uid=" + user + ")", "", "cn", "ipatokenradiusconfiglink", "ipatokenradiususername", "dn", "businesscategory"});
 	    action.noclose = true; // hold context for reuse
 
 	    Subject.doAs(servicesSubject, action);
@@ -216,7 +216,7 @@ public class UserController {
 
 	    String otptokens = "";
 
-	    action = new common.JndiAction(new String[]{"(ipatokenOwner=" + dn + ")", "cn=otp,dc=cs,dc=rutgers,dc=edu", "cn", "ipatokenuniqueid", "objectclass"});
+	    action = new common.JndiAction(null, new String[]{"(ipatokenOwner=" + dn + ")", "cn=otp,dc=cs,dc=rutgers,dc=edu", "cn", "ipatokenuniqueid", "objectclass"});
 
 	    action.noclose = true; // hold context for reuse
 	    action.ctx = ctx; // reuse existing context
@@ -294,7 +294,7 @@ public class UserController {
 	    return showError("Cannot login for services.", request, response, model);
 	}
 
-	common.JndiAction action = new common.JndiAction(new String[]{"(uid=" + user + ")", "", "cn", "ipatokenradiusconfiglink", "ipatokenradiususername", "dn", "businesscategory"});
+	common.JndiAction action = new common.JndiAction(null, new String[]{"(uid=" + user + ")", "", "cn", "ipatokenradiusconfiglink", "ipatokenradiususername", "dn", "businesscategory"});
 
 	Subject.doAs(servicesSubject, action);
 

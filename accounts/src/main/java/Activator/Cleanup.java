@@ -157,7 +157,7 @@ public class Cleanup {
 	
 	Subject subj = getSubject();  
 
-	JndiAction action = new JndiAction(new String[]{"(businessCategory=login)", "", "host", "cn", "member", "owner", "creatorsName", "dateofcreate", "createTimestamp", "businesscategory"});
+	JndiAction action = new JndiAction(null, new String[]{"(businessCategory=login)", "", "host", "cn", "member", "owner", "creatorsName", "dateofcreate", "createTimestamp", "businesscategory"});
 	Subject.doAs(subj, action);
 	if (action.data != null && action.data.size() > 0) {
 	    grouploop:

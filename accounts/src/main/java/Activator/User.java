@@ -214,7 +214,7 @@ public class User {
 	}
 
 	// ldapsearch with the group dn as base and a test for whether it's login
-	var action = new JndiAction(new String[]{"(&(businessCategory=login)(!(businesscategory=suspended)))", dn, "host", "cn"});
+	var action = new JndiAction(null, new String[]{"(&(businessCategory=login)(!(businesscategory=suspended)))", dn, "host", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    // normal group, return set of clusters it's valid for
@@ -245,7 +245,7 @@ public class User {
 	}
 
 	// ldapsearch with the group dn as base and a test for whether it's login
-	var action = new JndiAction(new String[]{"(&(cn=" + groupName + ")(businessCategory=login)(!(businesscategory=suspended)))", "", "host", "cn"});
+	var action = new JndiAction(null, new String[]{"(&(cn=" + groupName + ")(businessCategory=login)(!(businesscategory=suspended)))", "", "host", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    // normal group, return set of clusters it's valid for
@@ -263,7 +263,7 @@ public class User {
     public boolean groupExists(String groupName, Subject subj, Config config) {
 
 	// ldapsearch with the group dn as base and a test for whether it's login
-	var action = new JndiAction(new String[]{"(cn=" + groupName + ")", "", "cn"});
+	var action = new JndiAction(null, new String[]{"(cn=" + groupName + ")", "", "cn"});
 	Subject.doAs(subj, action);
 	if (action.val != null && action.val.size() > 0) {
 	    return true;
@@ -583,7 +583,7 @@ public class User {
 	    //   otherwise just specified user
 	    if (cleanup && username == null) {
 		// Need all active users. This LDAP query will generate them.
-		var action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(memberof=cn=login-*,*))", "", "uid"});
+		var action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(memberof=cn=login-*,*))", "", "uid"});
 		Subject.doAs(subj, action);
 
 		users = action.val;
@@ -644,7 +644,7 @@ public class User {
 
 		    // get group memberships from our data; result is action.val
 		    // will be filtered below to find manually maintained groups this user is in for a specific cluster
-		    var action = new JndiAction(new String[]{"(uid=" + username + ")", "", "memberOf", "givenname", "sn", "gecos"});
+		    var action = new JndiAction(null, new String[]{"(uid=" + username + ")", "", "memberOf", "givenname", "sn", "gecos"});
 		    Subject.doAs(subj, action);
 
 		    // for -v, print the basic data, to help debugging user issues

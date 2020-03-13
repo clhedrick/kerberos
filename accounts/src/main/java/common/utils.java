@@ -114,7 +114,7 @@ public class utils {
 	}
 
 	// Create the ldap query.
-	JndiAction action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(uid=" + username
+	JndiAction action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(uid=" + username
  + "))", "", "businesscategory"});
 	// execute the query authenticated with our Kerberos credentials
 	Subject.doAs(subj, action);
@@ -187,7 +187,7 @@ public class utils {
 	//createTimestamp: 20170119210315Z
 
 	// Create the ldap query.
-	JndiAction action = new JndiAction(new String[]{"(&(objectclass=inetorgperson)(uid=" + username + "))", "", "krbLastPwdChange", "createTimestamp"});
+	JndiAction action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(uid=" + username + "))", "", "krbLastPwdChange", "createTimestamp"});
 	// execute the query authenticated with our Kerberos credentials
 	Subject.doAs(subj, action);
 

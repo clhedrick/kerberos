@@ -24,7 +24,10 @@ import javax.security.auth.login.*;
 import javax.naming.*;
 import javax.naming.directory.*;
 import javax.naming.ldap.*;
+import javax.security.sasl.Sasl;
+import org.ietf.jgss.GSSCredential;
 import com.sun.security.auth.callback.TextCallbackHandler;
+import org.ietf.jgss.GSSCredential;
 import java.util.Hashtable;
 import java.util.HashMap;
 import java.util.ArrayList;
@@ -39,12 +42,14 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 	private String[] args;
 	public boolean noclose = false;
 	public DirContext ctx = null;
+        public GSSCredential gssapi = null;
 
 	public ArrayList<HashMap<String,ArrayList<String>>> val = new ArrayList<HashMap<String,ArrayList<String>>>();
 	// use this for new applications. The first one leads to really ugly declarations
 	public List<Map<String,List<String>>> data = new ArrayList<Map<String,List<String>>>();
 
-	public JndiAction(String[] origArgs) {
+        public JndiAction(GSSCredential gssapio, String[] origArgs) {
+	    this.gssapi = gssapio;
 	    this.args = (String[])origArgs.clone();
 	}
 
@@ -96,15 +101,17 @@ public class JndiAction implements java.security.PrivilegedAction<JndiAction> {
 		}
 	    }
 
-	    Hashtable<String,String> env = null;
+	    Hashtable<String,Object> env = null;
 
 	    if (ctx == null) {
 		// Set up environment for creating initial context
-		env = new Hashtable<String,String>(11);
+		env = new Hashtable<String,Object>(11);
 		
 		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
 		env.put(Context.PROVIDER_URL, config.kerbldapurl);
 		env.put(Context.SECURITY_AUTHENTICATION, "GSSAPI");
+		if (gssapi != null)
+		    env.put(Sasl.CREDENTIALS, gssapi);
 		env.put("com.sun.jndi.ldap.connect.pool", "true");
 	    }
 

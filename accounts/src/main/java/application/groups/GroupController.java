@@ -19,6 +19,7 @@
 
 package application;
 
+import org.ietf.jgss.GSSCredential;
 import java.util.List;
 import java.util.Date;
 import java.util.Set;
@@ -99,8 +100,9 @@ public class GroupController {
 		return "login";
 	    }
 	    String kname = (String)request.getSession().getAttribute("krb5user");
+	    GSSCredential gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
 	    
-	    common.JndiAction action = new common.JndiAction(new String[]{"(uid=" + name + ")", "", "uid"});
+	    common.JndiAction action = new common.JndiAction(gssapi, new String[]{"(uid=" + name + ")", "", "uid"});
 	    
 	    Subject.doAs(subject, action);
 	    if (action.val == null || action.val.size() == 0) {
@@ -159,13 +161,13 @@ public class GroupController {
 	
     }
 
-    public String getUserDisplay(String userDn, Subject subject, DirContext ctx, Config config) {
+    public String getUserDisplay(String userDn, Subject subject, GSSCredential gssapi, DirContext ctx, Config config) {
 	Logger logger = null;
 	logger = LogManager.getLogger();
 	int i;
 	String searchDn = userDn;
 
-	common.JndiAction action = new common.JndiAction(new String[]{"(objectclass=*)", userDn, "gecos"});
+	common.JndiAction action = new common.JndiAction(gssapi, new String[]{"(objectclass=*)", userDn, "gecos"});
 	// we're holding the context open, so use it
 	action.noclose = true;
 	action.ctx = ctx;
@@ -212,6 +214,9 @@ public class GroupController {
 	// lu.dn2user converts a dn to a username. If the dn starts with uid=XXXX, it returns XXXX. 
 	//    otherwise it returns the whole dn
 
+	GSSCredential gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
+
+	System.out.println("group 1");
 	gname = filtername(gname);
 
 	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
@@ -222,6 +227,7 @@ public class GroupController {
 	    return loginController.loginGet("group", request, response, model); 
 	}
 
+	System.out.println("group 2");
 	Config aconfig = new Config();
 	try {
 	    aconfig.loadConfig();
@@ -234,6 +240,7 @@ public class GroupController {
 	    return groupsController.groupsGet(request, response, model); 
 	}
 
+	System.out.println("group 3");
 	Map<String, List<String>> attrs = null;
 	Map<String,String> memberNames = new HashMap<String,String>();
 	boolean needsReview = false;
@@ -241,6 +248,7 @@ public class GroupController {
 	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
 	boolean isLoginManager = privs.contains("loginmanager");
 
+	System.out.println("group 4");
 	// want to use the same context for a number of operations
 	// try - finally to make sure it's always closed
 	// the point is that we're going to make a bunch of ldap queries. 
@@ -251,9 +259,10 @@ public class GroupController {
 	try {
 
 	    // This acton isn't done until it's called by doAs
-	    common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + gname + "))", "", "cn", "member", "host", "businessCategory", "dn", "gidNumber", "owner", "creatorsName", "dateofcreate", "createTimestamp"});
+	    common.JndiAction action = new common.JndiAction(gssapi, new String[]{"(&(objectclass=groupofnames)(cn=" + gname + "))", "", "cn", "member", "host", "businessCategory", "dn", "gidNumber", "owner", "creatorsName", "dateofcreate", "createTimestamp"});
 	    action.noclose = true; // hold context for reuse
 
+	    System.out.println("group 5");
 	    // this is part of the Kerberos support. Subject is the internal data structure representing a Kerberos ticket.
 	    // doas does an action authenticated as that subject. The action has to be a JndiAction. I supply a JndiAction does does
 	    // an LDAP query, but you could do anything that uses GSSAPI authentication.
@@ -266,6 +275,7 @@ public class GroupController {
 		model.addAttribute("messages", messages);
 		return groupsController.groupsGet(request, response, model); 
 	    }
+	    System.out.println("group 6");
 
 	    attrs = action.data.get(0);
 
@@ -284,6 +294,7 @@ public class GroupController {
 		Collections.sort(members);
 		people.addAll(members);
 	    }
+	    System.out.println("group 7");
 
 	    List<String> owners = attrs.get("owner");
 	    if (owners != null) {
@@ -292,19 +303,22 @@ public class GroupController {
 	    }
 
 	    List<String> creators = attrs.get("creatorsname");
-	    for (String creator: creators) {
-		// creator can be a service. don't want that
-		if (creator.startsWith("uid="))
-		    people.add(creator);
+	    if (creators != null) {
+		for (String creator: creators) {
+		    // creator can be a service. don't want that
+		    if (creator.startsWith("uid="))
+			people.add(creator);
+		}
 	    }
 
 	    // now have all the people displayed on the page
 	    // build a map from DN to what we want to display
 	    for (String member: people) {
-		String display = getUserDisplay(member, subject, ctx, aconfig);
+		String display = getUserDisplay(member, subject, gssapi, ctx, aconfig);
 		// put it in the map
 		memberNames.put(member, display);
 	    }
+	    System.out.println("group 8");
 
 	    // see if needs review. don't bother if no members
 	    needsReview = utils.needsReview(attrs);
@@ -315,6 +329,7 @@ public class GroupController {
 	    if (ctx != null)
 		JndiAction.closeCtx(ctx);
 	}
+	System.out.println("group 9");
 
 	// if we got an error from POST, we might already have messages.
 	if (!model.containsAttribute("messages"))
@@ -322,6 +337,7 @@ public class GroupController {
 
 	// set up model for display
 
+	System.out.println("group 10");
 	model.addAttribute("gname", gname);
 	model.addAttribute("clusters", aconfig.clusters);
 	model.addAttribute("group", attrs);
@@ -329,6 +345,7 @@ public class GroupController {
 	model.addAttribute("needsreview", needsReview);
 	model.addAttribute("isloginmanager", isLoginManager);
 	model.addAttribute("lu", new Util());
+	System.out.println("group 11");
 
         return "groups/showgroup";
     }
@@ -359,11 +376,12 @@ public class GroupController {
 	}
 
 	Config conf = Config.getConfig();
+	GSSCredential gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
 
 	// Get current values of login attributes so we know what to change.
 	// They show up as values of variables in action
 
-	common.JndiAction action = new common.JndiAction(new String[]{"(&(objectclass=groupofnames)(cn=" + name + "))", "", "member", "host", "businessCategory", "owner", "creatorsname"});
+	common.JndiAction action = new common.JndiAction(gssapi, new String[]{"(&(objectclass=groupofnames)(cn=" + name + "))", "", "member", "host", "businessCategory", "owner", "creatorsname"});
 
 	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
 	if (subject == null) {

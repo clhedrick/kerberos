@@ -19,6 +19,7 @@
 
 package application;
 
+import org.ietf.jgss.GSSCredential;
 import java.util.List;
 import java.util.Collections;
 import java.util.Date;
@@ -100,11 +101,12 @@ public class GroupsController {
 	// See comments on showgroup.jsp
 
 	String user = (String)request.getSession().getAttribute("krb5user");
+	GSSCredential gssapi = (GSSCredential)request.getSession().getAttribute("gssapi");
 
 	String query = Activator.Config.getConfig().groupsownedfilter.replaceAll("%u", user);
 
 	// this action isn't actually done until it's called by doAs. That executes it for the Kerberos subject using GSSAPI
-	common.JndiAction action = new common.JndiAction(new String[]{query, "", "cn", "member", "dn", "gidNumber", "businessCategory", "dateofcreate", "createTimestamp"});
+	common.JndiAction action = new common.JndiAction(gssapi, new String[]{query, "", "cn", "member", "dn", "gidNumber", "businessCategory", "dateofcreate", "createTimestamp"});
 
 	Subject.doAs(subject, action);
 

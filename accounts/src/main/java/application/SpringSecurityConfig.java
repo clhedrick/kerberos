@@ -52,6 +52,13 @@ public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
      @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
+	    // jee means to pass on the remote_user attribute from apache
+	    // tomcat server.xml must also have
+	    //  tomcatAuthentication="false"
+	    // in the ajp connector
+	    // authenticated user will show up as request.getRemoteUser()
+	    // for mod_auth_gssapi it will be the kerberos principal
+	    .jee().and()
 	    .httpBasic().and().authorizeRequests()
 	    // ldap user auth for request is optional
 	    // it's only used for /enrollhosts, but
@@ -62,7 +69,8 @@ public class SpringSecurityConfig extends WebSecurityConfigurerAdapter {
 	    .antMatchers("/**").permitAll()
 	    // need to disable CSRF for DELETE to work
 	    .and()
-	    .csrf().ignoringAntMatchers("/enrollhosts/**");
+	    .csrf().ignoringAntMatchers("/enrollhosts/**")
+	    .ignoringAntMatchers("/groups/login");
     }
 
     // when basic auth is used, this specifies what it is; LDAP in this case

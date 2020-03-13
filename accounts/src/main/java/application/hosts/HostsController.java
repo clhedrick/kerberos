@@ -190,7 +190,7 @@ public class HostsController {
 
 	    // look up hostgroup in LDAP
 	    var filter = Config.getConfig().selfmanagedfilter.replace("$HOST", hostname);
-	    common.JndiAction action = new common.JndiAction(new String[]{filter, "", "dn"});
+	    common.JndiAction action = new common.JndiAction(null, new String[]{filter, "", "dn"});
 
 	    Subject.doAs(servicesSubject, action);
 
@@ -209,7 +209,7 @@ public class HostsController {
 	String user = principal.getName();
 	var filter = "(&(uid=" + user + ")" + Config.getConfig().addhostsfilter + ")";
 
-	common.JndiAction action = new common.JndiAction(new String[]{filter, "", "dn"});
+	common.JndiAction action = new common.JndiAction(null, new String[]{filter, "", "dn"});
 
 	Subject.doAs(servicesSubject, action);
 
