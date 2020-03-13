@@ -1,0 +1,20 @@
+To make GSSAPI work, need several things:
+* gssapi.conf, in this directory, go into /etc/httpd/conf.d
+  It sets up mod_auth_gssapi
+* in tomcat/conf/server.xml, the ajp connector needs
+	       tomcatAuthentication="false"
+  That makes sure that the auth information fron
+  mod_auth_gssapi gets passed through
+* in IPA you must set up delegation. This allows the
+  server to get tickets on behalf of a user for
+  ldap and HTTP to the Kerberos servers, based on
+  a ticket from the user for HTTP on the application
+  server. For the application server test-services:
+
+ipa servicedelegationtarget-add ipa-testservices-target
+ipa servicedelegationtarget-add-member ipa-testservices-target --principals={HTTP/krb1.cs.rutgers.edu,HTTP/krb2.cs.rutgers.edu,HTTP/krb4.cs.rutgers.edu,ldap/krb1.cs.rutgers.edu,ldap/krb2.cs.rutgers.edu,ldap/krb4.cs.rutgers.edu}
+
+ipa servicedelegationrule-add ipa-testservices-rule
+ipa servicedelegationrule-add-member ipa-testservices-rule --principals=HTTP/test-services.cs.rutgers.edu
+ipa servicedelegationrule-add-target ipa-testservices-rule --servicedelegationtargets ipa-testservices-target
+

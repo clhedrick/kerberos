@@ -80,6 +80,38 @@ public class LoginController {
     private DhcpHostsController hostsController;
 
     //
+    // This code will use GSSAPI if the browser can send it
+    // Otherwise normal login
+    //
+    // Assume mod_auth_gssapi is set up also. This code handles
+    // GSSAPI auth for LDAP, but the Java GSSAPI APIs can't create
+    // kerberos credential caches. Since we use IPA commands to make
+    // some changes, we need a credential case for the user.
+    // mod_auth_gssapi sets those up. So if the browser send GSSAPI
+    // it is processed twice, by mod_auth_gssapi and this code.
+    //
+    // We can't rely on just mod_auth_gssapi,
+    // because the Java GSSAPI code has no way to use a credential
+    // cache that uses constrained delegation. So we need to use
+    // both mod_auth_gssapi and Java GSSAPI
+    //
+    // The underlying problem is that Java has two separate
+    // implementations of Kerberos, GSSAPI and an older Kerberos.
+    // They use different classes, and you can't move things
+    // between them exception in a few cases. 
+    //
+    // LDAP authentication can be done with either a GSSAPI
+    // credential or a traditional Kerberos subject, but the
+    // LDAP interface for them is different. For a traditional Kerberos
+    // login, you get a Subject from login, and use it with doAs
+    // For GSSAPI, you get a GSSCredential. It is set up as
+    // an attribute in the usual LDAP attribute array.
+    //
+    // To simplify the code, we always use doAs, but with
+    // GSSAPI login, the doAs subject is ignored, because
+    // an explicit GSSCredential takes precedent.
+
+    //
     // Support for login with password
     //
 
@@ -199,6 +231,9 @@ public class LoginController {
     //
 
     // subject for our service principal
+    // Note that the GSSAPI protocol requires us to use a
+    // principla that is HTTP/hostname. HTTP must be upper case
+    // principals are case-sensitive, at least for Linux
     public Subject getServiceSubject () {
 	Subject subject = new Subject();
 	Krb5LoginModule krb5LoginModule = new Krb5LoginModule();
@@ -235,6 +270,7 @@ public class LoginController {
 
     // GSSCredential for the string passed from client in the Authenticate token
     // this code will only work if constained delgaton is set up
+    // "token" is the argument the browser passed us in the Authenticate header
     public GSSCredential validateTicket(Subject serviceSubject, byte[] token) {
 	try {
 	    return Subject.doAs(serviceSubject, new KerberosValidateAction(token));
@@ -245,7 +281,7 @@ public class LoginController {
     }
 
     // helpeer for above. This handles constrained delegeation, so we actually
-    // get a credential that will work on behave of the user
+    // get a credential that will work on behalf of the user
     private class KerberosValidateAction implements PrivilegedExceptionAction<GSSCredential> {
 	byte[] kerberosTicket;
 
@@ -278,8 +314,12 @@ public class LoginController {
 	}
     }
 
+    // these are entry points for other modules that need a login
+    // initially they called the real loginGet. However since loginGet has
+    //   to return ModelAndView and the callers return String,
+    //   I've turned them into redirects. That's what you'd normally do anyway
+
     public String loginGet(String app, HttpServletRequest request, HttpServletResponse response, Model model) {
-	System.out.println("loginget 1");
 	String url = "/accounts/groups/login";
 	if (app != null)
 	    url = url + "?app=" + app;
@@ -290,7 +330,6 @@ public class LoginController {
     }
 
     public String loginGet(String app, Integer ifid, HttpServletRequest request, HttpServletResponse response, Model model) {
-	System.out.println("loginget 2");
 	String url = "/accounts/groups/login";
 	String sep = "?";
 	if (app != null) {
@@ -305,13 +344,14 @@ public class LoginController {
 	return "groups/login";
     }
 
+    // the extra argument "failed" currently isn't used. It's to distinguish
+    // the signature for this method  from the other loginGet's
     @GetMapping("/groups/login")
     public ModelAndView loginGet(@RequestParam(value="app", required=false) String app,
 			   // have to pass this through for dhcp
 			   @RequestParam(value="ifid", required=false) Integer ifid,
 			   @RequestParam(value="failed", required=false) Boolean failed,
 			    HttpServletRequest request, HttpServletResponse response, Model model) {
-	System.out.println("loginget");
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
@@ -326,22 +366,22 @@ public class LoginController {
 		negotiateHeader = request.getHeader(name).toString();
 	}
 
+	// these are set by mod_auth_gssapi if it
+	// recognized the header
 	var remoteUser = request.getRemoteUser();
 	var authType = request.getAuthType();
 	String user = null;
 
-	System.out.println("authtype from apache " + authType);
-	System.out.println("negotiate header " + negotiateHeader);
-	
 	// See if we have valid GSSAPI authentication
 	// Authtype means the mod_auth_gssapi auth works, in which case
 	//    we have a credential cache to copy
-	// Negotiateheader indictes that the daata got passed to us so
-	//    we can use gssapi with LDAP
+	// Negotiateheader indicates that the daata got passed to us so
+	//    we can use gssapi with LDAP.
+	// The negotiate header is processed twice, by mod_auth_gssapi, then us
 	if ("Negotiate".equals(authType) && remoteUser != null && remoteUser.indexOf("@") > 0 &&
 	    negotiateHeader != null && negotiateHeader.startsWith("Negotiate ")) {
 
-	  // stupid loop to simulate godo
+	  // stupid loop to simulate godo. this loop runs once
 	  for (var f = 0; f < 1; f++) {
 	    LoginContext lc = null;
 
@@ -361,11 +401,11 @@ public class LoginController {
 
 
 	    // now process the GSSAPI header
-	    // data is a base64-encoded tickre
+	    // data is a base64-encoded ticket
 	    Base64.Decoder decoder = Base64.getMimeDecoder();
 	    byte[] token = decoder.decode(negotiateHeader.substring(10));
 
-	    // subj will be a Subect based on our service keytab
+	    // subj will be a Subject based on our service keytab
 	    
 	    Subject subj = getServiceSubject();
 	    if (subj == null) {
@@ -379,8 +419,14 @@ public class LoginController {
 		messages.add("Automatic login failed: unable to convert authorization header from brower into Kerberos credentials");
 		break;
 	    }
+	    // remember the GSSCredential for the rest of the session
+	    // this attribute is needed whenever we use LDAP
 	    request.getSession().setAttribute("gssapi", cred);
-	    System.out.println("Using GSSAPI credentials");
+
+	    // at this point we have valid GSSAPI authentication.
+	    // do the other stuff from loginSubmit: figure out
+	    // user's privileges, and then save everything
+	    // in the session
 
 	    String filter = "(uid=" + user + ")";
 
@@ -421,20 +467,26 @@ public class LoginController {
 	    // used by LDAP for authentication. To avoid complicating
 	    // the code we still set krb5subject. It will be used in
 	    // doAs, but it wil actually be ignored, since gssapi will
-	    // override it. The doAs is needed for logins with password
+	    // override it. The doAs is needed when we login with a password
 	    request.getSession().setAttribute("privs", privs);
 	    request.getSession().setAttribute("krb5subject", subj);
 	    request.getSession().setAttribute("krb5user", user);
 
 	    // gssapi failed, will do normal login
-	    // because attributes aren't set
 
 	  } // end of dummy loop
 
 	} else {
-	    // if we had an auth header don't ask again
-	    // this asks for GSSAPI if possible
-	    // if not displayes the login page
+	    // Didn't have a GSSAPI header. Ask for one.
+	    //
+	    // When this happens we display the login
+	    // page as an error page (401 error), with
+	    // the header "WWW-Authenticate: negotiate"
+	    //
+	    // If the browser can to GSSAPI it tries again
+	    // with the Authentication header. Otherwise
+	    // it display the login page and we do a
+	    // manual login
 	    requestNegotiation = true;
 	}
 	// end of GSSAPI. This code is done in either case
@@ -442,7 +494,7 @@ public class LoginController {
 	model.addAttribute("app", (app == null) ? "" : app);
 	try {
 	    // if attribute is set, we are logged in, either
-	    // we already where or GSSAPI has just done it
+	    // we already were or GSSAPI has just done it
 	    // dispatch to the right application
 	    if (request.getSession().getAttribute("krb5subject") != null) {
 		if ("user".equals(model.asMap().get("app")))
@@ -463,9 +515,21 @@ public class LoginController {
 	} catch (Exception e){
 	}
 	// not logged in. Show login screen
+
 	// need to pass this through for the inventory entrypoint
 	model.addAttribute("ifid", ifid);
 
+	// if we didn't get GSSAPI info from the browser, ask for it
+	// in either case display login screen.  If www-authenticate
+	// is sent and the brwoser can do GSSAPI it will resubmit
+	// the original request with GSSAPI information. Otherwise
+	// it shows the login screen
+	//
+	// If GSSAPI authentication worked, we redirected into
+	// the application
+	//
+	// Using ModelAndView is the only way to generate a 401.
+	// You can't just set status in response. Spring will override it
 	if (requestNegotiation) {
 	    response.setHeader("WWW-Authenticate", "Negotiate");
 	    return new ModelAndView("groups/login", model.asMap(), HttpStatus.UNAUTHORIZED);
