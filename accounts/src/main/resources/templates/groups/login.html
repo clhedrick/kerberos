@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!DOCTYPE html>
 
 <html lang="en">
 <head><link href="../usertool.css" rel="stylesheet" type="text/css"/>
@@ -30,6 +30,18 @@ which may be different from your University password.
 <p></p>
 <input type="submit" value="login"/>
 </form>
+<div class="explanation">
+  NOTE: This application accepts Kerberos single-signon (technically called "SPNEGO") if you are
+  using a browser on a system where login uses Computer Science Kerberos. (This is true for all
+  Linux systems run by Computer Science staff. You can configure our own Mac or Linux systems
+  that way as well.)
+. <p>If you use single-signon, you won't need to type your
+  username and password to get to most screens.
+<p>
+  See <a href="https://docs.spring.io/spring-security-kerberos/docs/current/reference/html/browserspnegoconfig.html"> Configure Browsers for Spnego Negotiaton</a> You can either list https://services.cs.rutgers.edu or depending upon the browser, *.cs.rutgers.edu.
+  Note that Chrome on the Mac is like Linux in accepting a JSON file in /etc/opt/chrome/policies/managed
+</div>
+
 <div th:insert="~{accessibility :: footer}"></div>
 </div>
 </html>
