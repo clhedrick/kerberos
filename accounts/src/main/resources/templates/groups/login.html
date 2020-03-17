@@ -10,7 +10,9 @@
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
+<div style="display:flex; justify-content:space-between">
 <div role="navigation"><a href="../"> Account Management</a> </div>
+</div>
 
 <h1> Login to user / system management tools for Computer Science systems </h1>
 
@@ -27,18 +29,21 @@ which may be different from your University password.
 <label>Password: <input type="password" name="pass"/></label>
 <input type="hidden" name="app" th:value="${app}"/>
 <input type="hidden" name="ifid" th:value="${ifid}"/>
+<input type="hidden" name="logout" th:value="${logout}"/>
 <p></p>
 <input type="submit" value="login"/>
 </form>
-<div class="explanation">
-  NOTE: This application accepts Kerberos single-signon (technically called "SPNEGO") if you are
-  using a browser on a system where login uses Computer Science Kerberos. (This is true for all
-  Linux systems run by Computer Science staff. You can configure our own Mac or Linux systems
-  that way as well.)
-. <p>If you use single-signon, you won't need to type your
-  username and password to get to most screens.
+<p>&nbsp;
+<div class="note">
 <p>
-  See <a href="https://docs.spring.io/spring-security-kerberos/docs/current/reference/html/browserspnegoconfig.html"> Configure Browsers for Spnego Negotiaton</a> You can either list https://services.cs.rutgers.edu or depending upon the browser, *.cs.rutgers.edu.
+  NOTE: This application accepts Kerberos single-signon. If you use that you won't need
+  to type your username and password. This should work on any computer that supports
+  the Computer Science Kerberos system. That includes all computers run by Computer Science
+  staff. You can set it up on your own computer as well. See <a href="https://services.cs.rutgers.edu/kerberize.html">
+    Integrating your computer into Kerberos</a>.
+<p>
+  If your computer supports our Kerberos,
+  see <a href="https://docs.spring.io/spring-security-kerberos/docs/current/reference/html/browserspnegoconfig.html"> Configure Browsers for Spnego Negotiaton</a> You can either whitelist https://services.cs.rutgers.edu or depending upon the browser, *.cs.rutgers.edu.
   Note that Chrome on the Mac is like Linux in accepting a JSON file in /etc/opt/chrome/policies/managed
 </div>
 

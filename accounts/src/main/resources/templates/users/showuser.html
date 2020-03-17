@@ -10,7 +10,11 @@
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
-<a href="../"> Account Management</a> | <a href="showgroups">Group list</a>
+<div style="display:flex; justify-content:space-between">
+<div role="navigation"><a href="../"> Account Management</a> | <a href="showgroups">Group list</a></div>
+<div role="navigation"><a href="/accounts/groups/login?logout=true&app=user"> Logout</a></div>
+</div>
+
 
 <h1> Show User Information </h1>
 

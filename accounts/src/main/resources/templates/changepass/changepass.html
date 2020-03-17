@@ -11,7 +11,11 @@
 <div role="alert" class="messages" th:if="${retval == 2}">
 <p>You don't have a computer science account. If you are eligible, please <a href="../activate/activate">Activate Your Account</a> first and then return here.</p>
 </div>
+
+<div style="display:flex; justify-content:space-between">
 <div role="navigation"><a href="../"> Account Management</a> </div>
+<div role="navigation"><a href="/accounts/groups/login?logout=true"> Logout</a></div>
+</div>
 
 <div th:if="${!allowchange}">
 <p>You have previously requested that we disable this function for your account.</p>

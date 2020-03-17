@@ -62,7 +62,10 @@ $(document).ready(function(){
 <p th:each="msg : ${messages}" th:text="${msg}" />
 </div>
 
+<div style="display:flex; justify-content:space-between">
 <div role="navigation"><a href="../"> Account Management</a> | <a href="showgroups">Group list</a></div>
+<div role="navigation"><a href="/accounts/groups/login?logout=true"> Logout</a></div>
+</div>
 
 <h1> Show and Edit Group </h1>
 

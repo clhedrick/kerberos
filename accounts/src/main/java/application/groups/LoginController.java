@@ -344,18 +344,24 @@ public class LoginController {
 	return "groups/login";
     }
 
-    // the extra argument "failed" currently isn't used. It's to distinguish
-    // the signature for this method  from the other loginGet's
     @GetMapping("/groups/login")
     public ModelAndView loginGet(@RequestParam(value="app", required=false) String app,
 			   // have to pass this through for dhcp
 			   @RequestParam(value="ifid", required=false) Integer ifid,
-			   @RequestParam(value="failed", required=false) Boolean failed,
+			   @RequestParam(value="logout", required=false) Boolean logout,
 			    HttpServletRequest request, HttpServletResponse response, Model model) {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
+	model.addAttribute("logout", logout);
 	boolean requestNegotiation = false;
+
+	if (logout != null && logout) {
+	    request.getSession().removeAttribute("privs");
+	    request.getSession().removeAttribute("krb5subject");
+	    request.getSession().removeAttribute("krb5user");
+	    request.getSession().removeAttribute("gssapi");
+	}
 
 	// find negotiateheader if any
 	String negotiateHeader = null;
@@ -378,7 +384,8 @@ public class LoginController {
 	// Negotiateheader indicates that the daata got passed to us so
 	//    we can use gssapi with LDAP.
 	// The negotiate header is processed twice, by mod_auth_gssapi, then us
-	if ("Negotiate".equals(authType) && remoteUser != null && remoteUser.indexOf("@") > 0 &&
+	if ((logout == null || !logout) &&
+	    "Negotiate".equals(authType) && remoteUser != null && remoteUser.indexOf("@") > 0 &&
 	    negotiateHeader != null && negotiateHeader.startsWith("Negotiate ")) {
 
 	  // stupid loop to simulate godo. this loop runs once
@@ -543,11 +550,13 @@ public class LoginController {
 			      @RequestParam(value="ifid", required=false) Integer ifid,
 			      @RequestParam(value="user", required=false) String user,
 			      @RequestParam(value="pass", required=false) String pass,
+			      @RequestParam(value="logout", required=false) Boolean logout,
 			      HttpServletRequest request, HttpServletResponse response,
 			      Model model) {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
+	model.addAttribute("logout", logout);
 
 	LoginContext lc = null;
 	String username = filteruser(user);
