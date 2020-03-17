@@ -1,6 +1,9 @@
 To make GSSAPI work, need several things:
+* a principal of HTTP/hostname must be in /etc/krb5.keytab.http
+  owned by apache
 * gssapi.conf, in this directory, go into /etc/httpd/conf.d
   It sets up mod_auth_gssapi
+* create directories mentioned in gssapi.conf, owned apache
 * in tomcat/conf/server.xml, the ajp connector needs
 	       tomcatAuthentication="false"
   That makes sure that the auth information fron
