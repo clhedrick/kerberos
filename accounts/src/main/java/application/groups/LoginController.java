@@ -241,15 +241,15 @@ public class LoginController {
 
 	optionMap.put("keyTab", "/etc/krb5.keytab.http");
 	try {
-	    optionMap.put("principal", "HTTP/" + InetAddress.getLocalHost().getHostName());
+	    optionMap.put("principal", "HTTP/" + InetAddress.getLocalHost().getHostName() + "@" + Config.getConfig().kerberosdomain); 
 	} catch (Exception e) {
 	    System.out.println("exception in getservicesubject getlocalhost " + e.toString());
 	    return null;
 	}
 	optionMap.put("doNotPrompt", "true");
 	optionMap.put("refreshKrb5Config", "true");
-	optionMap.put("useTicketCache", "true");
-	optionMap.put("renewTGT", "true");
+	//	optionMap.put("useTicketCache", "true");
+	//	optionMap.put("renewTGT", "true");
 	optionMap.put("useKeyTab", "true");
 	optionMap.put("storeKey", "true");
 	optionMap.put("isInitiator", "true"); // needed for delegation

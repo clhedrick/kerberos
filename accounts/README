@@ -111,7 +111,7 @@ immediately. The host principal needs to be authorized to do large
 LDAP questions. The wiki page for IPA gives instructions for setting
 those things.
   krb5.keytab.services:  http/services.cs.rutgers.edu
-  has roles helpdesk, User Administrator, Rutgers add host, Rutgers read group creator
+  has roles helpdesk, User Administrator, Rutgers add host, Rutgers read group creator, Rutgers group businesscategory
   User Administrator has   permission: System: Read User Kerberos Login Attributes, 
      modify read kerberos login config  to add ipatokenreadusconfiglink and ipatokenradiiususername
   add permission Rutgers Write Radius Link
