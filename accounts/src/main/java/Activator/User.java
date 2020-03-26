@@ -134,10 +134,13 @@ public class User {
 	    }
 	}
 
+	// see if they are currently active. If not, we don't use their courses
+	var status = universityData.get("rutgersedustatus");
+
 	// add the groups for courses we manage
 	// have to check the courses the user is in one by one, and then apply the regexp's
 	var courses = universityData.get(config.courseattribute);
-	if (courses != null)
+	if (courses != null && status != null && status.contains("active"))
 	    // for each course the user is in, run the course rules. Last match wins
 	    for (var course: courses) {
 		// the rules are on group name, not course id, so make group name
@@ -775,6 +778,14 @@ public class User {
 		    logger.debug("Automatic groups user actually is a member of: " + existingAutomaticGroups);
 		    logger.debug("Add to groups: " + addGroups);
 		    logger.debug("Remove from groups: " + removeGroups);
+
+
+		    if (automaticGroups.size() > 0 || manualLoginGroups.size() > 0 || userAllowedClusters.size() > 0) {
+			var status = universityData.get("rutgersedustatus");
+			if (status == null || !status.contains("active")) 
+			    logger.info("### user " + username + " status " + status + " auto " + automaticGroups + " manual " + manualLoginGroups + " userAllowedClusters " + userAllowedClusters);
+		    }
+
 
 		    String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
 

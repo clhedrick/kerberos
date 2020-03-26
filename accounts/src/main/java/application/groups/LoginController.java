@@ -248,6 +248,7 @@ public class LoginController {
 	}
 	optionMap.put("doNotPrompt", "true");
 	optionMap.put("refreshKrb5Config", "true");
+	// if these are set, storekey fails
 	//	optionMap.put("useTicketCache", "true");
 	//	optionMap.put("renewTGT", "true");
 	optionMap.put("useKeyTab", "true");
