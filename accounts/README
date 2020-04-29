@@ -148,6 +148,20 @@ those things.
   role Rutgers group businesscategory
      service http/services.cs.rutgers.edu
 
+hostgroup self-managed allows hosts to get their own key table
+we want a host to be able to delete itself. That's done through
+the web app, which means HTTP/service.cs.rutgers.edu (an test-services)
+must to able to remove that hostgroup.
+  add permission Rutgers manage group selfmanaged
+     rule type permission, all
+     type hostgroup, target dn cn=self-managed,cn=hostgroups,cn=accounts,dc=cs,dc=rutgers,dc=edu
+     attribute member
+     privilege Rutgers group selfmanaged
+  privilege Rutgers group selfmanaged
+     permission Rutgers group selfmanaged
+  role Rutgers group selfmanaged
+     services HTTP/services.cs.rutgers.edu and test-services
+
 
 Also, to update the firewall on the kerberos servers, the host running
 this must be allowed to ssh to the firewall. The user syncipt on each
