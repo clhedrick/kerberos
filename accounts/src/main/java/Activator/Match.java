@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.Calendar;
 
 // ldap filter, sort of
 // matches are always case-independent
@@ -240,6 +241,39 @@ public class Match {
 	    return false;
 	}
     }
+
+    // 2017:7:01:198:311:01
+    public static boolean isRecent(String c) {
+	String [] parts = c.split(":");
+	if (parts.length < 5)
+	    return false;
+	var courseYear = 0;
+	var courseMonth = 0;
+	try {
+	    courseYear = Integer.parseInt(parts[0]);
+	    courseMonth = Integer.parseInt(parts[1]);
+	} catch (Exception e) {
+	    return false;
+	}
+
+	var now = Calendar.getInstance();
+	var nowYear = now.get(Calendar.YEAR);
+	var nowMonth = now.get(Calendar.MONTH) + 1;
+
+	// allow nowYear < courseYear assuning preregistration isn't going to be more
+	// than one semester in advance. graduation in may, so < 6 is the right test
+	switch(courseMonth) {
+	    // winter. allow through spring semester
+	    case 0: return nowYear == courseYear && nowMonth < 6 || nowYear < courseYear;
+	    // spring, allow through fall semester, meaning all year. maybe too generous?
+	    case 1: return nowYear <= courseYear;
+	    // summer, allow through fall semster, meaning all year
+	    case 7: return nowYear <= courseYear;
+	    // fall, allow through spring semester
+  	    case 9: return nowYear <= courseYear || nowYear == (courseYear + 1) && nowMonth < 6;
+	    default: return false;
+	}
+    }	
 
     // 2017:7:01:198:311:01
     public static String makeclass (String c, Config config) {

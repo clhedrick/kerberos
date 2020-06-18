@@ -136,13 +136,17 @@ public class User {
 
 	// see if they are currently active. If not, we don't use their courses
 	var status = universityData.get("rutgersedustatus");
+	var roles = universityData.get("employeetype");
 
 	// add the groups for courses we manage
 	// have to check the courses the user is in one by one, and then apply the regexp's
 	var courses = universityData.get(config.courseattribute);
-	if (courses != null && status != null && status.contains("active"))
+	if (courses != null && status != null && status.contains("active") &&
+	    roles != null && (roles.contains("STUDENT") || roles.contains("ADMIT COMING"))) 
 	    // for each course the user is in, run the course rules. Last match wins
 	    for (var course: courses) {
+		if (! Match.isRecent(course))
+		    continue;
 		// the rules are on group name, not course id, so make group name
 		// convert from 2016:9:16:198:510:01 to cs510-f16
 		var courseGroup = Match.makeclass(course, config);
