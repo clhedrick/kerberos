@@ -115,11 +115,6 @@ public class docommand {
 	      ) {
 		 retval = p.waitFor();
 
-		 // if it worked, no need to print a message
-		 if (retval == 0) {
-		     return 0;
-		 }
-
 		 if (outlist == null)
 		     logger.error("command returned " + retval + ": " + Arrays.toString(command));
 

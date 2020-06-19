@@ -449,6 +449,7 @@ public class User {
 	    args.remove("-t");
 	}
 
+	if (false) {
 	if (!cleanup && args.size() < 1) {
 	    System.out.println("");
 	    System.out.println("test USER - show what systems will be in the main activator menu");
@@ -460,6 +461,7 @@ public class User {
 	    System.out.println("Actions actually done  are logged to syslog, actions and debug info to stdout");
 	    System.out.println("");
 	    System.exit(1);
+	}
 	}
 	var username = (args.size() > 0) ? args.get(0) : null;
 	List<String> clusters = null;
@@ -588,9 +590,9 @@ public class User {
 
 	    // for real cleanup check all currently active users
 	    //   otherwise just specified user
-	    if (cleanup && username == null) {
+	    if (username == null) {
 		// Need all active users. This LDAP query will generate them.
-		var action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(memberof=cn=login-*,*))", "", "uid"});
+		var action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(memberof=cn=login-*,*))", "", "uid", "cn", "createtimestamp"});
 		Subject.doAs(subj, action);
 
 		users = action.val;
@@ -615,9 +617,28 @@ public class User {
 		var addtoCluster = new ArrayList<String>();
 		var removefromCluster = new ArrayList<String>();
 
-		if (activatableClusters != null)
-		    logger.debug("Requesting clusters user " + username);		    
-		else if (cleanup)
+		if (activatableClusters != null) {
+		    logger.debug("\n\nRequesting clusters user " + username);		    
+		    var cn = userMap.get("cn");
+		    logger.debug("Name: " + cn.get(0));
+		    var stamp = userMap.get("createtimestamp");
+		    logger.debug("Created: " + stamp.get(0));
+
+		    var outlist = new ArrayList<String>();
+		    String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
+		    docommand.docommand (new String[]{"/bin/ipa", "user-status", username}, env, null, outlist);
+		    var lastlog = "No successful logins";
+		    var success = false;
+		    for (var o: outlist) {
+			if (o.indexOf("successful") >= 0 && o.indexOf("N/A") < 0) {
+			    if ((!success) || (lastlog.compareTo(o) < 0)) {
+				lastlog = o;
+				success = true;
+			    }
+			}
+		    }				    
+		    logger.debug(lastlog);
+		} else if (cleanup)
 		    logger.debug("Doing cleanup for user " + username);
 		else
 		    logger.debug("Running as activator for user " + username + " for cluster " + requestedCluster);
@@ -673,10 +694,7 @@ public class User {
 		    if ((action.val == null || action.val.size() == 0) &&
 			(universityData.get("uid") == null || universityData.get("uid").size() == 0)) {
 			logger.debug("user " + username + " doesn't exist in University data or our system. Skipping.");
-			if (cleanup)
-			    continue;
-			else
-			    return false;
+			continue;
 		    }
 	
 
@@ -754,12 +772,27 @@ public class User {
 	    
 		    }
 
+		    currentClusters.addAll(ineligibleClusters);
+		    System.out.println("Currently on: " + currentClusters);
+		    System.out.println("Will be removed from: " + ineligibleClusters);
+
+		    for (var c :currentClusters) {
+			var warningname = config.warningdir + "/" + username + "@" + c;
+			var warningPath = Paths.get(warningname);
+			var warned = Files.exists(warningPath);
+			if (warned)
+			    System.out.println("User has been notified of expiration for " + c);
+		    }
+
+		    currentClusters = new ArrayList<String>();
+		    ineligibleClusters = new ArrayList<String>();	    
+
 		    // if just listing clusters they can login on, we're done. Don't want any actual changes
 		    // no debug output because caller will do the output
 		    // activatableClusters is a list to be returned for the "list" function
 		    // so if it's set this is a list function
 		    if (!cleanup && activatableClusters != null) {
-			return true;
+			continue;
 		    }
 
 		    // if we're here we're doing activation or cleanup
