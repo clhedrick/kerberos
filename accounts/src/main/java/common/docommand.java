@@ -48,6 +48,10 @@ public class docommand {
     }
 
     public static int docommand (String[]command, String[]env, JspWriter out, List<String> outlist){
+	return docommand(command, env, out, outlist, false);
+    }
+    
+    public static int docommand (String[]command, String[]env, JspWriter out, List<String> outlist, boolean alwaysout){
      
  	 Integer cacheUsed = null;
          Logger logger = null;

@@ -64,7 +64,7 @@ public class ActivateController {
 	
 	model.addAttribute("username", username);
 	if (username != null)
-	    model.addAttribute("ok", User.doUser(username, clusters, currentClusters, ineligibleClusters, null, false, false, true));
+	    model.addAttribute("ok", User.doUser(username, clusters, currentClusters, ineligibleClusters, null, false, false, false, true));
 	else 
 	    model.addAttribute("ok", false);
 	model.addAttribute("clusters", clusters);
@@ -84,7 +84,7 @@ public class ActivateController {
 	String username = request.getRemoteUser();
 	username = Uid.localUid(username, Activator.Config.getConfig());
 	
-	boolean ok = User.doUser(username, null, null, null, cluster, false, false, true);
+	boolean ok = User.doUser(username, null, null, null, cluster, false, false, false, true);
 	if (ok && utils.needsPassword(username)) {
 	    try {
 		response.sendRedirect("../changepass/changepass?cluster=" + URLEncoder.encode(cluster));
