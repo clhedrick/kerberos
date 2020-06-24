@@ -142,7 +142,7 @@ public class User {
 	// have to check the courses the user is in one by one, and then apply the regexp's
 	var courses = universityData.get(config.courseattribute);
 	if (courses != null && status != null && status.contains("active") &&
-	    roles != null && (roles.contains("STUDENT") || roles.contains("ADMIT COMING"))) 
+	    roles != null && (roles.contains("STUDENT") || roles.contains("SUMMER STUDENT") || roles.contains("ADMIT COMING"))) 
 	    // for each course the user is in, run the course rules. Last match wins
 	    for (var course: courses) {
 		if (! Match.isRecent(course))
@@ -640,7 +640,7 @@ public class User {
 
 			var outlist = new ArrayList<String>();
 			String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
-			docommand.docommand (new String[]{"/bin/ipa", "user-status", username}, env, null, outlist);
+			docommand.docommand (new String[]{"/bin/ipa", "user-status", username}, env, null, outlist, true);
 			// last login is kept separately on each server
 			// get all of them and pick the latest. The format is designed
 			// so we can use a text comparison to compare the date-times.

@@ -233,8 +233,12 @@ public class GroupsController {
 	    command.add("--setattr=dateOfCreate=" + dateString + "Z");
 	    command.add(name);
 	    logger.info(command);
-	    if (docommand.docommand(command.toArray(new String[1]), env) == 0)
+
+	    var errors = new ArrayList<String>();
+	    if (docommand.docommand(command.toArray(new String[1]), env, errors) == 0)
 		added = true;
+	    else
+		messages.add("Unable to add group\n" + errors.toString());
 
 	}
 
