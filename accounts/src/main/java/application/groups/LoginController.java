@@ -242,6 +242,7 @@ public class LoginController {
 	optionMap.put("keyTab", "/etc/krb5.keytab.http");
 	try {
 	    optionMap.put("principal", "HTTP/" + InetAddress.getLocalHost().getHostName() + "@" + Config.getConfig().kerberosdomain); 
+	    System.out.println("my principal " + "HTTP/" + InetAddress.getLocalHost().getHostName() + "@" + Config.getConfig().kerberosdomain);
 	} catch (Exception e) {
 	    System.out.println("exception in getservicesubject getlocalhost " + e.toString());
 	    return null;
