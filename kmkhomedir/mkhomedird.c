@@ -52,6 +52,15 @@
 
 #define CONFFILE "/etc/mkhomedird.conf"
 
+#ifdef ZFS
+#include <sys/types.h>
+#include <sys/nvpair.h>
+#include <libnvpair.h>
+#include <libzfs.h>
+
+extern char * getuserquota(char *filesys, char *user, char **fsret);
+#endif
+
 int debug = 0;
 
 #ifndef GETPEERNAME_ARG3_TYPE
@@ -261,7 +270,7 @@ main(int argc, char *argv[])
 
     }
 
-    chdir("/tmp"); // should be irrelevant. but just in case
+    (void)chdir("/tmp"); // should be irrelevant. but just in case
     umask(027); // just to get something known, we shouldn't actually create any files
 
     if ((retval = krb5_get_default_realm(context, &default_realm))) {
@@ -482,6 +491,35 @@ main(int argc, char *argv[])
         goto done;
     }
 
+    // for ZFS, set quota
+#ifdef ZFS
+    {
+        char *zfsfs = NULL;
+        char *quota = getuserquota(directory, username, &zfsfs);
+
+        if (debug)
+            mylog(LOG_DEBUG, "getquota %s %s -> %s %s", directory, username, quota, zfsfs);
+
+        if (quota) {
+            libzfs_handle_t *libh = libzfs_init();
+            zfs_handle_t *zh = zfs_open(libh, zfsfs, ZFS_TYPE_FILESYSTEM);
+            char *quotaattr = NULL;
+            
+            if (zh) {
+                (void)asprintf(&quotaattr, "userquota@%s", username);
+                mylog(LOG_DEBUG, "zfs set %s=%s %s", quotaattr, quota, zfsfs);
+                zfs_prop_set(zh, quotaattr, quota);
+                zfs_close(zh);
+            }
+            libzfs_fini(libh);
+            
+            free(quotaattr);
+            free(zfsfs);
+            free(quota);
+        }
+    }
+#endif
+    
     message = "";
 
 done:
