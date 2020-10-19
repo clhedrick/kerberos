@@ -58,7 +58,7 @@
 #include <libnvpair.h>
 #include <libzfs.h>
 
-extern char * getuserquota(char *filesys, char *user, char **fsret);
+extern char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsret);
 #endif
 
 int debug = 0;
@@ -495,16 +495,16 @@ main(int argc, char *argv[])
 #ifdef ZFS
     {
         char *zfsfs = NULL;
-        char *quota = getuserquota(directory, username, &zfsfs);
+        libzfs_handle_t *libh = libzfs_init();
+        char *quota = getuserquota(libh, directory, username, &zfsfs);
 
         if (debug)
             mylog(LOG_DEBUG, "getquota %s %s -> %s %s", directory, username, quota, zfsfs);
 
         if (quota) {
-            libzfs_handle_t *libh = libzfs_init();
+
             zfs_handle_t *zh = zfs_open(libh, zfsfs, ZFS_TYPE_FILESYSTEM);
             char *quotaattr = NULL;
-            
             if (zh) {
                 (void)asprintf(&quotaattr, "userquota@%s", username);
                 mylog(LOG_DEBUG, "zfs set %s=%s %s", quotaattr, quota, zfsfs);

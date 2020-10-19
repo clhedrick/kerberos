@@ -9,20 +9,23 @@
 #include <grp.h>
 #include <pwd.h>
 #include <syslog.h>
-
+#include <sys/types.h>
+#include <sys/nvpair.h>
+#include <libnvpair.h>
+#include <libzfs.h>
 
 #define MAXGROUPS 100
 #define ERRQUOTA NULL
 
-char * getuserquota(char *filesys, char *user, char **fsret){
+char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsret){
   FILE* cf;
   static char *line;
   size_t len;
   size_t count;
   int insection = 0;
   char *fs = NULL;
-  double base = 0.0;
-  double incr = 0.0;
+  uint64_t base = 0L;
+  uint64_t incr = 0L;
   int ngroups = 0;
 
   regex_t section_pat;
@@ -62,7 +65,7 @@ char * getuserquota(char *filesys, char *user, char **fsret){
         syslog(LOG_ERR, "Can't compile fs_pat");
         return(ERRQUOTA);
   }
-  if (regcomp(&data_pat, "^[ \t]*([-a-zA-Z/0-9_]+)[ \t]*=[ \t]*(\\+?)[ \t]*([0-9.]+)[ \t]*([BKGMTPEZbkgmtpez]?)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
+  if (regcomp(&data_pat, "^[ \t]*([-a-zA-Z/0-9_]+)[ \t]*=[ \t]*(\\+?)[ \t]*([0-9a-zA-Z.]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
         syslog(LOG_ERR, "Can't compile data_pat");
         return(ERRQUOTA);
   }
@@ -148,12 +151,21 @@ char * getuserquota(char *filesys, char *user, char **fsret){
     }
 
     ret = regexec(&data_pat, line, 5, match, 0);
+    // libzfs uses uint64_t. so even though zetabytes
+    // are supposedly supported, you can't actually set
+    // a quota bigger than about 10eb. The property is
+    // stored as number of bytes. It is converted to
+    // gb, etc, when printing, unless you ask for it
+    // literally, in which case you get bytes.
+    // we use the same parser that the zfs command does.
+    // Note that it works in integer arithmeric unless there's
+    // a decimal point, in which case it uses double and
+    // then converts to 64-bit integer
     if (ret == 0) {
       char *attr;
       int isplus = 0;
       char *num;
-      char unit;
-      double amount;
+      uint64_t amount;
       int i;
 
       attr = line + match[1].rm_so;
@@ -202,41 +214,23 @@ char * getuserquota(char *filesys, char *user, char **fsret){
       if (line[match[2].rm_so] == '+')
 	isplus = 1;
 
-      unit = line[match[4].rm_so];
-
       num = line + match[3].rm_so;
       // terminate with nul
       line[match[3].rm_eo] = '\0';
 
-      amount = atof(num);
-
-      if (unit == 'b' || unit == 'B')
-	;
-      if (unit == 'k' || unit == 'K')
-	amount *= 1024;
-      else if (unit == 'm' || unit == 'M')
-	amount *= 1024 * 1024;
-      else if (unit == 'g' || unit == 'G')
-	amount *= 1024 * 1024 * 1024;
-      else if (unit == 't' || unit == 'T')
-	amount  *= 1024LL * 1024LL * 1024LL * 1024LL;
-      else if (unit == 'p' || unit == 'P')
-	amount  *= 1024LL * 1024LL * 1024LL * 1024LL * 1024LL;
-      else if (unit == 'e' || unit == 'E')
-	amount  *= 1024LL * 1024LL * 1024LL * 1024LL * 1024LL * 1024LL;
-      else if (unit == 'z' || unit == 'Z')
-	amount  *= (double)(1024LL * 1024LL * 1024LL) * (double)(1024LL * 1024LL * 1024LL * 1024LL);
-      // no suffix
-      else if (line[match[4].rm_so] == line[match[4].rm_eo])
-	;
-      else {
-	// illegal value
+      // parse 10.2GB, etc using ZFS's parser
+      i = zfs_nicestrtonum(hdl, num, &amount);
+      if (i != 0) {
+	syslog(LOG_ERR, "%s isn't a valid quota", num);
 	continue;
       }
 
-      if (isplus)
+      if (isplus) {
 	incr += amount;
-      else if (amount > base)
+	if (incr < amount) {
+	  syslog(LOG_ERR, "integer overflow computing quota");
+	}
+      } else if (amount > base)
 	base = amount;
 
 #ifdef DEBUG
@@ -250,29 +244,20 @@ char * getuserquota(char *filesys, char *user, char **fsret){
     }
   }
 #ifdef DEBUG
-  printf("base %f incr %f\n", base, incr);
+  printf("base %lu incr %lu\n", base, incr);
 #endif
   if (line)
     free(line);
   fclose(cf);
-  double quotaval = base + incr;
+
+  uint64_t quotaval = base + incr;
+  if (quotaval < base) {
+    syslog(LOG_ERR, "integer overflow computing quota");
+  }
   char *retquota = NULL;
-  if (quotaval >= (double)(1024LL * 1024LL * 1024LL) * (double)(1024LL * 1024LL * 1024LL * 1024LL))
-    asprintf(&retquota, "%.2fz", quotaval / ((double)(1024LL * 1024LL * 1024LL) * (double)(1024LL * 1024LL * 1024LL * 1024LL)));
-  else if (quotaval >= 1024LL * 1024LL * 1024LL * 1024LL * 1024LL * 1024LL)
-    asprintf(&retquota, "%.2fe", quotaval / (1024LL * 1024LL * 1024LL * 1024LL * 1024LL * 1024LL));
-  else if (quotaval >= 1024LL * 1024LL * 1024LL * 1024LL * 1024LL)
-    asprintf(&retquota, "%.2fp", quotaval / (1024LL * 1024LL * 1024LL * 1024LL * 1024LL));
-  else if (quotaval >= 1024LL * 1024LL * 1024LL * 1024LL)
-    asprintf(&retquota, "%.2ft", quotaval / (1024LL * 1024LL * 1024LL * 1024LL));
-  else if (quotaval >= 1024LL * 1024LL * 1024LL)
-    asprintf(&retquota, "%.2fg", quotaval / (1024LL * 1024LL * 1024LL));
-  else if (quotaval >= 1024LL * 1024LL)
-    asprintf(&retquota, "%.2fm", quotaval / (1024LL * 1024LL));
-  else if (quotaval >= 1024LL)
-    asprintf(&retquota, "%.2fk", quotaval / (1024LL));
-  else
-    asprintf(&retquota, "%.0f", quotaval);
+
+  asprintf(&retquota, "%lu", quotaval);
+
   if (retquota && fs) {
     *fsret = fs;
     return retquota;
@@ -289,8 +274,9 @@ char * getuserquota(char *filesys, char *user, char **fsret){
 int main(int argc, char *argv[]) {
   char * quota;
   char * fs = NULL;
+  libzfs_handle_t *libh = libzfs_init();
 
-  quota = getuserquota("/fast/clh", "clh", &fs);
+  quota = getuserquota(libh, "/common/home/clh", "clh", &fs);
   printf("%s %s\n", quota, fs);
   free(quota);
 }
