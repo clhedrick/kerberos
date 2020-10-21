@@ -11,7 +11,7 @@ getquota: getquota.c
 	gcc -DMAIN -o getquota -I/usr/include/libzfs -I/usr/include/libspl getquota.c -lzfs
 
 reviewquotas: reviewquotas.c
-	gcc -DMAIN -o reviewquotas -I/usr/include/libzfs -I/usr/include/libspl reviewquotas.c -lzfs
+	gcc -g -o reviewquotas -I/usr/include/libzfs -I/usr/include/libspl reviewquotas.c -lzfs
 
 zfs: getquota.c mkhomedird.c
 	gcc -c getquota.c -I/usr/include/libzfs -I/usr/include/libspl
