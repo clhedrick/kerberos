@@ -11,10 +11,11 @@ The file contains sections, e.g.
 .nf
 
 [/common/home]
-fs=fast/home
-default=50g
-faculty=200g
-cs525=+2.5g
+:fs=fast/home
+:default=50g
+@faculty=200g
+@cs525=+2.5g
+smith=100g
 
 .fi
 A single server can have more than one file system, which
@@ -24,24 +25,24 @@ directory starting with /common/home. The first match is
 used, so you could have a different section for /common/home/shared.
 The more specific section should be first.
 .PP
-The "fs" attribute is the ZFS file system where the quota
+The ":fs" attribute is the ZFS file system where the quota
 should be set. That's normally the ZFS file system where
 that directory is mounted.
 .PP
 The quota is computed as a base plus adjustments. The base
 typicaly depends upon the type of user. Undergrads and faculty
-may have different quotas. The specification is GROUP=QUOTA.
+may have different quotas. The specification is USER=QUOTA or @GROUP=QUOTA.
 Note that the GROUP must be a Posix group, i.e. one with a GID.
 The quota can be a number, or a number followed by K, M, G, T, P, E, or Z 
 (or lowercase versions), with the usual meaning. (K = 1024) The number
 can have a decimal point. If more than one group matches, the largest
 quota is used.
 .PP
-The group "default" always matches.
+The group ":default" always matches.
 .PP
 There may also be adjustments. Some classes need extra storage, so
 we add the adjustments for all classes the uesr is in. The
-syntax is GROUP=+QUOTA, where the GROUP and QUOTA are as above.
+syntax is @GROUP=+QUOTA or USER=+QUOTA, where the GROUP and QUOTA are as above.
 .PP
 Lines starting with # are comments, and are ignored. Blank lines
 are ignored. Whitespace may be inserted between elements.

@@ -17,6 +17,8 @@
 #define MAXGROUPS 100
 #define ERRQUOTA NULL
 
+#define GETMATCH(l,m,off) (l[m[off].rm_eo] = '\0', l + m[off].rm_so)
+
 char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsret){
   FILE* cf;
   static char *line;
@@ -25,7 +27,11 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
   int insection = 0;
   char *fs = NULL;
   uint64_t base = 0L;
+  uint64_t sbase = 0L;
   uint64_t incr = 0L;
+  uint64_t sincr = 0L;
+  uint64_t quotaval = 0L;
+  uint64_t squotaval = 0L;
   int ngroups = 0;
 
   regex_t section_pat;
@@ -52,33 +58,50 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
   //here we actually get the groups
   getgrouplist(pw->pw_name, pw->pw_gid, groups, &ngroups);
 
+  cf = fopen("/etc/quotas.conf", "r");
+  if (!cf) {
+    syslog(LOG_ERR, "unable to open /etc/quotas.conf");
+    return(ERRQUOTA);
+  }
+
+  // if these fail, we will leak memory for the ones above, and for fopen
+  // my assumption is that this can't happen without a major failure of
+  // whoever is calling this
   if (regcomp(&section_pat, "^[ \t]*\\[", REG_NOSUB) != 0) {
         syslog(LOG_ERR, "Can't compile section_pat");
+	fclose(cf);
         return(ERRQUOTA);
   }
   //  if (regcomp(&valid_section_pat, "^[ \t]*\\[[ \t]*([-a-zA-Z/0-9_]+)[ \t]*\\]", REG_NEWLINE) != 0) {
   if (regcomp(&valid_section_pat, "^[ \t]*\\[[ \t]*([-a-zA-Z/0-9_]+)[ \t]*\\]", REG_EXTENDED|REG_NEWLINE) != 0) {
         syslog(LOG_ERR, "Can't compile valid_section_pat");
+	fclose(cf);
+	regfree(&section_pat);
         return(ERRQUOTA);
   }
-  if (regcomp(&fs_pat, "^[ \t]*fs[ \t]*=[ \t]*([-a-zA-Z/0-9_+]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
+  if (regcomp(&fs_pat, "^[ \t]*:fs[ \t]*=[ \t]*([-a-zA-Z/0-9_+]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
         syslog(LOG_ERR, "Can't compile fs_pat");
+	fclose(cf);
+	regfree(&section_pat);
+	regfree(&valid_section_pat);
         return(ERRQUOTA);
   }
-  if (regcomp(&data_pat, "^[ \t]*([-a-zA-Z/0-9_]+)[ \t]*=[ \t]*(\\+?)[ \t]*([0-9a-zA-Z.]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
+  if (regcomp(&data_pat, "^[ \t]*(@?)(:?[-a-zA-Z/0-9_]+)[ \t]*=[ \t]*(\\+?)[ \t]*([0-9a-zA-Z.]+)([ \t]*([0-9a-zA-Z.]+))?[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
         syslog(LOG_ERR, "Can't compile data_pat");
+	fclose(cf);
+	regfree(&section_pat);
+	regfree(&valid_section_pat);
+	regfree(&fs_pat);
         return(ERRQUOTA);
   }
   if (regcomp(&skip_pat, "^[ \t]*#|^[ \t\n]*$", REG_EXTENDED|REG_NOSUB) != 0) {
         syslog(LOG_ERR, "Can't compile skip_pat");
+	fclose(cf);
+	regfree(&section_pat);
+	regfree(&valid_section_pat);
+	regfree(&fs_pat);
+	regfree(&data_pat);
         return(ERRQUOTA);
-  }
-
-
-  cf = fopen("/etc/quotas.conf", "r");
-  if (!cf) {
-    syslog(LOG_ERR, "unable to open /etc/quotas.conf");
-    return(ERRQUOTA);
   }
 
   // first section to match
@@ -87,7 +110,7 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
   
   // look for [....] with whitespace allowed
   while ((count = getline(&line, &len, cf)) != -1) {
-    regmatch_t match[5];
+    regmatch_t match[8];
     int ret;
 
     //    printf("%d %s\n", regexec(&section_pat, line, 0, NULL, 0), line);
@@ -104,13 +127,10 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
       if (insection)
 	break;
 
-      // not in the right section. see if this is it
+      // not in the right section. see if this is the right one
       ret = regexec(&valid_section_pat, line, 2, match, 0);
       if (ret == 0) {
-	// yup, get the section name
-	char *name = line + match[1].rm_so;
-	// terminate with nul
-	line[match[1].rm_eo] = '\0';
+	char *name = GETMATCH(line,match,1);
 
 	if (strncmp(name, filesys, strlen(name)) == 0  ) {
 	  // match. this is the right section
@@ -134,11 +154,7 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
     // first special case: fs
     ret = regexec(&fs_pat, line, 3, match, 0);
     if (ret == 0) {
-      char *value;
-
-      value = line + match[1].rm_so;
-      // terminate with nul
-      line[match[1].rm_eo] = '\0';
+      char *value = GETMATCH(line,match,1);
 
       // if more than one first wins
       if (!fs) {
@@ -150,7 +166,7 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
       continue;
     }
 
-    ret = regexec(&data_pat, line, 5, match, 0);
+    ret = regexec(&data_pat, line, 8, match, 0);
     // libzfs uses uint64_t. so even though zetabytes
     // are supposedly supported, you can't actually set
     // a quota bigger than about 10eb. The property is
@@ -164,13 +180,49 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
     if (ret == 0) {
       char *attr;
       int isplus = 0;
+      int isgroup = 0;
       char *num;
       uint64_t amount;
+      uint64_t samount;
       int i;
 
-      attr = line + match[1].rm_so;
-      // terminate with nul
-      line[match[1].rm_eo] = '\0';
+      if (line[match[1].rm_so] == '@')
+	isgroup = 1;
+
+      attr = GETMATCH(line,match,2);
+
+      // note: default will fall through both tests
+      // and be done for any group
+      if (!isgroup && strcmp(attr, ":default") != 0) {
+	// this is a user spec. ignore if not this user
+	if (strcmp(attr, user) != 0)
+	  continue;
+
+	num = GETMATCH(line,match,4);
+
+	// parse 10.2GB, etc using ZFS's parser
+	i = zfs_nicestrtonum(hdl, num, &quotaval);
+	if (i != 0) {
+	  syslog(LOG_ERR, "%s isn't a valid quota", num);
+	  continue;
+	}
+
+	// if no soft quota, use hard
+	if (match[5].rm_so == match[5].rm_eo)
+	  squotaval = quotaval;
+	else {
+	  num = GETMATCH(line,match,6);
+
+	  // parse 10.2GB, etc using ZFS's parser
+	  i = zfs_nicestrtonum(hdl, num, &squotaval);
+	  if (i != 0) {
+	    syslog(LOG_ERR, "%s isn't a valid quota", num);
+	    continue;
+	  }
+	}
+
+	goto quotadone;
+      }
 
       // see if this is one of our groups
       // look up gid of the group in the file
@@ -180,11 +232,13 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
       // for the quota specs, rather than all
       // of the user's groups
 
-      if (strcmp(attr, "default") != 0) {
+      // fall through for defautl
+      if (isgroup) {
 	struct group grpstr;
 	struct group *gr = &grpstr;
 	// we have some big groups
 	char buf[100000];
+
 	if (getgrnam_r(attr, gr, buf, sizeof(buf), &gr) != 0) {
 	  syslog(LOG_ERR, "grname failed group %s", attr);
 	  continue;
@@ -195,7 +249,7 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
 	  syslog(LOG_ERR, "can't find group %s", attr);
 	  continue;
 	}
-
+	
 #ifdef DEBUG
 	printf("checking %s %i\n", gr->gr_name, gr->gr_gid);
 #endif
@@ -209,14 +263,16 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
 	if (i == ngroups)
 	  continue;
       }
+
+      printf("right group %s\n", attr);
+
       // group 'default' falls through and is always done
 
-      if (line[match[2].rm_so] == '+')
+      if (line[match[3].rm_so] == '+')
 	isplus = 1;
+      printf("isplus %d\n", isplus);
 
-      num = line + match[3].rm_so;
-      // terminate with nul
-      line[match[3].rm_eo] = '\0';
+      num = GETMATCH(line,match,4);
 
       // parse 10.2GB, etc using ZFS's parser
       i = zfs_nicestrtonum(hdl, num, &amount);
@@ -225,13 +281,40 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
 	continue;
       }
 
+      // if no soft quota, use hard quota
+      if (match[5].rm_so < 0 || match[5].rm_so == match[5].rm_eo) {
+	samount = amount;
+      } else {
+
+	num = GETMATCH(line,match,6);
+
+	// parse 10.2GB, etc using ZFS's parser
+	i = zfs_nicestrtonum(hdl, num, &samount);
+	if (i != 0) {
+	  syslog(LOG_ERR, "%s isn't a valid quota", num);
+	  continue;
+	}
+      }
+
+      // for plus, add it into incr.
+      // otherwise base if it's larger
+      // check for integer overflow. this is a slightly tricky
+      //   test, but you can prove that it works
       if (isplus) {
 	incr += amount;
+	sincr += samount;
 	if (incr < amount) {
 	  syslog(LOG_ERR, "integer overflow computing quota");
 	}
-      } else if (amount > base)
-	base = amount;
+	if (sincr < samount) {
+	  syslog(LOG_ERR, "integer overflow computing quota");
+	}
+      } else {
+	if (amount > base)
+	  base = amount;
+	if (samount > sbase)
+	  sbase = samount;
+      }
 
 #ifdef DEBUG
       printf("attr %s plus >%d< num %s suffix %c amount %f\n", attr, isplus, num, unit, amount);
@@ -243,20 +326,34 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
       continue;
     }
   }
+
+
 #ifdef DEBUG
   printf("base %lu incr %lu\n", base, incr);
 #endif
+
+  quotaval = base + incr;
+  squotaval = sbase + sincr;
+  if (quotaval < base) {
+    syslog(LOG_ERR, "integer overflow computing quota");
+  }
+  if (squotaval < sbase) {
+    syslog(LOG_ERR, "integer overflow computing quota");
+  }
+
+quotadone:
+  regfree(&section_pat);
+  regfree(&valid_section_pat);
+  regfree(&fs_pat);
+  regfree(&data_pat);
+  regfree(&skip_pat);
   if (line)
     free(line);
   fclose(cf);
 
-  uint64_t quotaval = base + incr;
-  if (quotaval < base) {
-    syslog(LOG_ERR, "integer overflow computing quota");
-  }
   char *retquota = NULL;
 
-  asprintf(&retquota, "%lu", quotaval);
+  asprintf(&retquota, "%lu %lu", quotaval, squotaval);
 
   if (retquota && fs) {
     *fsret = fs;
@@ -279,5 +376,10 @@ int main(int argc, char *argv[]) {
   quota = getuserquota(libh, "/common/home/clh", "clh", &fs);
   printf("%s %s\n", quota, fs);
   free(quota);
+  free(fs);
+  //  quota = getuserquota(libh, "/common/home/clh", "clh", &fs);
+  //  free(quota);
+  //  free(fs);
+  libzfs_fini(libh);
 }
 #endif

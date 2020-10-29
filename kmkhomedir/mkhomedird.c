@@ -387,6 +387,8 @@ main(int argc, char *argv[])
         exit(1);
     }
 
+    printf("received\n");
+
     // get arguments from kgetcred: operation, username and principal
 
     // username
@@ -497,6 +499,12 @@ main(int argc, char *argv[])
         char *zfsfs = NULL;
         libzfs_handle_t *libh = libzfs_init();
         char *quota = getuserquota(libh, directory, username, &zfsfs);
+        // this returns "hard soft". Only want hard
+        if (quota) {
+            char *qcp = index(quota, ' ');
+            if (qcp)
+                *qcp = '\0';
+        }
 
         if (debug)
             mylog(LOG_DEBUG, "getquota %s %s -> %s %s", directory, username, quota, zfsfs);

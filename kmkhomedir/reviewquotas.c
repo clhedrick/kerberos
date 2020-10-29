@@ -27,6 +27,12 @@
 #define MEMBERSIZE 10
 //#define DEBUG 1
 
+#define GETMATCH(l,m,off) (l[m[off].rm_eo] = '\0', l + m[off].rm_so)
+
+// NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE
+// ZFS does not have soft quotas. We ignore the soft quota spec
+// in the file
+
 struct quotaspec {
   struct group *grp;
   // mallocted buffer for group, so it can be freed
@@ -34,6 +40,7 @@ struct quotaspec {
   uint64_t amount;
   int isplus;
   int isdefault;
+  char *user;
   struct quotaspec *next;
 };
 
@@ -55,7 +62,7 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
     uint64_t base = 0L;
     uint64_t incr = 0L;
     int ngroups = 0;
-    
+
     // get actual args out of the struct
     struct argb *argp = (struct argb *) arg;
     struct quotaspec *quotalist = argp->qlist;
@@ -74,7 +81,16 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
     struct quotaspec *q = quotalist;
     int found = 0;
     while (q) {
-      if (q->isdefault == 1) {
+      if (q->user) {
+	if (strcmp(q->user, pw->pw_name) == 0) {
+	  // for user, use this exact amount
+	  base = q->amount;
+	  incr = 0L;
+	  break;
+	}
+	// finished with this spec
+	// will fall through to next iteration
+      } else if (q->isdefault == 1) {
 	// default applies to everyone
 	if (q->isplus)
 	  incr += q->amount;
@@ -84,18 +100,18 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
 	// the quota spec has a group. see if this person
 	// is a member of the group
 	char **userlist = q->grp->gr_mem;
-	if (! userlist)
-	  continue;
-	// loop over all users in the group.
-	// see if our person is one of them
-	for (int i=0; userlist[i] != NULL; i++) {
-	  if (strcmp(userlist[i], pw->pw_name) == 0) {
-	    // yes, process the amount
-	    if (q->isplus)
-	      incr += q->amount;
-	    else if (q->amount > base)
-	      base = q->amount;
-	    break;
+	if (userlist) {
+	  // loop over all users in the group.
+	  // see if our person is one of them
+	  for (int i=0; userlist[i] != NULL; i++) {
+	    if (strcmp(userlist[i], pw->pw_name) == 0) {
+	      // yes, process the amount
+	      if (q->isplus)
+		incr += q->amount;
+	      else if (q->amount > base)
+		base = q->amount;
+	      break;
+	    }
 	  }
 	}
       }
@@ -119,6 +135,8 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
       (void)asprintf(&quotastr, "%lu", desired);
       printf("setting %s %s\n ", quotaattr, quotastr);
       zfs_prop_set(zh, quotaattr, quotastr);
+      free(quotaattr);
+      free(quotastr);
     }
 
     return (0);
@@ -149,7 +167,14 @@ void procfs(libzfs_handle_t *libzh, char *dirname, char *filesys, struct quotasp
   printf("\ndir %s fs %s\n", dirname, filesys);
   struct quotaspec *qq = quotalist;
   while(qq) {
-    printf("group %s plus %d amount %lu\n", qq->isdefault?"default":qq->grp->gr_name, qq->isplus, qq->amount);
+    char *label = NULL;
+    if (qq->isdefault)
+      label = ":default";
+    else if (qq->user)
+      label = qq->user;
+    else
+      label = qq->grp->gr_name;
+    printf("entry %s%s plus %d amount %lu\n", qq->grp?"@":"", label, qq->isplus, qq->amount);
     qq = qq->next;
   }
 #endif
@@ -186,11 +211,11 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Can't compile valid_section_pat");
     exit(1);
   }
-  if (regcomp(&fs_pat, "^[ \t]*fs[ \t]*=[ \t]*([-a-zA-Z/0-9_+]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
+  if (regcomp(&fs_pat, "^[ \t]*:fs[ \t]*=[ \t]*([-a-zA-Z/0-9_+]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
     fprintf(stderr, "Can't compile fs_pat");
     exit(1);
   }
-  if (regcomp(&data_pat, "^[ \t]*([-a-zA-Z/0-9_]+)[ \t]*=[ \t]*(\\+?)[ \t]*([0-9a-zA-Z.]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
+  if (regcomp(&data_pat, "^[ \t]*(@?)(:?[-a-zA-Z/0-9_]+)[ \t]*=[ \t]*(\\+?)[ \t]*([0-9a-zA-Z.]+)([ \t]*([0-9a-zA-Z.]+))?[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
     fprintf(stderr, "Can't compile data_pat");
     exit(1);
   }
@@ -227,7 +252,7 @@ int main(int argc, char *argv[]) {
   struct quotaspec * quotalast = NULL;
 
   while (getline(&line, &len, cf) != -1) {
-    regmatch_t match[5];
+    regmatch_t match[8];
 
     int ret;
 
@@ -275,6 +300,8 @@ int main(int argc, char *argv[]) {
 	    free(q->groupbuf);
 	  free(q->grp);
 	}
+	if (q->user)
+	  free(q->user);
 	free(q);
 	q = next;
       }
@@ -282,10 +309,7 @@ int main(int argc, char *argv[]) {
       quotalast = NULL;
 
       // get the section name
-      char *name = line + match[1].rm_so;
-      // terminate with nul
-      line[match[1].rm_eo] = '\0';
-      dirname = strdup(name);
+      dirname = strdup(GETMATCH(line,match,1));
       // done with this line
       continue;
     }
@@ -295,13 +319,8 @@ int main(int argc, char *argv[]) {
     // first special case: fs=
     ret = regexec(&fs_pat, line, 2, match, 0);
     if (ret == 0) {
-      char *value;
-
       // fs=name is the ZFS file system
-      // save it in filesys
-      value = line + match[1].rm_so;
-      // terminate with nul
-      line[match[1].rm_eo] = '\0';
+      char *value = GETMATCH(line,match,1);
 
       // if more than one first wins
       if (!filesys) {
@@ -313,7 +332,7 @@ int main(int argc, char *argv[]) {
     }
 
     // better be a quota specification
-    ret = regexec(&data_pat, line, 5, match, 0);
+    ret = regexec(&data_pat, line, 8, match, 0);
     if (ret != 0) {
       fprintf(stderr, "bad quota specification line: %s\n", line);
       exit(1);
@@ -326,13 +345,15 @@ int main(int argc, char *argv[]) {
 
     // line is "group=quota". get the group
     // (Can also be "default")
-    char *attr = line + match[1].rm_so;
-    // terminate with nul
-    line[match[1].rm_eo] = '\0';
+    char *attr = GETMATCH(line, match, 2);
+    int isgroup = 0;
 
-    if (strcmp(attr, "default") == 0) {
+    if (line[match[1].rm_so] == '@')
+      isgroup = 1;
+
+    if (strcmp(attr, ":default") == 0) {
       q->isdefault = 1;
-    } else {
+    } else if (isgroup){
       // it's a group. we need to save the whole group struct so we
       // can see if the user is in the group
       
@@ -354,18 +375,20 @@ int main(int argc, char *argv[]) {
       }
       q->grp = grp;
       q->groupbuf = groupbuf;
+    } else {
+      // is not @group it's a user
+      q->user = strdup(attr);
     }
     
     // have processed the group or default. Now process the quota
     // can be group=10g or group=+10g. See if it's a plus
-    if (line[match[2].rm_so] == '+')
+    if (line[match[3].rm_so] == '+')
       q->isplus = 1;
 
     // quota specification can be number of something like 10G
     // ZFS has a library routine to parse this.
-    char *num = line + match[3].rm_so;
-    // terminate with nul
-    line[match[3].rm_eo] = '\0';
+    char *num = GETMATCH(line,match,4);
+
     // ask ZFS to parse specification. Output is a 64-bit integer
     // put it in the "amount" field of the quotaspec
     int i = zfs_nicestrtonum(libh, num, &q->amount);
@@ -385,7 +408,42 @@ int main(int argc, char *argv[]) {
   // process last group
   procfs(libh, dirname, filesys, quotalist);
 
+  if (line)
+    free(line);
+
+  // free stuff from last time
+  if (dirname) {
+    free(dirname);
+    dirname = NULL;
+  }
+  if (filesys) {
+    free(filesys);
+    filesys = NULL;
+  }
+  // free the list
+  struct quotaspec *q = quotalist;
+  while (q) {
+    struct quotaspec *next = q->next;
+    if (q->grp) {
+      if (q->groupbuf)
+	free(q->groupbuf);
+      free(q->grp);
+    }
+    if (q->user)
+      free(q->user);
+    free(q);
+    q = next;
+  }
 
   fclose(cf);
+
+  libzfs_fini(libh);
+  
+  regfree(&section_pat);
+  regfree(&valid_section_pat);
+  regfree(&fs_pat);
+  regfree(&data_pat);
+  regfree(&skip_pat);
+
 
 }
