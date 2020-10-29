@@ -205,3 +205,7 @@ Instructions for integrating the ISC dhcpd. Our accounts application
 will manage DHCP data in LDAP. This has setup instructions and a 
 patch for the LDAP server.
 
+## rquotad
+
+This has nothing to do with Kerberos. It is a patch to rpc.rquotad to support quotas for ZFS file systems. 
+This particular version supports just ZFS, though supporting a mix of file system types would be easy.
