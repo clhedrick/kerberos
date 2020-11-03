@@ -91,7 +91,7 @@ int us_callback(struct quotaspec *quotalist, const char *uuid, const char *usern
     int ngroups = 0;
     // none is a flag. if any entry that applies
     // to this user says "none", this user has
-    // no quota, i.e. infinite quota. With netapp, it's represented as zero
+    // no quota, i.e. infinite quota. With netapp, it's represented as "-"
     int none = 0;
 
     // now look at quota specs to compute desired
@@ -157,7 +157,8 @@ int us_callback(struct quotaspec *quotalist, const char *uuid, const char *usern
     printf("domain %s rid %d spacde current %lu correct %lu\n", domain, rid, space, desired);
 #endif
 
-    // netapp uses 0 for no quota
+    // -1 is unlimited. the is my internal representation
+    // in the update it is shown as "-"
     if (none)
       desired = -1L;
 
