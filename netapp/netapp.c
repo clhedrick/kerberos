@@ -117,6 +117,11 @@ static char *request(const char *url) {
       char *line = NULL;
       size_t len = 0;
 
+      if (!fp) {
+	fprintf(stderr, "Can't open  /etc/netapp.conf");
+	exit(1);
+      }
+
       while (getline(&line, &len, fp) != -1) {
 	if (strncmp(line, "getstats:", strlen("getstats:")) == 0) {
 	  size_t eol = strlen(line) - 1;
@@ -130,6 +135,11 @@ static char *request(const char *url) {
 	  quotamanagerp = strdup(line);
 	}
       }
+    }
+
+    if (!getstatsp || !quotamanagerp) {
+      fprintf(stderr, "Didn't get both netapp passwords\n");
+      exit(1);
     }
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -304,14 +314,14 @@ int procfs(char *dirname, char *vol, void *quotalist, char *qtree) {
 
     text = request(url);
     if (!text)
-        return 1;
+      exit(1);
 
     root = json_loads(text, 0, &error);
     free(text);
 
     if (!root) {
         fprintf(stderr, "error: on line %d: %s\n", error.line, error.text);
-        return 1;
+	exit(1);
     }
 
     // now process the qtree results. For each user with
@@ -321,14 +331,14 @@ int procfs(char *dirname, char *vol, void *quotalist, char *qtree) {
     if (!json_is_object(root)) {
         fprintf(stderr, "error: root is not an object\n");
         json_decref(root);
-        return 1;
+	exit(1);
     }
 
     records = json_object_get(root, "records");
     if (!json_is_array(records)) {
       fprintf(stderr, "error: no records\n");
       json_decref(root);
-      return 1;
+      exit(1);
     }
 
     for (i = 0; i < json_array_size(records); i++) {
@@ -342,7 +352,7 @@ int procfs(char *dirname, char *vol, void *quotalist, char *qtree) {
             fprintf(stderr, "error: rules data %d is not an object\n", (int)(i + 1));
 	    fprintf(stderr, "%s\n", json_dumps(data, JSON_INDENT(3)));
             json_decref(root);
-            return 1;
+	    exit(1);
         }
 
 	users = json_object_get(data, "users");
@@ -354,7 +364,7 @@ int procfs(char *dirname, char *vol, void *quotalist, char *qtree) {
 	  // haven't seen this one
 	  fprintf(stderr, "user array size %d, skipping\n", json_array_size(users));
 	  fprintf(stderr, "%s\n", json_dumps(data, JSON_INDENT(3)));
-	  continue;
+	  exit(1);
 	}
 	user = json_array_get(users, 0);
         if (!json_is_object(user)) {
@@ -362,14 +372,14 @@ int procfs(char *dirname, char *vol, void *quotalist, char *qtree) {
 	  fprintf(stderr, "error: user not an object\n");
 	  json_decref(root);
 	  fprintf(stderr, "%s\n", json_dumps(data, JSON_INDENT(3)));
-	  continue;
+	  exit(1);
         }
 	name = json_object_get(user, "name");
 	if (!json_is_string(name)) {
 	  // haven't seen this
 	  fprintf(stderr, "username not a string\n");
 	  fprintf(stderr, "%s\n", json_dumps(data, JSON_INDENT(3)));
-	  continue;
+	  exit(1);
 	}
 	username = json_string_value(name);
 	// null username is the default
@@ -382,7 +392,7 @@ int procfs(char *dirname, char *vol, void *quotalist, char *qtree) {
 	if (!json_is_string(uuid)) {
 	  fprintf(stderr, "uuid not a string\n");
 	  fprintf(stderr, "%s\n", json_dumps(data, JSON_INDENT(3)));
-	  continue;
+	  exit(1);
 	}
 
 	uuids = json_string_value(uuid);
@@ -406,7 +416,7 @@ int procfs(char *dirname, char *vol, void *quotalist, char *qtree) {
 	} else {
 	  fprintf(stderr, "hard limit unknown number type");
 	  fprintf(stderr, "%s\n", json_dumps(data, JSON_INDENT(3)));
-	  return 1;
+	  exit(1);
 	}
     havequota:
 

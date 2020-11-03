@@ -99,6 +99,10 @@ int change_quota(char *uuid, long quota, char *vol, char *qtree, const char *use
   //  fprintf(stderr, "point 1\n");
   //  curl_global_init(CURL_GLOBAL_ALL);
   curl = curl_easy_init();
+  if (!curl) {
+    fprintf(stderr, "curl_easy_init failed\n");
+    exit(1);
+  }
   fprintf(stderr, "curl_easy_init ret %d\n", curl);
   if(curl) {
     curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -133,6 +137,7 @@ int change_quota(char *uuid, long quota, char *vol, char *qtree, const char *use
     if(res != CURLE_OK) {
       fprintf(stderr, "curl_easy_perform() failed: %s\n",
               curl_easy_strerror(res));
+      exit(1);
     }
     else {
       /*
