@@ -400,13 +400,13 @@ int procfs(char *dirname, char *vol, void *quotalist, char *qtree) {
 	space = json_object_get(data, "space");
         if (!json_is_object(space)) {
 	  // no quota
-	  hardlimit = 0L;
+	  hardlimit = -1L;
 	  goto havequota;
         }
 	hard = json_object_get(space, "hard_limit");
 	if (!json_is_number(hard)) {
 	  // one quota is simply -. treat it as no quota
-	  hardlimit = 0;
+	  hardlimit = -1L;
 	  goto havequota;
 	}
 	if (json_is_integer(hard)) {

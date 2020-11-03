@@ -85,7 +85,7 @@ struct quotaspec {
 //   domain is irrelevant
 //   rid is the uid of the user involved
 //   space is their current quota
-int us_callback(struct quotaspec *quotalist, const char *uuid, const char *username, uint64_t space, char *vol, char *qtree) {
+int us_callback(struct quotaspec *quotalist, const char *uuid, const char *username, long space, char *vol, char *qtree) {
     uint64_t base = 0L;
     uint64_t incr = 0L;
     int ngroups = 0;
@@ -159,10 +159,8 @@ int us_callback(struct quotaspec *quotalist, const char *uuid, const char *usern
 
     // netapp uses 0 for no quota
     if (none)
-      desired = 0L;
-    // since 0 is no quota, use 2 bytes for nothing allowed
-    else if (desired == 0L)
-      desired = 2L;
+      desired = -1L;
+
     // do we need to change the quota?
 
     // for a new entry, caller passes Netapp's default quota as "space". So

@@ -74,22 +74,29 @@ int change_quota(char *uuid, long quota, char *vol, char *qtree, const char *use
   struct MemoryStruct chunk;
 
   // json to PATCH for adjusting a quota
-  static const char *posttemplate = "{  \"space\": {    \"hard_limit\": %ld  }}";
+  static const char *posttemplate = "{  \"space\": {    \"hard_limit\": %s  }}";
   static const char *urltemplate = "https://cluster.lcsr.rutgers.edu/api/storage/quota/rules/%s";
   static const char *addurl = "https://cluster.lcsr.rutgers.edu/api/storage/quota/rules";
   // json to POST for adding a quota
-  static const char *addtemplate = "{ \"qtree\": {\"name\": \"%s\" }, \"space\": { \"hard_limit\":  %lu }, \"svm\": { \"name\": \"koko.lcsr.rutgers.edu\" }, \"type\": \"user\",  \"user_mapping\": \"off\", \"users\": [ { \"name\": \"%s\" } ],  \"volume\": { \"name\": \"%s\" } }";
+  static const char *addtemplate = "{ \"qtree\": {\"name\": \"%s\" }, \"space\": { \"hard_limit\":  %s }, \"svm\": { \"name\": \"koko.lcsr.rutgers.edu\" }, \"type\": \"user\",  \"user_mapping\": \"off\", \"users\": [ { \"name\": \"%s\" } ],  \"volume\": { \"name\": \"%s\" } }";
 
   char *postthis;
   char *url;
+  char *quotastr;
+  if (quota >= 0)
+    (void)asprintf(&quotastr, "%ld", quota);
+  else
+    quotastr = strdup("-");
 
   if (uuid) {
-    (void)asprintf(&postthis, posttemplate, quota);
+    (void)asprintf(&postthis, posttemplate, quotastr);
     (void)asprintf(&url, urltemplate, uuid);
   } else {
-    (void)asprintf(&postthis, addtemplate, qtree, quota, username, vol);
+    (void)asprintf(&postthis, addtemplate, qtree, quotastr, username, vol);
     (void)asprintf(&url, "%s", addurl);
   }
+
+  free(quotastr);
 
   chunk.memory = malloc(1);  /* will be grown as needed by realloc above */
   chunk.size = 0;    /* no data at this point */
