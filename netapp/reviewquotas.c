@@ -475,5 +475,6 @@ int main(int argc, char *argv[]) {
   regfree(&data_pat);
   regfree(&skip_pat);
 
+  exit(0);
 
 }

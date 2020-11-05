@@ -1,2 +1,9 @@
 This isn't kerberos, but since reviewquota for ZFS is here,
 I'm putting the netapp version here.
+
+This requires the Jansson package, https://github.com/akheron/jansson
+I did a make install to install the header file and library on the
+system.
+
+It's a C library for JSON and REST. It uses libcurl to do the
+web stuff.
