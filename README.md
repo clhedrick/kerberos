@@ -6,10 +6,10 @@ git clone https://github.com/clhedrick/kerberos.git
 
 # Summary
 
-This is support code for Kerberos and IPA, created as part of a project
-to fully Kerberize the Rutgers CS department. We are specifically interested
-in secure NFS. However the software here may be useful outside our
-context. 
+This is support code for Kerberos and IPA, created as part of a
+project to fully Kerberize the Rutgers CS department. We are
+specifically interested in secure NFS. However the software here may
+be useful outside our context.
 
 Aside from accounts, which is a system to automatically create and remove 
 accounts based on user roles and what classes they are in, the rest of this
