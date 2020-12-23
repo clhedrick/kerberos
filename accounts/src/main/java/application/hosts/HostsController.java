@@ -147,7 +147,8 @@ public class HostsController {
 	String remoteAddrString = request.getRemoteAddr();
 
 	// need to match InetAddress. String isn't good enough, because IPv6 addresses
-	// can be represented different ways
+	// can be represented different ways. getByName works with an IP address as well as hostname,
+	// so this converts the string representation of the remote IP address to an InetAddress object
 	InetAddress remoteAddr;
 	try {
 	    remoteAddr =  InetAddress.getByName(remoteAddrString);
