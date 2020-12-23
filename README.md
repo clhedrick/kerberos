@@ -16,9 +16,10 @@ remove accounts based on user roles and what classes they are in, the
 rest of this is software to workaround limitations in the way Linux
 supports Kerberos, and inconsistencies between the various tools.
 
-The majority of work is the second category: making tools work together.
-Many Kerberos-related tools work fine on their own. They just don't work
-together. Here are notes on the specific pieces we've had to do:
+The majority of work is the second category: making tools work
+together.  Many Kerberos-related tools work fine on their own. They
+just don't work together. Here are notes on the specific pieces we've
+had to do:
 
 ## accounts
 
