@@ -11,10 +11,10 @@ project to fully Kerberize the Rutgers CS department. We are
 specifically interested in secure NFS. However the software here may
 be useful outside our context.
 
-Aside from accounts, which is a system to automatically create and remove 
-accounts based on user roles and what classes they are in, the rest of this
-is software to workaround limitations in the way Linux supports Kerberos, 
-and inconsistencies between the various tools.
+Aside from accounts, which is a system to automatically create and
+remove accounts based on user roles and what classes they are in, the
+rest of this is software to workaround limitations in the way Linux
+supports Kerberos, and inconsistencies between the various tools.
 
 The majority of work is the second category: making tools work together.
 Many Kerberos-related tools work fine on their own. They just don't work
