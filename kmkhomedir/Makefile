@@ -4,16 +4,30 @@ all:: mkhomedird kmkhomedir pam_kmkhomedir.so
 # and a couple of other minor changes. The original is kept as mkhomedir_helper.c.orig, so new versions
 # can be merged
 
+# zfs is a version that sets the ZFS quota. It has to be built on a system with ZFS and ZFS development
+test: test.c
+	gcc -DMAIN -o test -I/usr/include/libzfs -I/usr/include/libspl test.c -lzfs
+getquota: getquota.c
+	gcc -DMAIN -o getquota -I/usr/include/libzfs -I/usr/include/libspl getquota.c -lzfs
+
+reviewquotas: reviewquotas.c
+	gcc -g -o reviewquotas -I/usr/include/libzfs -I/usr/include/libspl reviewquotas.c -lzfs
+
+zfs: getquota.c mkhomedird.c
+	gcc -c getquota.c -I/usr/include/libzfs -I/usr/include/libspl
+	gcc -DZFS -DHAVE_CONFIG_H  -I/usr/include/krb5 -I/usr/include/libzfs -I/usr/include/libspl -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wno-unused-result -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -Wno-suggest-attribute=format  -pthread -c mkhomedird.c
+	gcc  -Wl,--enable-new-dtags -Wl,-rpath -Wl,/usr/lib -g -O2  -g -o mkhomedird mkhomedird.o getquota.o -lkrb5 -lk5crypto -lcom_err -lkrb5support  -lkeyutils -lresolv  -ldl -lzfs
+
 mkhomedird: mkhomedird.c
-	gcc -DHAVE_CONFIG_H  -I/usr/include/krb5  -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -pthread -c mkhomedird.c
+	gcc -DHAVE_CONFIG_H  -I/usr/include/krb5  -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wno-unused-result -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -pthread -c mkhomedird.c
 	gcc  -Wl,--enable-new-dtags -Wl,-rpath -Wl,/usr/lib -g -O2  -g -o mkhomedird mkhomedird.o -lkrb5 -lk5crypto -lcom_err -lkrb5support  -lkeyutils -lresolv  -ldl
 
 kmkhomedir: pam_kmkhomedir.c
-	gcc -DHAVE_CONFIG_H  -I/usr/include/krb5  -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wparentheses -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -pthread -c pam_kmkhomedir.c
+	gcc -DHAVE_CONFIG_H  -I/usr/include/krb5  -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wno-unused-result -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wparentheses -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -pthread -c pam_kmkhomedir.c
 	gcc  -Wl,--enable-new-dtags -Wl,-rpath -Wl,/usr/lib -g -O2  -o kmkhomedir pam_kmkhomedir.o -lkrb5 -lk5crypto -lcom_err -lkrb5support  -lkeyutils -lresolv  -ldl
 
 pam_kmkhomedir.so: pam_kmkhomedir.c mkhomedir_helper.c
-	gcc -fPIC -fno-stack-protector -DPAM -DHAVE_CONFIG_H  -I/usr/include/krb5  -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wparentheses -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -pthread -c pam_kmkhomedir.c -o pam_kmkhomedir.o
+	gcc -fPIC -fno-stack-protector -DPAM -DHAVE_CONFIG_H  -I/usr/include/krb5  -DKRB5_DEPRECATED=1 -DKRB5_PRIVATE  -g -O2 -Wall -Wno-unused-result -Wcast-align -Wshadow -Wmissing-prototypes -Wno-format-zero-length -Woverflow -Wstrict-overflow -Wmissing-format-attribute -Wmissing-prototypes -Wreturn-type -Wmissing-braces -Wparentheses -Wswitch -Wunused-function -Wunused-label -Wunused-variable -Wunused-value -Wunknown-pragmas -Wsign-compare -Werror=uninitialized -Werror=pointer-arith -Werror=declaration-after-statement -pthread -c pam_kmkhomedir.c -o pam_kmkhomedir.o
 	gcc -c -fPIC -fno-stack-protector -DPAM mkhomedir_helper.c
 # need the -lc to get fstat
 	ld -x --shared -o pam_kmkhomedir.so pam_kmkhomedir.o mkhomedir_helper.o -lkrb5 -lk5crypto -lcom_err -lkrb5support  -lkeyutils -lresolv  -ldl -lpam -lc
