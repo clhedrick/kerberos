@@ -144,7 +144,17 @@ public class HostsController {
 	// ip address and the fully-qualified hostname. If things don't all agree Kerberos may not
 	// work properly.
 
-	String remoteAddr = request.getRemoteAddr();
+	String remoteAddrString = request.getRemoteAddr();
+
+	// need to match InetAddress. String isn't good enough, because IPv6 addresses
+	// can be represented different ways
+	InetAddress remoteAddr;
+	try {
+	    remoteAddr =  InetAddress.getByName(remoteAddrString);
+	} catch (java.net.UnknownHostException uhe) {
+	    return ("Error: can't parse address " + remoteAddrString).getBytes();
+	}
+	
 	InetAddress[] remoteAddrs;
 	try {
 	    remoteAddrs = InetAddress.getAllByName(hostname);
@@ -152,8 +162,9 @@ public class HostsController {
 	    return ("Error: can't find host " + hostname + " in DNS").getBytes();
 	}
 	boolean foundAddr = false;
+	
 	for (int i = 0; i < remoteAddrs.length; i++) {
-	    if (remoteAddrs[i].getHostAddress().equals(remoteAddr)) {
+	    if (remoteAddrs[i].equals(remoteAddr)) {
 		if (!hostname.equals(remoteAddrs[i].getCanonicalHostName())) {
 		    return ("Error: the hostname you supplied, " + hostname + ", doesn't agree with the full hostname for your IP address, " + remoteAddrs[i].getCanonicalHostName()).getBytes();
 		}
@@ -297,7 +308,6 @@ public class HostsController {
 	    }
 	    return errmsg.getBytes();
 	}
-	
 
 	logger.info("ipa service-add nfs/" + hostname);
 	messages = new ArrayList<String>();
