@@ -60,6 +60,8 @@
 #include <errno.h>
 #include <search.h>
 #include <keyutils.h>
+#include <signal.h>
+#include <setjmp.h>
 #include "../common/ccacheutil.h"
 
 /**************************
@@ -857,6 +859,13 @@ void usage(char * progname) {
   exit(0);
 }
 
+static jmp_buf env_alarm;
+
+static void sig_alarm(int signo) {
+  alarm(0);
+  longjmp(env_alarm, 1);
+}
+
 int main(int argc, char *argv[])
 {
   extern int opterr, optind;
@@ -1005,11 +1014,39 @@ int main(int argc, char *argv[])
   while (1) {
     struct cc_entry *entry;
     time_t renew_left;
+    time_t nextloop;
+    time_t now;
+    sigset_t set;
+
+    sigemptyset( &set );
+    sigaddset( &set, SIGALRM );
+    
+    sigprocmask(SIG_UNBLOCK, &set, NULL);
+    if (signal(SIGALRM, sig_alarm) == SIG_ERR) {
+      mylog(LOG_DEBUG, "error setting SIGALRM");
+      exit(1);
+    }
+
+    if (setjmp(env_alarm) != 0) {
+      int fd;
+      mylog(LOG_DEBUG, "hang in main loop, restart loop");
+      // could be in the middle of a file operation, so close files
+      // openlog keeps an fd open. make sure the closes don't kill it
+      if (!debug)
+	closelog();
+      for (fd=getdtablesize(); fd >= 3; --fd) 
+	close(fd);
+      if (!debug)
+	openlog("renewd", 0, LOG_DAEMON);
+      continue;
+    }
+    // consider hung after 59 sec
+    alarm(59);
 
     // pass 1. renew primary caches only
 
-    time_t now = time(0);
-    time_t nextloop = now + wait * 60;
+    now = time(0);
+    nextloop = now + wait * 60;
 
     // checkanonymous(context, 60 * (wait + 10));
 
@@ -1041,6 +1078,9 @@ int main(int argc, char *argv[])
       exit(0);
 
     freeccs();
+
+    // send section protected by timeout
+    alarm(0);
 
     now = time(0);
 
