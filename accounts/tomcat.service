@@ -1,11 +1,12 @@
 [Unit]
 Description=User Management Web Service (tomcat)
-After=syslog.target network.target
 
 [Service]
 Type=simple
+ExecStartPre=/bin/install -d -g apache -o apache -m 750 /var/run/httpd/clientcaches
 ExecStart=/bin/k5start -U -f /etc/krb5.keytab.services -K 50 -k /tmp/krb5ccservices /var/www/tomcat/bin/startup.sh
 ExecStop=/var/www/tomcat/bin/shutdown.sh
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
