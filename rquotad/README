@@ -6,22 +6,33 @@ a file system.
 
 It's part of the package quota.
 
+as root:
+
 edit /etc/apt/sources.list
 uncomment deb-src for at least the main repo
 
 apt-get update
 
-apt-get install build-essential fakeroot dpkg-dev
+apt-get install build-essential fakeroot dpkg-dev libzfslinux-dev
 
-make a directory for the build and cd
-apt-get source quota
-apt-get build-dep quota
+apt-get build-dep quota 
 
-this will create a subdirectory quota-VERSION
-cd into that
+Following can be done as non-root. It will create a directory quota. You might
+want to do it inside another directory, as it will download stuff.
 
-do the patches. configure has to be done after Makefile.in
-is patched
+apt-get --build source quota
 
-./configure
-make
+this will create a subdirectory quota-VERSION. 
+
+put getzfsinfo.c and diff into the directory
+
+Add the patches. E.g. "patch < diff". You may need to
+fix files where patch doesn't do it automatically.
+
+Patch the files and do "./configure; make" in the directory. I've chosen to 
+patch Makfile.in rather than the actual makefile, which is why you need
+to do configuration again.
+
+The file you want is rpc.rquotad
+
+

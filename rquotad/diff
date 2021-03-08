@@ -1,27 +1,37 @@
-*** Makefile.in.orig	2020-10-21 10:31:13.803406341 -0400
---- Makefile.in	2020-10-21 10:32:37.948564361 -0400
+*** Makefile.in.orig	2021-03-08 14:07:56.717317738 -0500
+--- Makefile.in	2021-03-08 14:31:34.515636681 -0500
 ***************
-*** 200,206 ****
-  	svc_socket.c
-  @WITH_RPC_TRUE@am_rpc_rquotad_OBJECTS = rquota_server.$(OBJEXT) \
-  @WITH_RPC_TRUE@	rquota_svc.$(OBJEXT) svc_socket.$(OBJEXT)
+*** 205,211 ****
+  @WITH_RPC_TRUE@	rpc_rquotad-rquota_server.$(OBJEXT) \
+  @WITH_RPC_TRUE@	rpc_rquotad-rquota_svc.$(OBJEXT) \
+  @WITH_RPC_TRUE@	rpc_rquotad-svc_socket.$(OBJEXT)
 ! rpc_rquotad_OBJECTS = $(am_rpc_rquotad_OBJECTS)
   @WITH_RPC_TRUE@rpc_rquotad_DEPENDENCIES = libquota.a \
   @WITH_RPC_TRUE@	$(am__DEPENDENCIES_1) $(RPCLIBS) \
   @WITH_RPC_TRUE@	$(am__DEPENDENCIES_1)
---- 200,206 ----
-  	svc_socket.c
-  @WITH_RPC_TRUE@am_rpc_rquotad_OBJECTS = rquota_server.$(OBJEXT) \
-  @WITH_RPC_TRUE@	rquota_svc.$(OBJEXT) svc_socket.$(OBJEXT)
-! rpc_rquotad_OBJECTS = $(am_rpc_rquotad_OBJECTS) getzfsinfo.o -lzfs
+--- 205,211 ----
+  @WITH_RPC_TRUE@	rpc_rquotad-rquota_server.$(OBJEXT) \
+  @WITH_RPC_TRUE@	rpc_rquotad-rquota_svc.$(OBJEXT) \
+  @WITH_RPC_TRUE@	rpc_rquotad-svc_socket.$(OBJEXT)
+! rpc_rquotad_OBJECTS = $(am_rpc_rquotad_OBJECTS) getzfsinfo.o
   @WITH_RPC_TRUE@rpc_rquotad_DEPENDENCIES = libquota.a \
   @WITH_RPC_TRUE@	$(am__DEPENDENCIES_1) $(RPCLIBS) \
   @WITH_RPC_TRUE@	$(am__DEPENDENCIES_1)
 ***************
-*** 955,960 ****
---- 955,965 ----
-  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/warnquota.Po@am__quote@
-  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/xqmstats.Po@am__quote@
+*** 744,749 ****
+--- 744,750 ----
+  @WITH_RPC_TRUE@rpc_rquotad_CFLAGS = $(TIRPC_CFLAGS)
+  @WITH_RPC_TRUE@rpc_rquotad_LDADD = \
+  @WITH_RPC_TRUE@	libquota.a \
++ @WITH_RPC_TRUE@	-lzfs \
+  @WITH_RPC_TRUE@	$(WRAP_LIBS) \
+  @WITH_RPC_TRUE@	$(RPCLIBS) \
+  @WITH_RPC_TRUE@	$(TIRPC_LIBS)
+***************
+*** 1018,1023 ****
+--- 1019,1029 ----
+  
+  am--depfiles: $(am__depfiles_remade)
   
 + getzfsinfo: getzfsinfo.c
 + 	gcc -DMAIN -o getzfsinfo -I/usr/include/libzfs -I/usr/include/libspl getzfsinfo.c -lzfs
@@ -31,6 +41,8 @@
   .c.o:
   @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
   @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+
+
 *** rquota_server.c.orig	2020-10-21 10:29:25.041909562 -0400
 --- rquota_server.c	2020-10-21 15:30:53.227087277 -0400
 ***************
