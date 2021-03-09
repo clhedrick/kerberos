@@ -1,0 +1,21 @@
+*** svcgssd_proc.c.orig	2021-03-09 11:27:38.155812742 -0500
+--- svcgssd_proc.c	2021-03-09 11:27:26.731890637 -0500
+***************
+*** 432,437 ****
+--- 432,447 ----
+  	/* We no longer need the gss context */
+  	gss_delete_sec_context(&ignore_min_stat, &ctx, &ignore_out_tok);
+  
++         /* timeout in 30 min or ticket expiration, whichever is sooner */
++ 	{// so we can use a local variable //
++ 	  time_t now = time(0);
++ 
++ 	  if ((now + 1800) < ctx_endtime) {
++ 	    ctx_endtime = now + 1800;
++ 	  }
++ 
++         }
++ 
+  	do_svc_downcall(&out_handle, &cred, mech, &ctx_token, ctx_endtime,
+  			hostbased_name);
+  continue_needed:

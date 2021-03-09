@@ -1,0 +1,33 @@
+This is a patch to Ubuntu 20's rpc.svcgssd to make group changes show
+up. See 
+https://linux-nfs.vger.kernel.narkive.com/dgTL2KiI/svcgssd-allow-administrators-to-specify-timeout-for-the-cached-context
+
+For simplicity I'm not doing the UI stuff. I'm hardcoding the timeout to 30 min
+
+as root:
+
+edit /etc/apt/sources.list
+uncomment deb-src for at least the main repo
+
+apt-get update
+
+apt-get install build-essential fakeroot dpkg-dev
+
+apt-get build-dep nfs-utils
+
+Following can be done as non-root. It will create a directory quota. You might
+want to do it inside another directory, as it will download stuff.
+
+apt-get --build source nfs-utils
+
+this will create a subdirectory nfs-utiles-VERSION. 
+
+Cd into nfs-utils-NNN/utils/gssd
+
+Add the patches. E.g. "patch < diff".
+
+cd ..; make
+
+gssd/svcgssd should be installed as rpc.svcgssd.
+
+This is only needed on servers.

@@ -477,6 +477,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   if (is_collection(ccname)) {
       krb5_ccache ccache = NULL;
 
+      printf("iscol");
+
       setresgid(pwd->pw_gid, pwd->pw_gid, -1);
       setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
@@ -505,7 +507,9 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   } else if (is_collection_type(ccname) && usecollection) {
       // have specific cache
       char *prop = NULL;
-      char *collection = convert_to_collection(ccname, (uid_t)-1);
+      char *collection = convert_to_collection(ccname, getruid());
+
+      printf("iscol type convert %s to %s", ccname, collection);
 
       // reset environment to collection
       if (asprintf(&prop, "KRB5CCNAME=%s", collection) > 0) {

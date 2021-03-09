@@ -1,0 +1,6 @@
+This is a patch to Ubuntu 20's rpc.svcgssd to make group changes show
+up. See 
+https://linux-nfs.vger.kernel.narkive.com/dgTL2KiI/svcgssd-allow-administrators-to-specify-timeout-for-the-cached-context
+
+For simplicity I'm not doing the UI stuff. I'm hardcoding the timeout to 30 min
+

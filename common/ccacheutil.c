@@ -184,7 +184,9 @@ is_collection(const char *ccname) {
     }
     return 1;
   }
-  return (strcmp(ccname, "KCM:") == 0) ||
+  // KCM: is officially a collection, but we can't use it
+  // because it doesn't have the UID
+  return (strcmp(ccname, "KCM:") == 0 && strlen(ccname) > 4) ||
     (strncmp(ccname, "DIR:", 4) == 0 && ccname[4] != ':');
 
 }
