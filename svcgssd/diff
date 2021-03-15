@@ -1,17 +1,18 @@
-*** svcgssd_proc.c.orig	2021-03-09 11:27:38.155812742 -0500
---- svcgssd_proc.c	2021-03-09 11:27:26.731890637 -0500
+*** svcgssd_proc.c.orig	2016-08-03 14:25:15.000000000 -0400
+--- svcgssd_proc.c	2021-03-15 11:27:05.616657960 -0400
 ***************
 *** 432,437 ****
---- 432,447 ----
+--- 432,448 ----
   	/* We no longer need the gss context */
   	gss_delete_sec_context(&ignore_min_stat, &ctx, &ignore_out_tok);
   
-+         /* timeout in 30 min or ticket expiration, whichever is sooner */
++         /* timeout in 45 min or ticket expiration, whichever is sooner */
++ 	/* should end in 5 so it doesn't overlap client timeout of 10 min */
 + 	{// so we can use a local variable //
 + 	  time_t now = time(0);
 + 
-+ 	  if ((now + 1800) < ctx_endtime) {
-+ 	    ctx_endtime = now + 1800;
++ 	  if ((now + 2700) < ctx_endtime) {
++ 	    ctx_endtime = now + 2700;
 + 	  }
 + 
 +         }
