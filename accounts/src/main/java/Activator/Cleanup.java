@@ -158,6 +158,7 @@ public class Cleanup {
 	Subject subj = getSubject();  
 
 	JndiAction action = new JndiAction(null, new String[]{"(businessCategory=login)", "", "host", "cn", "member", "owner", "creatorsName", "dateofcreate", "createTimestamp", "businesscategory"});
+	// JndiAction action = new JndiAction(null, new String[]{"(&(cn=clh2*)(businessCategory=login))", "", "host", "cn", "member", "owner", "creatorsName", "dateofcreate", "createTimestamp", "businesscategory"});
 	Subject.doAs(subj, action);
 	if (action.data != null && action.data.size() > 0) {
 	    grouploop:
@@ -204,10 +205,14 @@ public class Cleanup {
 		//    reviewemail: email to notify when a close happens, no default
 		//    reviewnoclose: true to not actually close but just mail reviewemail, default false
 
-		Path warningPath = Paths.get(config.reviewdir + "/" + name + ":1");
-		Path warning2Path = Paths.get(config.reviewdir + "/" + name + ":2");
-		Path warningClosePath = Paths.get(config.reviewdir + "/" + name + ":close");
-		Path warningDonePath = Paths.get(config.reviewdir + "/" + name + ":done");
+		var warnname = name;
+		if (warnname.endsWith("-suspended"))
+		    warnname = name.substring(0,name.length() - "-suspended".length());
+
+		Path warningPath = Paths.get(config.reviewdir + "/" + warnname + ":1");
+		Path warning2Path = Paths.get(config.reviewdir + "/" + warnname + ":2");
+		Path warningClosePath = Paths.get(config.reviewdir + "/" + warnname + ":close");
+		Path warningDonePath = Paths.get(config.reviewdir + "/" + warnname + ":done");
 
 		Integer reviewTime = new Integer(config.reviewtime);
 		Integer review2ndWarning = new Integer(config.review2ndwarning);
@@ -230,6 +235,17 @@ public class Cleanup {
 			    // faied; don't clear status if it's still suspended
 			    continue;
 			}
+			if (name.endsWith("-suspended")) {
+			    var newname = name.substring(0,name.length() - "-suspended".length());
+			    logger.info("ipa group-mod " + name + " --rename " + newname);
+			    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--rename", newname}, env) != 0) {
+				logger.error("unable to rename " + name + " to " +newname);
+				continue;
+			    }
+			    // this is a bad combination. suspended has been removed but hasn't bee renamed
+			}
+
+			    
 		    }
 
 		    //  If we warned them, rename the warning to done
@@ -344,27 +360,24 @@ public class Cleanup {
 
 		if (warningType == WarningType.CLOSE) {
 		    text.append("Because you have not responded to the previous warnings, this group\n");
-		    text.append("is being suspended. Please respond to " + config.helpmail + " to\n");
-		    text.append("reactivate it.\n");
+		    text.append("is being suspended.\n");
 		    text.append("\n");
-		    text.append("Users who were in this group may no longer be authorized to\n");
-		} else {
-		    text.append("Please go to the account management application at\n");
-		    text.append("   " + config.reviewurl + "\n");
-		    text.append("\n");
-		    text.append("* Choose \"Group and Guest Management.\"\n");
-		    text.append("* Once you have logged in, you will see a list of all the groups you\n");
-		    text.append("  control. Some of them will be marked \"Needs review.\" \n");
-		    text.append("  For each group that needs review, click on the group.\n");
-		    text.append("* Review the users currently in the group, removing any than no longer\n");
-		    text.append("  need access to these systems, using the red X icon\n");
-		    text.append("* Once the group membership is correct, click on the button labelled\n");
-		    text.append("  \"Confirm Membership.\"\n");
-		    text.append("* If you no longer have any users you need to authorize, you may remove the\n");
-		    text.append("  group entirely, using the red X in the main list of groups.\n");
-		    text.append("\n");
-		    text.append("When you remove users from the group, they may no longer be authorized to\n");
 		}
+		text.append("Please go to the account management application at\n");
+		text.append("   " + config.reviewurl + "\n");
+		text.append("\n");
+		text.append("* Choose \"Group and Guest Management.\"\n");
+		text.append("* Once you have logged in, you will see a list of all the groups you\n");
+		text.append("  control. Some of them will be marked \"Needs review.\" \n");
+		text.append("  For each group that needs review, click on the group.\n");
+		text.append("* Review the users currently in the group, removing any than no longer\n");
+		text.append("  need access to these systems, using the red X icon\n");
+		text.append("* Once the group membership is correct, click on the button labelled\n");
+		text.append("  \"Confirm Membership.\"\n");
+		text.append("* If you no longer have any users you need to authorize, you may remove the\n");
+		text.append("  group entirely, using the red X in the main list of groups.\n");
+		text.append("\n");
+		text.append("When you remove users from the group, they may no longer be authorized to\n");
 		text.append("login. If so, we will warn them via email, giving them " + config.warningdays + " days to\n");
 		text.append("move any information that they are going to need.\n");
 
@@ -381,6 +394,16 @@ public class Cleanup {
 			    logger.error("unable to add businesscategory=suspended to " + name);
 			    continue;   // don't notify if it fails
 			}
+
+			// should be impossible, but don't create -suspended-suspended
+			if (! name.endsWith("-suspended")) {
+			    logger.info("ipa group-mod " + name + " --rename " + name + "-suspended");
+			    if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--rename", name + "-suspended"}, env) != 0) {
+				logger.error("unable to rename group to " + name + "-suspended");
+				continue;   // don't notify if it fails
+			    }
+			}
+
 		    }
 		}
 

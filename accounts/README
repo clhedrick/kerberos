@@ -165,6 +165,10 @@ must to able to remove that hostgroup.
   role Rutgers group selfmanaged
      services HTTP/services.cs.rutgers.edu and test-services
 
+create permission: Rutgers do all to group
+   click "all" for granted rights. nothing else
+Add this permission to Privilege Group Administrators.
+this is neded to allow rename of group to group-suspeneded and back
 
 Also, to update the firewall on the kerberos servers, the host running
 this must be allowed to ssh to the firewall. The user syncipt on each

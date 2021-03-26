@@ -580,7 +580,18 @@ public class GroupController {
 		if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--delattr=businesscategory=suspended"}, env) != 0) 
 		    messages.add("Unable to update information to show that group has been validated");
 	    }
+	    if (name.endsWith("-suspended")) {
+		var newname = name.substring(0,name.length() - "-suspended".length());
+		// the owner can do most things to a group, but not rename it. so we need
+		// to use the service ticket
+		String renv[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
 
+		logger.info("ipa group-mod " + name + " --rename " + newname);
+		if (docommand.docommand (new String[]{"/bin/ipa", "group-mod", name, "--rename", newname}, renv) != 0) {
+		    messages.add("Unable to rename " + name + " to " +newname);
+		}
+		// this is a bad combination. suspended has been removed but hasn't bee renamed
+	    }
 	    return groupGet(name, request, response, model);	
 	}
 
