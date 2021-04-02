@@ -210,3 +210,8 @@ patch for the LDAP server.
 
 This has nothing to do with Kerberos. It is a patch to rpc.rquotad to support quotas for ZFS file systems. 
 This particular version supports just ZFS, though supporting a mix of file system types would be easy.
+
+## svcgssd
+
+Fixes a bug that causes group changes not to show up on Kerberized NFS servers
+
