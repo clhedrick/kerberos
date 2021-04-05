@@ -78,9 +78,10 @@ usage(char *name)
 }
 
 static int
-net_read(int fd, char *buf, int len)
+net_read(int fd, char *buf, unsigned int len)
 {
-    int cc, len2 = 0;
+    int cc;
+    unsigned len2 = 0;
 
     do {
         cc = SOCKET_READ((SOCKET)fd, buf, len);
@@ -163,7 +164,7 @@ main(int argc, char *argv[])
     struct sockaddr * peername = (struct sockaddr *)&peername_storage;
     GETPEERNAME_ARG3_TYPE  namelen = sizeof(peername);
     int sock = -1;                      /* incoming connection fd */
-    short xmitlen;
+    unsigned short xmitlen;
     krb5_error_code retval;
     krb5_principal server;
     char *service = "mkhomedird";
@@ -294,6 +295,10 @@ main(int argc, char *argv[])
             i++;
     }
     homedirs = malloc(sizeof(char *) * (i + 1));
+    if (!homedirs) {
+        mylog(LOG_ERR, "malloc failed\n");
+        exit(1);
+    }
     i = 0;
     for (cp = strtok(homedirstr, ", "); cp; cp = strtok(NULL, ", ")) {
         homedirs[i] = cp;
@@ -514,14 +519,16 @@ main(int argc, char *argv[])
             zfs_handle_t *zh = zfs_open(libh, zfsfs, ZFS_TYPE_FILESYSTEM);
             char *quotaattr = NULL;
             if (zh) {
-                (void)asprintf(&quotaattr, "userquota@%s", username);
-                mylog(LOG_DEBUG, "zfs set %s=%s %s", quotaattr, quota, zfsfs);
-                zfs_prop_set(zh, quotaattr, quota);
+                if (asprintf(&quotaattr, "userquota@%s", username) > 0) {
+                    mylog(LOG_DEBUG, "zfs set %s=%s %s", quotaattr, quota, zfsfs);
+                    zfs_prop_set(zh, quotaattr, quota);
+                }
                 zfs_close(zh);
             }
             libzfs_fini(libh);
             
-            free(quotaattr);
+            if (quotaattr)
+                free(quotaattr);
             free(zfsfs);
             free(quota);
         }
