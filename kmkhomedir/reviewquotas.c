@@ -44,11 +44,20 @@ struct quotaspec {
   struct quotaspec *next;
 };
 
+struct userlist {
+  uid_t rid;
+  struct userlist *next;
+};
+struct userlist *userlist;
+
 // args for callback
 struct argb {
   struct quotaspec *qlist;
   zfs_handle_t *zh;
 };
+
+// for printing
+char *filesysname;
 
 // called for each user with an existing quota on a file system
 // this is where we look at current quota,
@@ -61,6 +70,7 @@ struct argb {
 int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
     uint64_t base = 0L;
     uint64_t incr = 0L;
+    uint64_t amount = 0L;
     int ngroups = 0;
 
     // get actual args out of the struct
@@ -68,12 +78,23 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
     struct quotaspec *quotalist = argp->qlist;
     zfs_handle_t *zh = argp->zh;
 
+    struct userlist *next;
+    // remove this uid from userlist, since we've seen them
+    // set the uid to "nobody", which we won't try to set a quota for
+    for (next = userlist; next; next = next->next) {
+      if (next->rid == rid) {
+	next->rid = 65534;
+	break;
+      }
+    }
+      
+
     // rid is the user with the existing quota
     struct passwd* pw = getpwuid(rid);
     if(pw == NULL){
       return(0);
     }
-    
+
     // now look at quota specs to compute desired
     // quota for this user
     // for quotas without +, pick the largest one for this user. That's base
@@ -81,12 +102,19 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
     struct quotaspec *q = quotalist;
     int found = 0;
     while (q) {
+      amount = q->amount;
+      // for comparisons to work, turn 0 into explicit infininty
+      if (amount == 0)
+	amount = -1L;
       if (q->user) {
 	if (strcmp(q->user, pw->pw_name) == 0) {
+	  if (q->isplus)
+	    incr += q->amount;
 	  // for user, use this exact amount
-	  base = q->amount;
-	  incr = 0L;
-	  break;
+	  else {
+	    base = amount;
+	    break;
+	  }
 	}
 	// finished with this spec
 	// will fall through to next iteration
@@ -94,8 +122,8 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
 	// default applies to everyone
 	if (q->isplus)
 	  incr += q->amount;
-	else if (q->amount > base)
-	  base = q->amount;
+	else if (amount > base)
+	  base = amount;
       } else {
 	// the quota spec has a group. see if this person
 	// is a member of the group
@@ -108,8 +136,8 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
 	      // yes, process the amount
 	      if (q->isplus)
 		incr += q->amount;
-	      else if (q->amount > base)
-		base = q->amount;
+	      else if (amount > base)
+		base = amount;
 	      break;
 	    }
 	  }
@@ -119,7 +147,13 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
     }
 
     // compute desired quota
-    uint64_t desired = base + incr;
+    uint64_t desired = base;
+    // if explicit infinity use 0 and don't add incr
+    if (base == -1)
+      desired = 0;
+    // otherwise add incr
+    else
+      desired = desired + incr;
     // the current quota is in spae
 
 #ifdef DEBUG    
@@ -133,7 +167,7 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
       (void)asprintf(&quotaattr, "userquota@%s", pw->pw_name);
       // quotas internally are actually 64-bit integers
       (void)asprintf(&quotastr, "%lu", desired);
-      printf("setting %s %s\n ", quotaattr, quotastr);
+      printf("zfs set %s %s %s\n", quotaattr, quotastr, filesysname);
       zfs_prop_set(zh, quotaattr, quotastr);
       free(quotaattr);
       free(quotastr);
@@ -141,6 +175,15 @@ int us_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
 
     return (0);
 }
+
+int uslist_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
+  struct userlist *next = malloc(sizeof(struct userlist));
+  next->rid = rid;
+  next->next = userlist;
+  userlist = next;
+  return(0);
+}
+  
 
 // we're looping through file systems in /etc/quotas.conf
 // once we have all the info for a file system, call this
@@ -161,6 +204,7 @@ void procfs(libzfs_handle_t *libzh, char *dirname, char *filesys, struct quotasp
     fprintf(stderr, "not able to open file system %s\n", filesys);
     exit(1);
   }
+  filesysname = filesys;
 
   // for debugging, print the quota specifications for this file system
 #ifdef DEBUG    
@@ -185,10 +229,35 @@ void procfs(libzfs_handle_t *libzh, char *dirname, char *filesys, struct quotasp
   argb.qlist = quotalist;
   argb.zh = zh;
 
+  // loop over all users with existing space. We need this to find
+  // users with space but no quota
+  userlist = NULL;
+  zfs_userspace(zh, ZFS_PROP_USEROBJUSED, uslist_callback, &argb);
+
   // loop over all users with existing quotas on this file system
   // calls us_callback for each one, passing the quota info
   // and argb
   zfs_userspace(zh, ZFS_PROP_USERQUOTA, us_callback, &argb);
+
+  // now loop over users with space but no quotas
+  struct userlist *next;
+  for (next = userlist; next; next = next->next) {
+    // "nobody" means we've already seen this user
+    // also don't set quotas for sysem users (< 1000)
+    if (next->rid != 65534 && next->rid >= 1000) {
+      // don't have a quota yet, so current is 0
+      us_callback(&argb, "", next->rid, 0L);
+    }
+  }
+
+  // now free userlist
+  next = userlist;
+  while (next) {
+    struct userlist *lookahead = next->next;
+    free(next);
+    next = lookahead;
+  }
+  userlist = NULL;
 
   zfs_close(zh);
 
