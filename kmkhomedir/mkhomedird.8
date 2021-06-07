@@ -21,9 +21,11 @@ form prefix/username. Prefix is checked against a list in
 .nf
 [appdefaults]
 mkhomedird = {
-     homedirs=/home1,/home2
+     homedirs=/home1,/home2:755
 }
 .fi
+Note that the directory permission may be specified. If not, 700 is used. This
+interactions with the pam process, so you may need to specify a umask there also.
 .PP
 Where NFS mounts aren't reliable, sometimes a user will login when the file system isn't
 mounted. To avoid creating directories on top of the mount point,
@@ -34,7 +36,7 @@ To configure this, use the testfile option in appdefaults. E.g.
 .nf
 [appdefaults]
 mkhomedird = {
-     homedirs=/home1,/home2
+     homedirs=/home1,/home2:755
      testfile = MOUNTED
 }
 .fi

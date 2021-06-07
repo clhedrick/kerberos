@@ -188,6 +188,7 @@ main(int argc, char *argv[])
     char **homedirs = NULL;
     char *cp;
     char *testfile = NULL;
+    char *permstr = NULL;
 
     // in case we're run by a user from the command line, get a known environment
     clearenv();
@@ -458,8 +459,19 @@ main(int argc, char *argv[])
 
     // now compare directory prefix with legal ones.
     for (i = 0; homedirs[i]; i++) {
-        if (strcmp(homedirs[i], directory) == 0)
-            break;
+        char *sp;
+        sp = strchr(homedirs[i], ':');
+        if (sp == NULL) {
+            if (strcmp(homedirs[i], directory) == 0) {
+                permstr = "0700"; // defailt perm
+                break;
+            }
+        } else {
+            if (strncmp(homedirs[i], directory, sp - homedirs[i]) == 0) {
+                permstr = sp + 1;
+                break;
+            }
+        }
     }
     if (homedirs[i] == NULL) {
         // search went off send, i.e. not found
@@ -486,7 +498,10 @@ main(int argc, char *argv[])
     // put back the / between prefix and username, we turned into into nul above
     *cp = '/'; 
 
-    i = mkdir(directory, 0700);
+    // use the mode specified
+    umask(0);
+    i = mkdir(directory, (mode_t)strtol(permstr, NULL, 8));
+    //    printf("directory %s permstr %s perm %d err %d\n", directory, permstr, (mode_t)strtol(permstr, NULL, 8), errno);
     if (i && errno != EEXIST) {
         message = strerror(errno);
         goto done;
