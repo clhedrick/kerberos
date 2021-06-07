@@ -42,8 +42,13 @@ mkhomedird = {
 The testfile shouldn't have a directory in front of it. It will be assumed to be
 present anywhere that has user home directories. This feature is present in both
 the server and pam_kmkhomedir. It makes sense to configure it both places.
+.PP
+If the file system uses ZFS, mkhomedird will set a quota for the 
+user. The quota is specified in quotas.conf. If this program is used
+for a ZFS file system, you should also run reviewquotas as a cron job,
+in case group memberships or policies change.
 .SH "SEE ALSO"
-pam_kmkhomedir(8)
+pam_kmkhomedir(8), quotas.conf(5)
 .SH "NOTES"
 .PP
 /etc/krb5.keytab must have an entry for the service principal, which

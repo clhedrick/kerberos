@@ -1,0 +1,14 @@
+.TH MKHOMEDIRD 8
+.SH NAME
+reviewquotas \- adjust quotas for ZFS file sysetm
+.SH SYNOPSIS
+.B reviewquotas
+[ -d ]
+.SH DESCRIPTION
+.I reviewquotas
+reads /etc/quotas.conf and then reviews all users on
+the ZFS file systems specified there. If their quotas
+are wrong it adjusts them.
+.PP
+.SH "SEE ALSO"
+quotas.conf(5)

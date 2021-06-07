@@ -1,0 +1,10 @@
+[Unit]
+Description=Makehomedirectory Daemon for Kerberized users called by pam_kmkhomedir
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/mkhomedird
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
