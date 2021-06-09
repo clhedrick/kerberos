@@ -26,8 +26,7 @@ used, so you could have a different section for /common/home/shared.
 The more specific section should be first.
 .PP
 The ":fs" attribute is the ZFS file system where the quota
-should be set. That's normally the ZFS file system where
-that directory is mounted.
+should be set. 
 .PP
 The quota is computed as a base plus adjustments. The base
 typicaly depends upon the type of user. Undergrads and faculty
@@ -47,3 +46,6 @@ syntax is @GROUP=+QUOTA or USER=+QUOTA, where the GROUP and QUOTA are as above.
 Lines starting with # are comments, and are ignored. Blank lines
 are ignored. Whitespace may be inserted between elements.
 It is not necessary to restart mkhomedird when the file is changed.
+.PP
+NOTE: 0 means no quota. It overrides other types of adjustment.
+It can be used for both groups and individuals.

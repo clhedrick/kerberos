@@ -310,7 +310,10 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
 	  syslog(LOG_ERR, "integer overflow computing quota");
 	}
       } else {
-	if (amount > base)
+	if (amount == 0)
+	  // explicit infinity
+	  base = -1L;
+	else if (amount > base)
 	  base = amount;
 	if (samount > sbase)
 	  sbase = samount;
@@ -332,11 +335,15 @@ char * getuserquota(libzfs_handle_t *hdl, char *filesys, char *user, char **fsre
   printf("base %lu incr %lu\n", base, incr);
 #endif
 
-  quotaval = base + incr;
-  squotaval = sbase + sincr;
-  if (quotaval < base) {
-    syslog(LOG_ERR, "integer overflow computing quota");
+  if (base == -1)
+    quotaval = 0;
+  else {
+    quotaval = base + incr;
+    if (quotaval < base) {
+      syslog(LOG_ERR, "integer overflow computing quota");
+    }
   }
+  squotaval = sbase + sincr;
   if (squotaval < sbase) {
     syslog(LOG_ERR, "integer overflow computing quota");
   }
