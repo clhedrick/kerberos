@@ -45,6 +45,18 @@ install:: all
 	cp pam_kmkhomedir.so /lib64/security
 	cp pam_kmkhomedir.8 /usr/share/man/man8
 
+installserver:: all
+	install --owner=root --group=root --mode=0755 mkhomedird /usr/sbin/mkhomedird
+	install --owner=root --group=root --mode=0755 reviewquotas /usr/local/sbin/reviewquotas
+	install --owner=root --group=root --mode=0644 mkhomedird.service /etc/systemd/system/mkhomedird.service
+	install --owner=root --group=root --mode=0644 mkhomedird.8 /usr/share/man/man8/mkhomedird.8
+	install --owner=root --group=root --mode=0644 quotas.conf.5 /usr/share/man/man5/quotas.conf.5
+	install --owner=root --group=root --mode=0644 reviewquotas.8 /usr/share/man/man8/reviewquotas.8
+	echo "Your still need to set up /etc/quotas.conf and add an entry to /etc/krb5.conf"
+
+server.tar:: all
+	tar cf server.tar mkhomedird reviewquotas mkhomedird.service mkhomedird.8 quotas.conf.5 reviewquotas.8 Makefile
+
 installu14:: all
 	cp pam_kmkhomedir.so /lib/x86_64-linux-gnu/security/
 	cp pam_kmkhomedir.8 /usr/share/man/man8
