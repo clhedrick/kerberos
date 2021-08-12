@@ -190,6 +190,8 @@ int uslist_callback(void *arg, const char*domain, uid_t rid, uint64_t space) {
 // to process it. this will loop over all users with quotas
 // on the file system and update their quota
 void procfs(libzfs_handle_t *libzh, char *dirname, char *filesys, struct quotaspec* quotalist) {
+  int error = 0;
+
   // probably at end
   if (dirname == NULL && filesys == NULL && quotalist == NULL)
      return;
@@ -232,12 +234,12 @@ void procfs(libzfs_handle_t *libzh, char *dirname, char *filesys, struct quotasp
   // loop over all users with existing space. We need this to find
   // users with space but no quota
   userlist = NULL;
-  zfs_userspace(zh, ZFS_PROP_USEROBJUSED, uslist_callback, &argb);
+  error = zfs_userspace(zh, ZFS_PROP_USEROBJUSED, uslist_callback, &argb);
 
   // loop over all users with existing quotas on this file system
   // calls us_callback for each one, passing the quota info
   // and argb
-  zfs_userspace(zh, ZFS_PROP_USERQUOTA, us_callback, &argb);
+  error = error + zfs_userspace(zh, ZFS_PROP_USERQUOTA, us_callback, &argb);
 
   // now loop over users with space but no quotas
   struct userlist *next;
@@ -260,6 +262,8 @@ void procfs(libzfs_handle_t *libzh, char *dirname, char *filesys, struct quotasp
   userlist = NULL;
 
   zfs_close(zh);
+
+  return error;
 
 }
 
