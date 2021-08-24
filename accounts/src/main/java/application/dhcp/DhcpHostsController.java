@@ -36,6 +36,7 @@ import java.math.BigInteger;
 import java.text.SimpleDateFormat;
 import java.net.UnknownHostException;
 import java.net.InetAddress;
+import java.net.Inet4Address;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -634,9 +635,13 @@ public class DhcpHostsController {
 		    continue;
 		}
 
-		for (var address: addresses)
-		    addrstatement = addrstatement + " " + address.getHostAddress();;
-
+		for (var address: addresses) {
+		    // skip ipv6 addresses, since DHCP only handles v4
+		    if (address instanceof java.net.Inet4Address) {
+			var addressstr = address.getHostAddress();
+			addrstatement = addrstatement + " " + addressstr;
+		    }
+		}
 	    }
 
 	    if (origname != null && !origname.isBlank()) {

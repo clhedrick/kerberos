@@ -120,6 +120,10 @@
         <configuration>
           <source>11</source>
           <target>11</target>
+<compilerArguments>
+    <Xlint:unchecked />
+    <Xlint:deprecation />
+</compilerArguments>
         </configuration>
       </plugin>
       <plugin>
