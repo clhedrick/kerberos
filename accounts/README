@@ -35,6 +35,11 @@ ices /var/www/tomcat/bin/startup.sh
 </Location>
   verify the right alias for localhost6. It's different on centos and ubuntu.
   Also need proxy, proxy.load and proxy_ajp.load
+* Create /var/www/.../html/dhcp with index.html
+<head>
+<meta http-equiv="Refresh" content="0; url=https://services.cs.rutgers.edu/accounts/dhcp/showsubnets" />
+</head>
+* Use letsencrypt to set up sshl
 * rsyslog needs to listen on tcp and udp. In recent versions you have to
   uncomment something in /etc/rsyslog.conf
 
@@ -48,6 +53,7 @@ To install:
 * tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS
   and also -DcasServer=cas.cs.rutgers.edu or test-cas.cs.rutgers.edu
   test-services is only authorized for test-cas, I think
+* install activate in /usr/local/bin. may need to change java location
 
 You can debug .JSP files by editing them directly in tomcat/webapps/ROOT
 However once they work, you must copy them to src/main/webapp/ here, or
