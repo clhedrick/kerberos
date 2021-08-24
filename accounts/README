@@ -23,6 +23,15 @@ ices /var/www/tomcat/bin/startup.sh
    of activate. The big issue with the command line versoin is that the
    oracle jdbc client seems to work differently for web and command line
    environments. The command ine version needs a bunch of shared libraries
+* apache needs 
+<Location "/accounts/">
+   ProxyPass "ajp://ip6-localhost:8009/accounts/"
+</Location>
+  verify the right alias for localhost6. It's different on centos and ubuntu.
+  Also need proxy, proxy.load and proxy_ajp.load
+* rsyslog needs to listen on tcp and udp. In recent versions you have to
+  uncomment something in /etc/rsyslog.conf
+
 
 To install:
 * password database needs to be in tomcat/db. It's built from src/database
