@@ -3,7 +3,8 @@ manager, see README.PROGRAMMING.
 
 -------------
 
-Deploys in tomcat/webapps/ROOT
+Deploys in tomcat/webapps/accounts.war which creates
+tomcat/webapps/account
 
 See INTRO.TOMCAT and INTRO.MAVEN if you don't know the tools
 
@@ -13,6 +14,11 @@ Need
     yum install haveged
     systemctl enable haveged; systemctl start haveged
 * krb5.conf, krb5.keytab, krb5.keytab.services
+   krb5.keytab.services has HTTP/hostname@CS.RUTGERS.EDU
+  but only services.cs.rutgers.edu and test-services.cs.rutgers.edu
+  are authorized. To add a host, you need to have OIT authorize it for CAS,
+  and you have to add various roles. That's described later in this
+  document.
 * /etc/init.d/tomcat uses 
    /bin/k5start -U -f /etc/krb5.keytab.services -K 50 -k /tmp/krb5ccserv
 ices /var/www/tomcat/bin/startup.sh 
@@ -41,6 +47,7 @@ To install:
 -- or use ./build and ./install
 * tomcat/bin/setenv.sh needs -DserverName=services.cs.rutgers.edu or whatever hostname needs to be used with CAS
   and also -DcasServer=cas.cs.rutgers.edu or test-cas.cs.rutgers.edu
+  test-services is only authorized for test-cas, I think
 
 You can debug .JSP files by editing them directly in tomcat/webapps/ROOT
 However once they work, you must copy them to src/main/webapp/ here, or
