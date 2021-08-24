@@ -93,7 +93,7 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
   
   // now have a zfs file system, filesys
   // see if it is in /etc/quotas.conf. Only report quotas if so
-  if (regcomp(&fs_pat, "^[ \t]*fs[ \t]*=[ \t]*([-a-zA-Z/0-9_+]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
+  if (regcomp(&fs_pat, "^[ \t]*:fs[ \t]*=[ \t]*([-a-zA-Z/0-9_+]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
     fprintf(stderr, "Can't compile fs_pat");
     goto out;
   }
