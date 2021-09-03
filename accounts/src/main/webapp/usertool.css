@@ -3,9 +3,10 @@ body {
   font-family: helvetica, arial
 }
 #masthead {
+  background-position: 13px 6px;
   background-image: url(red_banner2.png);
   background-repeat: no-repeat;
-  background-size: 346.43px 100px;
+  background-size: 660px 77px;
   background-color: rgb(204,0,41);
   height:100px;
 }
