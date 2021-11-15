@@ -21,7 +21,7 @@ package common;
 import java.io.*;
 import javax.servlet.jsp.JspWriter;
 import java.io.PrintStream;
-import org.apache.commons.lang3.StringEscapeUtils;
+import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import java.util.Arrays;

@@ -87,7 +87,7 @@ public class ActivateController {
 	boolean ok = User.doUser(username, null, null, null, cluster, false, false, false, true);
 	if (ok && utils.needsPassword(username)) {
 	    try {
-		response.sendRedirect("../changepass/changepass?cluster=" + URLEncoder.encode(cluster));
+		response.sendRedirect("../changepass/changepass?cluster=" + URLEncoder.encode(cluster, "UTF-8"));
 	    } catch (Exception e) {}
 	}
 

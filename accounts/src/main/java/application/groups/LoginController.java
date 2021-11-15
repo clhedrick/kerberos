@@ -380,6 +380,10 @@ public class LoginController {
 	var authType = request.getAuthType();
 	String user = null;
 
+	System.out.println("remoteUser " + remoteUser);
+	System.out.println("authType " + authType);
+	System.out.println("negotiateHeader " + negotiateHeader);
+
 	// See if we have valid GSSAPI authentication
 	// Authtype means the mod_auth_gssapi auth works, in which case
 	//    we have a credential cache to copy

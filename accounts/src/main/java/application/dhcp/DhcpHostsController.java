@@ -192,7 +192,7 @@ public class DhcpHostsController {
 	// that Subject.
 
 	Config conf = Config.getConfig();
-	var privs = (Set<String>)request.getSession().getAttribute("privs");
+	var privs = (Set<?>)request.getSession().getAttribute("privs");
 	
 	Subject subject = (Subject)request.getSession().getAttribute("krb5subject");
 	if (subject == null) {
@@ -470,13 +470,13 @@ public class DhcpHostsController {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
-	((List<String>)model.asMap().get("messages")).clear();
+	((List<?>)model.asMap().get("messages")).clear();
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
 
 	Config conf = Config.getConfig();
-	var privs = (Set<String>)request.getSession().getAttribute("privs");
+	var privs = (Set<?>)request.getSession().getAttribute("privs");
 
 
 	// user has asked to modify subnets but doesn't have permission

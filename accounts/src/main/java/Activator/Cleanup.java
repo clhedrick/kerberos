@@ -214,9 +214,9 @@ public class Cleanup {
 		Path warningClosePath = Paths.get(config.reviewdir + "/" + warnname + ":close");
 		Path warningDonePath = Paths.get(config.reviewdir + "/" + warnname + ":done");
 
-		Integer reviewTime = new Integer(config.reviewtime);
-		Integer review2ndWarning = new Integer(config.review2ndwarning);
-		Integer reviewCloseWarning = new Integer(config.reviewclose);
+		Integer reviewTime = Integer.parseInt(config.reviewtime);
+		Integer review2ndWarning = Integer.parseInt(config.review2ndwarning);
+		Integer reviewCloseWarning = Integer.parseInt(config.reviewclose);
 
 		boolean warned = Files.exists(warningPath);
 		boolean warned2 = Files.exists(warning2Path);

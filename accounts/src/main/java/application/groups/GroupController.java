@@ -242,7 +242,7 @@ public class GroupController {
 	Map<String,String> memberNames = new HashMap<String,String>();
 	boolean needsReview = false;
 
-	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
+	Set<?>privs = (Set<?>)request.getSession().getAttribute("privs");
 	boolean isLoginManager = privs.contains("loginmanager");
 
 	// want to use the same context for a number of operations
@@ -353,7 +353,7 @@ public class GroupController {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
-	((List<String>)model.asMap().get("messages")).clear();
+	((List<?>)model.asMap().get("messages")).clear();
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
@@ -413,7 +413,7 @@ public class GroupController {
 
 	// if they aren't login manager, don't change login settings
 	// ldap wouldn't let us do it, but don't want error messages
-	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
+	Set<?>privs = (Set<?>)request.getSession().getAttribute("privs");
 	boolean isLoginManager = privs.contains("loginmanager");
 
 	boolean ok = true;

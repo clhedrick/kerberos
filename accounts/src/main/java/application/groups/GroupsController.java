@@ -110,7 +110,7 @@ public class GroupsController {
 
 	Subject.doAs(subject, action);
 
-	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
+	Set<?>privs = (Set<?>)request.getSession().getAttribute("privs");
 	if (action.val.size() == 0 && !(privs.contains("addgroup"))) {
 	    List<String> messages = new ArrayList<String>();
 	    messages.add("There are no groups you can manage");
@@ -150,14 +150,14 @@ public class GroupsController {
 
 	List<String>messages = new ArrayList<String>();
 	model.addAttribute("messages", messages);
-	((List<String>)model.asMap().get("messages")).clear();
+	((List<?>)model.asMap().get("messages")).clear();
 
 	Logger logger = null;
 	logger = LogManager.getLogger();
 
 	Config conf = Config.getConfig();
 
-	Set<String>privs = (Set<String>)request.getSession().getAttribute("privs");
+	Set<?>privs = (Set<?>)request.getSession().getAttribute("privs");
 	// user has asked to add group but doesn't have permission
 	// actually, the ACIs should prohibit this anyway
 	if (name != null && !"".equals(name) && !(privs.contains("addgroup"))) {

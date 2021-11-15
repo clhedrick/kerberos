@@ -252,7 +252,7 @@ public class utils {
 	if (reviewtime == null)
 	    return false;
 
-	Integer reviewDays = new Integer(reviewtime);
+	Integer reviewDays = Integer.parseInt(reviewtime);
 
 	// only review login groups
 	if (! lu.valList(attrs.get("businesscategory")).contains("login"))
