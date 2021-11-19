@@ -192,6 +192,14 @@ create permission: Rutgers do all to group
 Add this permission to Privilege Group Administrators.
 this is neded to allow rename of group to group-suspeneded and back
 
+Ansible script checks to see whether the right setup has been
+done for a host. To do that, coresysadmins must have role
+create role Rutgers: coresysadmins
+add to coresysadmins
+create privilege: Rutgers: Read Service Delegations
+add to Rutgers: coresyadmins
+add permission System: Read Service Delegations
+
 Also, to update the firewall on the kerberos servers, the host running
 this must be allowed to ssh to the firewall. The user syncipt on each
 Kerberos server must list http/services.cs.rutgers.edu in .k5login.
