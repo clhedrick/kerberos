@@ -79,6 +79,9 @@ data_eq_string (krb5_data d, const char *s)
 krb5_boolean is_local_tgt (krb5_principal princ, krb5_data *realm);
 
 /* Return true if princ is the local krbtgt principal for local_realm. */
+// The previous line is the official definition. What this is really
+// used for is going through the credentials in a credential cache
+// and picking out the TGT.
 krb5_boolean
 is_local_tgt(krb5_principal princ, krb5_data *realm)
 {
@@ -89,13 +92,24 @@ is_local_tgt(krb5_principal princ, krb5_data *realm)
 
 #define RENEWDCCS "/run/renewdccs/"
 
+// touch a file in /run/renewdccs with the same name as the cache, e.g.
+//   /run/renewdccs/KEYRING:persistent:1003:krb_ccache_BEBVrkP
+// If the credential cache has a / in it, change it to \, e.g.
+//   /run/renewdccs/FILE:\tmp\krb5cc_1002_0s1VcT
+// Renewd wants to kill credentials for users who are no longer
+// logged in. But there's no practical way it can find all credentials.
+// So login and cron register credentials by touching these files.
+// Renewd can then check whether the credentials are still needed,
+// and delete them if not.
+
 void register_for_delete(pam_handle_t *pamh, const char *cache, uid_t uid) {
   char *newname;
   const char *cp;
   char *cp2;
   int fd;
+  char ch;
 
-  newname = malloc(strlen(cache) + strlen(RENEWDCCS) + 1);
+  newname = (char *)malloc(strlen(cache) + strlen(RENEWDCCS) + 1);
 
   strcpy(newname, RENEWDCCS);
   cp2 = newname + strlen(RENEWDCCS);
@@ -104,16 +118,21 @@ void register_for_delete(pam_handle_t *pamh, const char *cache, uid_t uid) {
 
   cp = cache;
 
-  while (*cp) {
-    char ch = *cp;
+  // copy the cache name, turning / into \
+  // this is not the most elegant code, but "while (*cp)" triggers a GCC bug
+  ch = *cp;
+  while (ch) {
     if (ch == '/')
       *cp2 = '\\';
     else
       *cp2 = ch;
     cp++;
     cp2++;
+    ch = *cp;
   }
   *cp2 = '\0';
+
+  // touch the file
   fd = open(newname, O_CREAT|O_WRONLY, 0600);
   if (fd < 0 && errno == ENOENT) {
     fd = mkdir(RENEWDCCS, 0700);
@@ -132,102 +151,6 @@ void register_for_delete(pam_handle_t *pamh, const char *cache, uid_t uid) {
   dprintf(fd, "%lu\n", (unsigned long)uid);
   free(newname);
   close(fd);
-}
-
-// for names like /run/user/%U/krbcc_%U 
-// make need to create directory, but only if it's user-specific
-
-void
-assure_dir(char *template, char *filename, struct passwd *pwd) {
-  char *cp;
-  char *lastslash = NULL;
-  char *nexttolastslash = NULL;
-  int ok = 0;
-  int err;
-
-  // first, see if there's a % in the last directory compontent
-  // if so, that's a user-specific directory, and we're willing to
-  // create it. Otherwise, nothing we can do.
-
-  for (cp = template; *cp; cp++) {
-    if (*cp == '/') {
-      nexttolastslash = lastslash;
-      lastslash = cp;
-    }
-  }
-  // is there a % between next to last and last?
-  if (lastslash && nexttolastslash) {
-    cp = strchr(nexttolastslash, '%');
-    if (cp < lastslash)
-      ok = 1;
-  }
-  
-  // if not, nothing to do
-  if (!ok)
-    return;
-
-  // there is. need to check the directory
-  
-  // get directory, by cutting off at least /
-  cp = strrchr(filename, '/');
-  *cp = '\0';
-  if (mkdir(filename, 0700)) {
-    // nothing to do
-    *cp = '/';
-    return;
-  }
-  // created it, set owner
-  chown(filename, pwd->pw_uid, pwd->pw_gid);
-  *cp = '/';
-
-}
-
-char *
-build_cache_name(char *arg, uid_t uid, const char *username)
-{
-    char *cache_name = NULL;
-    int retval;
-    size_t len = 0, delta;
-    char *p, *q;
-
-    // compute length of final product
-    for (p = arg; *p != '\0'; p++) {
-      if (p[0] == '%' && p[1] == 'U') {
-	len += snprintf(NULL, 0, "%ld", (long) uid);
-	p++;
-      } else if (p[0] == '%' && p[1] == 'u') {
-	len += snprintf(NULL, 0, "%s", username);
-	p++;
-      } else {
-	len++;
-      }
-    }
-    len++;
-
-    // now do it for real
-    cache_name = malloc(len);
-    if (cache_name == NULL) {
-      return NULL;
-    }
-    for (p = arg, q = cache_name; *p != '\0'; p++) {
-      if (p[0] == '%' && p[1] == 'U') {
-	delta = snprintf(q, len, "%ld", (long) uid);
-	q += delta;
-	len -= delta;
-	p++;
-      } else if (p[0] == '%' && p[1] == 'u') {
-	delta = snprintf(q, len, "%s", username);
-	q += delta;
-	len -= delta;
-	p++;
-      } else {
-	*q = *p;
-	q++;
-	len--;
-      }
-    }
-    *q = '\0';
-    return cache_name;
 }
 
 PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, const char **argv) {
@@ -266,6 +189,20 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
 
   pam_syslog(pamh, LOG_INFO, "registering ccname %s", ccname);
 
+  // arguments:
+  // usecollection - probably should be set. If KRB5CCNAME is
+  //   set to a specific cache, change it to the collection,
+  //   assuming collections are supported for that cache type.
+  //   I.e. change KEYRING:persistent:1003:krb_ccache_LfuILAO
+  //   to KEYRING:persistent:1003. But no change for files in /tmp
+  // usedefaultname - if KRB5CCNAME isn't set, set it to the
+  //   the default ccname from /etc/krb5.conf. Renewd 
+  //   looks at KRB5CCNAME for all processes on the sytem so it
+  //   knows what credential caches are in use. If KRB5CCNAME isn't
+  //   set, renewd might fail to renew the credentials. If your
+  //   version of sshd doesn't set KRB5CCNAME you should probably
+  //   set this
+
   for (i = 0; i < argc; i++) {
     if (strcmp(argv[i], "usecollection") == 0)
       usecollection = 1;
@@ -278,9 +215,19 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     return PAM_SUCCESS;  // nothing to do
 
   // generally credentials will be set up by sssd, pam_krb5, or sshd
-  // in all of those cases we want the usual code. However pam_kgetcred
+  // in all of those cases we want to move the credetials if they're not
+  // in the right place. But we don't want to do this for cron jobs.
+  // pam_kgetcred
   // will put credentials in /tmp, and we want them to stay there even
-  // if the default is keyring. So iscron really means is_kgetcred
+  // if the default is keyring. So iscron really means that credentials
+  // were set by pam_kgetcred. We want to leave them in /tmp so credentials
+  // for cron jobs don't interact with the normal interactive
+  // credentials in KEYRING. If you set your primary credential to
+  // user-admin in an interactive sesion, we don't want cronjobs to fail 
+  // because they see the wrong credentials.
+
+  // pam_kgetcred sets an internal pam attribute kgetcred_test
+
   if (pam_get_data(pamh, "kgetcred_test", &getcred) == PAM_SUCCESS)
     iscron = 1;
 
@@ -316,9 +263,12 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     setresgid(pwd->pw_gid, pwd->pw_gid, -1);
     setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
-    // since no KRB5, it means our default ccache
+    // since no KRB5CCNAME, credentials are in our default ccache
+    // in theory this might give us a cache that doesn't actually exist
+    // no point registering that
     ret = krb5_cc_default(context, &firstcache);
     if (ret == 0) 
+      // we don't need the result. This call is done just to see if the cache exists
       ret = krb5_cc_get_principal(context, firstcache, &userprinc);
     if (ret == 0)
       // we have an actual cache
@@ -341,7 +291,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     setresgid(oldgid, oldgid, -1);
 
     if (!ccname) {
-      // no name, nothing to do
+      // no credential cache, nothing to do. This process apparently has no kerberos credentials
       // this is considered normal. it's for root cron jobs, etc.
       krb5_free_context(context);
       pam_syslog(pamh, LOG_INFO, "no KRB5CCNAME nor default cache for uid %lud", olduid);
@@ -367,8 +317,13 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // fancy normalization code for the check.
   //
 
+  // krb5_cc_default_name generates a name based on a speficiation in /etc/krb5.conf
+  // It's often something like KEYRING:persistent:%{uid}.  It uses the current uid,
+  // so we have to set it. (We're running as root.)
+
   setresgid(pwd->pw_gid, pwd->pw_gid, -1);
   setresuid(pwd->pw_uid, pwd->pw_uid, -1);
+
   default_name =  krb5_cc_default_name(context);  
 
   setresuid(olduid, olduid, -1);
@@ -393,13 +348,19 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
     int numcolon = 0; 
     char *prop = NULL;
 
+    // this code normally means sshd has put the credentials in a /tmp file, and
+    // the system normally uses KEYRING. Typically we copy the credentials from
+    // the /tmp file to a credential cache in KEYRING.
 
+    // as usual, need the users uid if the kerberos libraries have to generate a ccname
     setresgid(pwd->pw_gid, pwd->pw_gid, -1);
     setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
+    // look up the existing credentials, probably in /krb/krb5cc...
     ret = krb5_cc_resolve(context, ccname, &firstcache);
     if (ret) goto err2;
 
+    // Figure out where to copy them.
     // If possible we reuse an existing cache, if one has the right principal.
     // There is no API call that lets us look only for caches of a specific type. The best we
     // can do is this. We then have to verify that it's the right type. If it's not
@@ -477,8 +438,6 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   if (is_collection(ccname)) {
       krb5_ccache ccache = NULL;
 
-      printf("iscol");
-
       setresgid(pwd->pw_gid, pwd->pw_gid, -1);
       setresuid(pwd->pw_uid, pwd->pw_uid, -1);
 
@@ -507,9 +466,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   } else if (is_collection_type(ccname) && usecollection) {
       // have specific cache
       char *prop = NULL;
-      char *collection = convert_to_collection(ccname, getruid());
-
-      printf("iscol type convert %s to %s", ccname, collection);
+      char *collection = convert_to_collection(ccname, getuid());
 
       // reset environment to collection
       if (asprintf(&prop, "KRB5CCNAME=%s", collection) > 0) {
