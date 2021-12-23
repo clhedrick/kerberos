@@ -50,6 +50,9 @@ import org.springframework.web.servlet.ModelAndView;
 import org.springframework.http.HttpStatus;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.ApplicationContext;
+
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.security.auth.*;
@@ -77,7 +80,13 @@ import application.DhcpHostsController;
 public class LoginController {
 
     @Autowired
-    private DhcpHostsController hostsController;
+    private ApplicationContext appContext;
+
+    // prevent circular reference
+    @Lazy
+    @Autowired
+    // can't autowire directly or it is circular 
+    private DhcpHostsController hostsController = null;
 
     //
     // This code will use GSSAPI if the browser can send it

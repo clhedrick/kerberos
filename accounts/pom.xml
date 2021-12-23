@@ -12,9 +12,14 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>2.5.0</version>
+    <version>2.6.1</version>
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
+
+<!-- log4j vulnerability -->
+  <properties>
+    <log4j2.version>2.17.0</log4j2.version>
+  </properties>
 
   <dependencies>
 <!-- spring-boot-starter-web normally is there anyway. We exclude logging because we want log4j -->
@@ -72,17 +77,17 @@
     <dependency>
       <groupId>org.jasig.cas.client</groupId>
       <artifactId>cas-client-core</artifactId>
-      <version>3.6.2</version>
+      <version>3.6.4</version>
     </dependency>
     <dependency>
       <groupId>org.hsqldb</groupId>
       <artifactId>hsqldb</artifactId>
-      <version>2.6.0</version>
+      <version>2.6.1</version>
     </dependency>
     <dependency>
       <groupId>org.hsqldb</groupId>
       <artifactId>sqltool</artifactId>
-      <version>2.6.0</version>
+      <version>2.6.1</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -110,27 +115,6 @@
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-ldap</artifactId>
     </dependency>
-<!-- for log4j vulnerabiity. should go away with next spring boot update -->
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-core</artifactId>
-      <version>2.17.0</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-api</artifactId>
-      <version>2.17.0</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-slf4j-impl</artifactId>
-      <version>2.17.0</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-jul</artifactId>
-      <version>2.17.0</version>
-    </dependency>
   </dependencies>
 
  <build>
@@ -142,10 +126,10 @@
         <configuration>
           <source>11</source>
           <target>11</target>
-<compilerArguments>
-    <Xlint:unchecked />
-    <Xlint:deprecation />
-</compilerArguments>
+	  <compilerArguments>
+	    <Xlint:unchecked />
+	    <Xlint:deprecation />
+	  </compilerArguments>
         </configuration>
       </plugin>
       <plugin>

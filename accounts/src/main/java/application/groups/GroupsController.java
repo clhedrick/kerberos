@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.ApplicationContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -69,9 +70,10 @@ public class GroupsController {
     @Autowired
     private LoginController loginController;
 
+    // need lazy to prevent circular reference
+    @Lazy
     @Autowired
-    private GroupController groupController;
-
+    private GroupController groupController = null;
 
     public String filtername(String s) {
 	if (s == null)
@@ -242,9 +244,9 @@ public class GroupsController {
 
 	}
 
-	if (added)
-	    return groupController.groupGet(name, request, response, model);	
-	else
+	if (added) {
+	    return groupController.groupGet(name, request, response, model);
+	} else
 	    return groupsGet(request, response, model);
 
     }
