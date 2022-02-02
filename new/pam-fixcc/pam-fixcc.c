@@ -60,6 +60,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *default_realm = NULL;
   const char *default_name = NULL;
   const char *default_type = NULL;
+  const char *this_type = NULL;
   krb5_ccache cachecopy = NULL;
   krb5_ccache firstcache = NULL;
   struct passwd * pwd = NULL;
@@ -109,14 +110,21 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   krb5_cc_close(context, firstcache);
   firstcache = NULL;
 
+  // set firstcache to cache in /tmp
+  ret = krb5_cc_resolve(context, ccname, &firstcache);
+  if (ret) goto err2;
+
+  // if we already have the right kind of cache, nothing to do
+  this_type = krb5_cc_get_type(context, firstcache);
+  if (strcmp(this_type, default_type) == 0) {
+    // they're the same, exit (err2 actually returns success)
+    goto err2;
+  }
+
   // need a principal for the new cache
   ret = krb5_get_default_realm(context, &default_realm);
   if (ret) goto err2;
   ret = krb5_build_principal(context, &userprinc, strlen(default_realm), default_realm, username, NULL);
-  if (ret) goto err2;
-
-  // set firstcache to cache in /tmp
-  ret = krb5_cc_resolve(context, ccname, &firstcache);
   if (ret) goto err2;
 
   // Search all cache collections for this user, looking for one with the specified principal
