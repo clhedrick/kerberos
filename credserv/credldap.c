@@ -235,11 +235,11 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
     }
     resetenv = 1;
 
-    if (asprintf(&putstr, "KRB5CCNAME=MEMORY:%s", krb5_cc_get_name(context, cache)) > 0) {
-        putenv(putstr);
-        free(putstr);
+    if (asprintf(&putstr, "KRB5CCNAME=MEMORY:%s", krb5_cc_get_name(context, cache)) < 0) {
+        mylog(LOG_ERR, "ldap_initialize failed");
     }
-
+            
+    putenv(putstr);
     // can't release this string, as it becomes part of the env
 
     // make sure everything is written before we use it
@@ -273,10 +273,10 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
  ok:
     if (resetenv) {
         if (oldvalcopy) {
-            if (asprintf(&putstr, "KRB5CCNAME=%s", oldvalcopy) > 0) {
-                putenv(putstr); // becomes part of env, don't free it
-                free(putstr);
+            if (asprintf(&putstr, "KRB5CCNAME=%s", oldvalcopy) < 0) {
+                mylog(LOG_ERR, "asprintf failed");
             }
+            putenv(putstr); // becomes part of env, don't free it
             free(oldvalcopy); // but this is no longer needed
         } else {
             unsetenv("KRB5CCNAME");
@@ -312,8 +312,7 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm, char *user, struct 
     krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
 
     if (asprintf(&filter, "(uid=%s)", user) < 0) {
-        mylog(LOG_ERR, "asprintf failed GetLdapData 1");
-        return 1;
+        mylog(LOG_ERR, "asprintf failed");
     }
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
@@ -370,15 +369,14 @@ int isPrived(krb5_context context, LDAP *ld, char* realm, char *userprinc, char 
     if (cp) {
         *cp = '\0';
         if (asprintf(&filter, "(uid=%s)", userprinc) < 0) {
-            mylog(LOG_ERR, "asprintf failed isPrived 1");
-            return 0;
+            mylog(LOG_ERR, "asprintf failed");
         }
         *cp = '@';
     } else
         if (asprintf(&filter, "(uid=%s)", userprinc) < 0) {
-            mylog(LOG_ERR, "asprintf failed isPrived 2");
-            return 0;
+            mylog(LOG_ERR, "asprintf failed");
         }
+
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
         mylog(LOG_ERR, "ldap_search_s failed");
@@ -452,8 +450,7 @@ char *getnetgroup(krb5_context context, LDAP *ld, char *realm, char* netgroup) {
     krb5_appdefault_string(context, "credserv", &realm_data, "altbase", "", &base);
 
     if (asprintf(&filter, "(&(objectclass=ipanisnetgroup)(cn=%s))", netgroup) < 0) {
-        mylog(LOG_ERR, "asprintf failed getnetgroup 1");
-        return NULL;
+        mylog(LOG_ERR, "asprintf failed");
     }
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
@@ -474,8 +471,7 @@ char *getnetgroup(krb5_context context, LDAP *ld, char *realm, char* netgroup) {
             members = ldap_get_values_len(ld, entry, attr);
             if (members[0]) {
                 if (asprintf(&retval, "%s", members[0]->bv_val) < 0) {
-                    mylog(LOG_ERR, "asprintf failed getnetgroup 2");
-                    return NULL;
+                    mylog(LOG_ERR, "asprintf failed");
                 }
             }
         }
@@ -509,8 +505,7 @@ int hostinnetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char
     krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
 
     if (asprintf(&filter, "(&(objectclass=ipahost)(cn=%s))", host) < 0) {
-        mylog(LOG_ERR, "asprintf failed hostinnetgroup 1");        
-        return 0;
+        mylog(LOG_ERR, "asprintf failed");
     }
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
@@ -527,10 +522,8 @@ int hostinnetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char
     }
 
     if (asprintf(&target, "ipaUniqueID=%s,", netgroup) < 0) {
-        mylog(LOG_ERR, "asprintf failed hostinnetgroup 2");
-        return 0;
+        mylog(LOG_ERR, "asprintf failed");
     }
-            
     targetlen = strlen(target);
     for (attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
         if (strcasecmp(attr, "memberOf") == 0) {
@@ -691,8 +684,7 @@ int deleteKeytab(LDAP *ld, char *dn, struct berval **keytab, char *principal) {
     int i;
 
     if (asprintf(&prefix, "%s=", principal) < 0) {
-        mylog(LOG_ERR, "asprintf failed deleteKeytab 1");
-        return 1;
+        mylog(LOG_ERR, "asprintf failed");        
     }
 
     // remove any value for this principal
@@ -796,8 +788,7 @@ int main(int argc, char *argv[]) {
     /* search from this point */
      
     if (asprintf(&filter, "(uid=%s)", targetuser) < 0) {
-        perror("asprintf failed main 1");
-        return 0;
+        mylog(LOG_ERR, "asprintf failed");
     }
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
