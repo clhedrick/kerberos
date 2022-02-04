@@ -275,6 +275,11 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
 
     // uses the callback above to specify the username and realm. Note that the principal (bind_princ) is
     // passes as the application-specific private data. Our callback uses it to get the info it needs.
+    // the callback can prompt for password, but that can't work here. It turns out that they will
+    // use a ticket from KRB5CCNAME, so we make sure that is set up.
+    // Credserv handles each request in a separate process, so that's safe.It doesn't appear that
+    // openldap has a way to pass credentials in other than the enviornment variable.
+    // ldap_sasl_bind_s seems to be able to pass credentials directly, but I couldn't make it work
     ret = ldap_sasl_interactive_bind_s(ld, NULL, "GSSAPI", NULL, NULL, LDAP_SASL_QUIET, ldap_sasl_interact, bind_princ);
     if (ret != LDAP_SUCCESS) {
         mylog(LOG_ERR, "ldap_sasl_bind_s: %s", ldap_err2string(ret));
