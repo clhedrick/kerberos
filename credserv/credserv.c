@@ -418,7 +418,10 @@ main(int argc, char *argv[])
 
     }
 
-    chdir("/tmp"); // should be irrelevant. but just in case
+    if (chdir("/tmp") != 0) { // should be irrelevant. but just in case
+        mylog(LOG_ERR, "chdir /tmp failed");
+    }
+        
     umask(027); // just to get something known, we shouldn't actually create any files
 
     /*
@@ -770,7 +773,10 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     int preflen = strlen(principal) + 1;
     char *impersonate_kt = NULL;
 
-    asprintf(&prefix, "%s=", principal);
+    if (asprintf(&prefix, "%s=", principal) < 0) {
+        mylog(LOG_ERR, "asprintf failed getcreds 1");
+        return GENERIC_ERR;
+    }
 
     // This is the one operation where we don't do permissions
     // checking. The code in the main body verified that the caller
@@ -1346,10 +1352,17 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         char *newrule;
         mylog(LOG_DEBUG, "user %s principal %s host %s not in INDEX, adding", username, principal, hostname);
 
-        if (strcmp(flags, "") != 0)
-            asprintf(&newrule, "%s:%s:%s", hostname, principal, flags);
-        else
-            asprintf(&newrule, "%s:%s", hostname, principal);
+        if (strcmp(flags, "") != 0) {
+            if (asprintf(&newrule, "%s:%s:%s", hostname, principal, flags) < 0) {
+                mylog(LOG_DEBUG, "asprintf registercred 1");
+                return "memory allocation failed";
+            }                
+        } else {
+            if (asprintf(&newrule, "%s:%s", hostname, principal) < 0) {
+                mylog(LOG_DEBUG, "asprintf registercred 1");
+                return "memory allocation failed";
+            }                
+        }
 
         r = addRule(ld, dn, newrule);
 
@@ -1429,7 +1442,11 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         fseek(keytabf, 0, SEEK_SET);  //same as rewind(f);
         
         keydata = malloc(fsize + 1);
-        fread(keydata, fsize, 1, keytabf);
+        if (fread(keydata, fsize, 1, keytabf) != (size_t)fsize) {
+            mylog(LOG_ERR, "unable to read key table");
+            return "unable to read key table";
+        }
+            
         fclose(keytabf);
         unlink(princname);
     
