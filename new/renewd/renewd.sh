@@ -5,6 +5,12 @@
 
 # Have to process KEYRING:persistent and files in /tmp differently
 
+if test "$1" = "-d"; then
+    DEBUG="echo"
+else
+    DEBUG=""
+fi
+
 #### functions common to all credential cache types
 
 # checkrenew - see if a ccache needs renewing
@@ -14,7 +20,7 @@
 function checkrenew() {
    local date ccstart ccend lifetime renewtime now
 
-   date=`klist -c "$1"|grep "krbtgt/CS.RUTGERS.EDU@CS.RUTGERS.EDU"`
+   date=`sudo -n -u "$2" klist -c "$1"|grep "krbtgt/CS.RUTGERS.EDU@CS.RUTGERS.EDU"`
    # get first two items from 
    # 01/26/2022 15:03:37  01/26/2022 22:52:16  krbtgt/CS.RUTGERS.EDU@CS.RUTGERS.EDU
    ccstart=`echo "$date" | awk '{print $1 " " $2}' `
@@ -48,7 +54,7 @@ function checkrenew() {
 function checkexpired() {
    local date ccstart ccend lifetime renewtime now
 
-   date=`klist -c "$1"|grep "krbtgt/CS.RUTGERS.EDU@CS.RUTGERS.EDU"`
+   date=`sudo -n -u "$2" klist -c "$1"|grep "krbtgt/CS.RUTGERS.EDU@CS.RUTGERS.EDU"`
    # expiration time as 01/26/2022 22:52:16
    ccend=`echo $date | awk '{print $3 " " $4}'`
    # expiration time in unix seconds since epoch
@@ -75,9 +81,13 @@ function getloggedin() {
 }
 
 getloggedin
-#echo ${!loggedin[@]}
+if test -n "$DEBUG"; then
+    echo ${!loggedin[@]}
+fi
 
 #### handle KEYRING caches
+
+CACHETYPE=`grep '^ *default_ccache_name' /etc/krb5.conf | egrep -o '=.*$' | egrep -o '[^= ]+'`
 
 # has an entry for all uids with keyrings
 declare -a keyusers
@@ -91,9 +101,23 @@ function getkeyusers() {
    done < <(cat /proc/key-users | cut -d: -f1)
 }
 
-getkeyusers
 # echo ${!keyusers[@]}
 
+function getkcmusers() {
+   while read uid; do
+      keyusers[$uid]=1
+   done < <(strings /var/lib/sss/secrets/secrets.ldb | awk '/cn=ccache,cn=[0-9]+,.*,cn=kcm$/{print gensub("^.*cn=ccache,cn=([0-9]*).*$","\\1",1)}')
+}
+
+if test "$CACHETYPE" = "KCM:"; then
+    getkcmusers
+else
+    getkeyusers
+fi
+    
+if test -n "$DEBUG"; then
+    echo ${!keyusers[@]}
+fi
 
 ### main processing loop
 
@@ -102,6 +126,7 @@ getkeyusers
 
 for uid in "${!keyusers[@]}"
 do
+echo checking uid $uid
    # don't do anything to root
    if test "$uid" -eq 0; then
      continue
@@ -109,7 +134,15 @@ do
 
    # use klist -l to list all ccaches for uid
    # klist -l needs KRB5CCNAME set. -c doesn't work in a few cases
-   export KRB5CCNAME=KEYRING:persistent:"${uid}"
+   if test "$CACHETYPE" = "KCM:"; then
+       export KRB5CCNAME="KCM:"
+   else
+       export KRB5CCNAME=KEYRING:persistent:"${uid}"
+   fi
+
+   if test -n "$DEBUG"; then
+       echo $KRB5CCNAME
+   fi
 
    # get username for this uid
    uname=`getent passwd "$uid" | cut -d: -f1`
@@ -119,18 +152,34 @@ do
 
       # use klist -l to list their actual credentials
       while read ccname; do
-	 # if time to renew, do so
-         checkrenew "$ccname"  
-         if test "$renew" -eq 1; then
-            logger -p user.debug -t renew sudo -n -u "$uname" kinit -R -c "$ccname"  
-            logger -p user.info -r renewd renewing cache "$ccname"  
+         echo check logged in $ccname
+	  # check if expired
+         checkexpired "$ccname" "$uname"
+	 if test "$expired" -eq 1; then
+	     $DEBUG logger -p user.debug -t renewd "destroy sudo -n -u $uname kdestroy -R -c $ccname"  
+	     $DEBUG logger -p user.info -t renewd "destroy expired cache $ccname"  
 	    # kinit -R will renew a cache
-	    sudo -n -u "$uname" kinit -R -c "$ccname"  
+	     echo sudo -n -u "$uname" kdestroy -c "$ccname"  
+	     $DEBUG sudo -n -u "$uname" kdestroy -c "$ccname"  
+            continue
+         fi
+
+	 # if time to renew, do so
+         checkrenew "$ccname" "$uname"
+         if test "$renew" -eq 1; then
+	     $DEBUG logger -p user.debug -t renewd "sudo -n -u $uname kinit -R -c $ccname"  
+	     $DEBUG logger -p user.info -t renewd "renewing cache $ccname"  
+	    # kinit -R will renew a cache
+	     echo sudo -n -u "$uname" kinit -R -c "$ccname"  
+	     $DEBUG sudo -n -u "$uname" kinit -R -c "$ccname"  
 	 else
-            logger -p user.debug -t renewd "not time to renew yet $ccname"
+	     $DEBUG logger -p user.debug -t renewd "not time to renew yet $ccname"
          fi
       done < <( sudo -n -u "$uname" klist -l | tail -n +3 | awk '{print $2}' )
    else
+      if test -n "$DEBUG"; then
+          echo not logged in $uid
+      fi
       # not logged in, so kill all their keys
 
       # do they actually have any keys?
@@ -140,16 +189,16 @@ do
 
       # tail gets rid of the header
       # list all ccaches for this user. KRB5CCNAME was set above to the uid
-      creds=`klist -l | tail -n +3`
+      creds=`sudo -n -u "$uname" klist -l | tail -n +3`
       if test -z "$creds"; then
-#         echo no creds for "$uid"
+         echo no creds for "$uid"
          continue
       fi
 
-      logger -p user.info -t renewd Deleted old cache "$uname"
+      $DEBUG logger -p user.info -t renewd "Deleted old cache $uname"
       # kdestroy -A kills all caches for collection in KRB5CCNAME
       # | true suppresses messages about seg faults
-      sudo -n -u "$uname" kdestroy -A | true
+      $DEBUG sudo -n -u "$uname" kdestroy -A | true
    fi
 done
 
@@ -161,17 +210,19 @@ done
 # tempccs is indexed by file name
 # look for all files listed as KRB5CCNAME for some process
 declare -A tempccs
+/proc/*/environ | tr '\000' '\n'| egrep -soh 'KRB5CCNAME=.*' | egrep -o '/tmp/krb5cc.*'
 function gettempinuse() {
    while read file; do
-
        # by doing egrep -i /tmp/krb5cc.*, we ignore any FILE: prefix
        # so we always have a file name
-
        tempccs["$file"]=1
-   done < <(egrep -sohz 'KRB5CCNAME=.*' /proc/*/environ | egrep -o '/tmp/krb5cc.*')
+   done < <(cat /proc/*/environ | tr '\000' '\n'| egrep -soh 'KRB5CCNAME=.*' | egrep -o '/tmp/krb5cc.*')
 }
 
 gettempinuse
+if test -n "$DEBUG"; then
+    echo tempccs ${!tempccs[@]}
+fi
 
 # see if this temp file is in use
 
@@ -195,6 +246,7 @@ function checktempused() {
 # if a user does their own kinit they're on their own
 for ccname in /tmp/krb5cc*
 do
+   echo checking $ccname
    # see who owns the file
    uid=`stat -c '%u' "$ccname"`
 
@@ -210,27 +262,31 @@ do
    checktempused "$ccname"
    if test "$inuse" -eq 0; then
       # not in use by any process. kill it
-      logger -p user.info -t renewd Deleted old cache "$ccname"
+      echo "Deleted cache not in use  $ccname"
+      logger -p user.info -t renewd "Deleted cache not in use $ccname"
       rm "$ccname"
       continue
    fi
+   echo inuse
 
    # if we get here, the ccache is in use. But might
    # still be expired
    # if ccache is expired we can't do anything, so kill it
    # (not needed for keyring, as it removes expired cc's)
-   checkexpired "$ccname"
+   checkexpired "$ccname" "$uname"
    if test "$expired" -eq 1; then
-      logger -p user.info -t renewd Deleted old cache "$ccname"
+      echo "Deleted old cache $ccname"
+      logger -p user.info -t renewd "Deleted old cache $ccname"
       rm "$ccname"
       continue
    fi
 
    # no need to see if user is logged in, since
    # only ccaches in use by someone get to here
-   checkrenew "$ccname"  
+   checkrenew "$ccname" "$uname"
    if test "$renew" -eq 1; then
-      logger -p user.info -t renewd renewing cache "$ccname"  
+      logger -p user.info -t renewd "renewing cache $ccname"  
+      echo sudo -n -u "$uname" kinit -R -c "$ccname"  
       sudo -n -u "$uname" kinit -R -c "$ccname"  
    else
       logger -p user.debug -t renewd "not time to renew yet $ccname"
