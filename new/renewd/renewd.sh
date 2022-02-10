@@ -70,6 +70,18 @@ function checkexpired() {
    fi
 }
 
+function checkprincipal() {
+   local date ccstart ccend lifetime renewtime now
+
+   ccprin=`sudo -n -u "$2" klist -c "$1" | grep "Default principal" | egrep -o '[^ ]+@CS.RUTGERS.EDU'`
+
+   if test "$ccprin" = "$2@CS.RUTGERS.EDU"; then
+      ok=1
+   else
+      ok=0
+   fi
+}
+
 # loggedin is array loggedin[uid] is 1 if user is logged in
 declare -a loggedin
 
@@ -163,6 +175,13 @@ echo checking uid $uid
 	     $DEBUG sudo -n -u "$uname" kdestroy -c "$ccname"  
             continue
          fi
+
+	 # if the pricipal isn't user@CS.RUTGERS.EDU, dont consider renewing
+	 checkprincipal "$ccname" "$uname"
+	 if test "$ok" -eq 0; then
+	     echo cache has wrong principal, ignoring
+	     continue
+	 fi
 
 	 # if time to renew, do so
          checkrenew "$ccname" "$uname"
@@ -279,6 +298,13 @@ do
       logger -p user.info -t renewd "Deleted old cache $ccname"
       rm "$ccname"
       continue
+   fi
+
+   # if the pricipal isn't user@CS.RUTGERS.EDU, dont consider renewing
+   checkprincipal "$ccname" "$uname"
+   if test "$ok" -eq 0; then
+       echo cache has wrong principal, ignoring
+       continue
    fi
 
    # no need to see if user is logged in, since
