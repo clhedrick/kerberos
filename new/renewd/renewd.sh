@@ -99,7 +99,7 @@ fi
 
 #### handle KEYRING caches
 
-CACHETYPE=`grep '^ *default_ccache_name' /etc/krb5.conf | egrep -o '=.*$' | egrep -o '[^= ]+'`
+CACHETYPE=`grep '^[[:space:]]*default_ccache_name' /etc/krb5.conf | egrep -o '=.*$' | egrep -o '[^= ]+'`
 
 # has an entry for all uids with keyrings
 declare -a keyusers
