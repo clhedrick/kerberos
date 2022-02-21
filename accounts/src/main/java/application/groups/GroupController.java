@@ -146,7 +146,8 @@ public class GroupController {
 		logger.info("Sending notification of account creation for " + name + " to " + toaddress);
 		// for testing, can put a test address in conf file. It will
 		// get all email rather than actual user
-		if (!Mail.sendMail(conf.fromaddress, (conf.testaddress == null ? toaddress
+		if (!Mail.sendMail(conf.fromaddress, conf.replytoaddress,
+				   (conf.testaddress == null ? toaddress
 						      : conf.testaddress), parts[0], parts[1])) {
 		    messages.add("Attempt to send mail to " + toaddress + " failed. Please ask the user to go to " + conf.reviewurl + " and use the set password function.");
 		    return null;

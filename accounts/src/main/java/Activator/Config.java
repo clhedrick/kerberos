@@ -58,6 +58,10 @@ public class Config {
     public String createtemplate = "/etc/activator.create";
     public int warningdays = 60;
     public String fromaddress = null;
+    public String replytoaddress = null;
+    public String dkimkey = null;
+    public String dkimselector = null;
+    public String dkimdomain = null;    
     public String reservedgroups = null;
     public String testaddress = null;
     public String mailhost = null;
@@ -192,6 +196,14 @@ public class Config {
 		    }
 		    if (atoms[0].equals("fromaddress"))
 			fromaddress = atoms[1];
+		    if (atoms[0].equals("replytoaddress"))
+			replytoaddress = atoms[1];
+		    if (atoms[0].equals("dkimkey"))
+			dkimkey = atoms[1];
+		    if (atoms[0].equals("dkimselector"))
+			dkimselector = atoms[1];
+		    if (atoms[0].equals("dkimdomain"))
+			dkimdomain = atoms[1];
 		    if (atoms[0].equals("reservedgroups"))
 			reservedgroups = atoms[1];
 		    if (atoms[0].equals("testaddress"))
