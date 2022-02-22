@@ -110,7 +110,10 @@ public class Mail {
     }
 
     public static void main(String [] args) {    
-	sendMail("hedrick@test-services.cs.rutgers.edu", "hedrick@rutgers.edu", "hedrick@cs.rutgers.edu", "test message", "This is a test from java");
+	String from = Config.getConfig().fromaddress;
+	String replyto = Config.getConfig().replytoaddress;
+
+	sendMail(from, replyto, "hedrick@cs.rutgers.edu", "test message", "This is a test from java");
     }
 
 }

@@ -66,6 +66,8 @@ For DKIM:
 text record is
   v=DKIM1;g=*;k=rsa;p=XXX;s=email;t=s
   where XXX is the output of the 3rd openssl command
+     However for 2048 bit keys, it's too long. Split it in 2
+     and add it as "xxxxx""xxxx". Client will concatenate them.
 add it as a text record on email._domainkey.HOSTNAME. that makes "email" the selector
 configuration in /etc/activator.config
   dkimkey /etc/dkim.test-service - this is a copy of dkim.der, the private key
