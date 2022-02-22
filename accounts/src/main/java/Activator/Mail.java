@@ -83,23 +83,13 @@ public class Mail {
 		dkimSigner.setLengthParam(true);
 		dkimSigner.setCopyHeaderFields(false);
 
-		// DkimMessage is in fact of type Message, but the compiler
-		// doesn't realize it, so do this at runtime
-		Object signed = new DkimMessage(message, dkimSigner);
-		if (signed instanceof Message) {
-		    Message m = (Message) signed;
-		    Transport.send(m);
-		    System.out.println("Sent DKIM message");
-		}
-		//	    Class C = signed.getClass();
-		//	    while (C != null) {
-		//		System.out.println(C.getName());
-		//		C = C.getSuperclass();
-		//	    }
+		var signed = new DkimMessage(message, dkimSigner);
+		Transport.send(signed);
+		System.out.println("Sent signed message to " + to);
 	    
 	    } else {
 		Transport.send(message);
-		System.out.println("Sent unsigned message");
+		System.out.println("Sent unsigned message to " + to );
 	    }
 
 	}catch (Exception mex) {
