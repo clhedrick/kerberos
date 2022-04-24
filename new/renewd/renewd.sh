@@ -97,7 +97,7 @@ if test -n "$DEBUG"; then
     echo ${!loggedin[@]}
 fi
 
-#### handle KEYRING caches
+#### handle KEYRING and KCM caches
 
 CACHETYPE=`grep '^[[:space:]]*default_ccache_name' /etc/krb5.conf | egrep -o '=.*$' | egrep -o '[^= ]+'`
 
@@ -115,6 +115,8 @@ function getkeyusers() {
 
 # echo ${!keyusers[@]}
 
+# find all in KCM. There is actually a utility to dump ldb files,
+# but that requires you to install extra software. This seems to work.
 function getkcmusers() {
    while read uid; do
       keyusers[$uid]=1
