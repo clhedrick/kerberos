@@ -229,7 +229,7 @@ done
 # tempccs is indexed by file name
 # look for all files listed as KRB5CCNAME for some process
 declare -A tempccs
-/proc/*/environ | tr '\000' '\n'| egrep -soh 'KRB5CCNAME=.*' | egrep -o '/tmp/krb5cc.*'
+# echo temp in use `cat /proc/*/environ | tr '\000' '\n'| egrep -soh 'KRB5CCNAME=.*' | egrep -o '/tmp/krb5cc.*'`
 function gettempinuse() {
    while read file; do
        # by doing egrep -i /tmp/krb5cc.*, we ignore any FILE: prefix
