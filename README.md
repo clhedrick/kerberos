@@ -238,3 +238,11 @@ just ZFS, though supporting a mix of file system types would be easy.
 
 Fixes a bug that causes group changes not to show up on Kerberized NFS servers
 
+## nvidia-wrap
+
+Nothing do with kerberos. Program for use on systems where SLURM controls
+access to GPUs. We want interactive users to be able to use nvidia-smi
+to see GPU use, even though only Slurm jobs actually have access to the
+GPUs. This changes cgroup to one that can open gpus and then runs 
+nvidia-smi with no arguments. Must be installed setuid root
+
