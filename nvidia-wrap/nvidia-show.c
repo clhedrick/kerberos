@@ -1,8 +1,0 @@
-#include <stdio.h>
-#include <fcntl.h>
-#include <string.h>
-#include <ctype.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <wait.h>
-#include <sys/stat.h>
