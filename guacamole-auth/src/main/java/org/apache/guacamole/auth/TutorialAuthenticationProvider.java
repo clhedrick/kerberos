@@ -7,6 +7,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.io.PrintWriter;
 import java.util.Calendar;
+import java.time.LocalTime;
+
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.environment.Environment;
@@ -14,6 +16,10 @@ import org.apache.guacamole.environment.LocalEnvironment;
 import org.apache.guacamole.net.auth.simple.SimpleAuthenticationProvider;
 import org.apache.guacamole.net.auth.Credentials;
 import org.apache.guacamole.protocol.GuacamoleConfiguration;
+import org.apache.guacamole.net.auth.AuthenticatedUser;
+import org.apache.guacamole.net.auth.UserContext;
+import org.apache.guacamole.net.auth.simple.SimpleUserContext;
+
 import javax.naming.Context;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.DirContext;
@@ -32,13 +38,11 @@ import javax.naming.directory.BasicAttribute;
  */
 public class TutorialAuthenticationProvider extends SimpleAuthenticationProvider {
 
-    // This code gets called twice. Save the return value from
-    // the first time. Without this, one-time passwords can't work,
-    // because they fail the second time. It also sends the same
-    // ldap search twice, which is just silly.
+    // cache ldap results. they're alway the same, so no point spaming ldap
 
-    // The second call removes the value, to avoid memory growth.
-    private static ConcurrentHashMap<Credentials,Map<String, GuacamoleConfiguration>> authenticated = new ConcurrentHashMap<Credentials,Map<String, GuacamoleConfiguration>>();
+    private static Map<String, GuacamoleConfiguration> configSave = null;
+    private static LocalTime configUpdate = null;
+	
 
     @Override
     public String getIdentifier() {
@@ -53,51 +57,55 @@ public class TutorialAuthenticationProvider extends SimpleAuthenticationProvider
 	// Get the Guacamole server environment
 	Environment environment = new LocalEnvironment();
 
-	
-        String username = credentials.getUsername();
-	String password = credentials.getPassword();
+	// on second call user is already authenticated, so ignore this
+	// the caller will pass null for credentials to indicate that
+	if (credentials != null) {
 
-	// for some reason we are called with nulls before the login
-	// screen is put up
-	if (username == null || password == null)
-	    return null;
+	    String username = credentials.getUsername();
+	    String password = credentials.getPassword();
 
-	// this code gets called twice. If this is the second time, return the
-	// value from the first time. Otherwise two factor won't work
-	Map<String, GuacamoleConfiguration> oldvalue = authenticated.get(credentials);
-	if (oldvalue != null) {
-	    authenticated.remove(credentials);
-	    return oldvalue;
+	    // for some reason we are called with nulls before the login
+	    // screen is put up
+	    if (username == null || password == null)
+		return null;
+
+	    // authenticate user, and create credential cache for xrdp to fetch
+	    String uuid = UUID.randomUUID().toString();
+	    String cc = "/var/spool/guacamole/krb5guac_" + username + "_" + uuid;
+	    String [] cmd = {"/usr/local/bin/skinit", "-l", "1d", "-c", cc, username};
+	    Process p = null;
+	    try {
+		p = Runtime.getRuntime().exec(cmd);
+	    } catch (Exception e) {
+		System.out.println("unable to run skinit: " + e);
+	    }
+
+	    int retval = -1;
+	    try (PrintWriter writer = new PrintWriter(p.getOutputStream())) {
+		writer.println(password);
+		writer.close();
+		retval = p.waitFor();
+	    } catch(InterruptedException e2) {
+		System.out.println("Password check process interrupted");
+	    } finally {
+		p.destroy();
+	    }	    
+
+	    if (retval != 0) {
+		credentials.setPassword("");
+		return null;
+	    }
+
+	    credentials.setPassword("##GUAC#" + uuid);
+
 	}
 
-	// authenticate user, and create credential cache for xrdp to fetch
-	String uuid = UUID.randomUUID().toString();
-	String cc = "/var/spool/guacamole/krb5guac_" + username + "_" + uuid;
-	String [] cmd = {"/usr/local/bin/skinit", "-l", "1d", "-c", cc, username};
-	Process p = null;
-	try {
-	    p = Runtime.getRuntime().exec(cmd);
-	} catch (Exception e) {
-	    System.out.println("unable to run skinit: " + e);
+	// if we have cached configs within 10 minutes, use them
+	// otherwise continue and get new configurations
+	if (configUpdate != null && configSave != null &&
+	    configUpdate.plusMinutes(10).isAfter(LocalTime.now())) {
+	    return configSave;
 	}
-
-	int retval = -1;
-        try (PrintWriter writer = new PrintWriter(p.getOutputStream())) {
-	    writer.println(password);
-	    writer.close();
-	    retval = p.waitFor();
-	} catch(InterruptedException e2) {
-	    System.out.println("Password check process interrupted");
-	} finally {
-	    p.destroy();
-	}	    
-
-	if (retval != 0) {
-	    credentials.setPassword("");
-	    return null;
-	}
-
-	credentials.setPassword("##GUAC#" + uuid);
 
 	// set up ldap connection to get list of hosts
 	Hashtable<String, String> env = new Hashtable<String, String>();
@@ -174,15 +182,36 @@ public class TutorialAuthenticationProvider extends SimpleAuthenticationProvider
 
 	    context.close();
 	} catch (Exception e) {
-	    System.out.println("authentication failed for " + username + "/" + password + " " + e);
+	    System.out.println("can't get configuration info from ldap");
 	    return null;
 	}
 
-	authenticated.put(credentials, configs);
+	// save new value in cache
+	configSave = configs;
+	configUpdate = LocalTime.now();
 
 	return configs;
 
     }
     
+    // just like the real one but with null credentials
+
+    @Override
+    public UserContext getUserContext(AuthenticatedUser authenticatedUser)
+            throws GuacamoleException {
+
+        // Get configurations
+        Map<String, GuacamoleConfiguration> configs =
+	    getAuthorizedConfigurations(null);
+
+        // Return as unauthorized if not authorized to retrieve configs
+        if (configs == null)
+            return null;
+
+        // Return user context restricted to authorized configs
+        return new SimpleUserContext(this, authenticatedUser.getIdentifier(), configs, true);
+
+    }
+
 
 }
