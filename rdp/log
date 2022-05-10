@@ -1,0 +1,93 @@
+gcc  -Wno-unused-result -Wl,--enable-new-dtags -Wl,-rpath -Wl,/usr/lib -g -O2  -o krdp krdp.c -lkrb5 -lk5crypto -lcom_err -lkrb5support -lresolv  -ldl 
+gcc -fPIC -fno-stack-protector -DPAM -DHAVE_CONFIG_H  -I/usr/include/krb5 -g -O2 -Wall -Wno-unused-result -Wno-nonnull -c krdp.c -o pam_krdp.o
+krdp.c: In function ‘pam_krdp’:
+krdp.c:219:17: warning: unused variable ‘usercreds’ [-Wunused-variable]
+  219 |      krb5_creds usercreds;
+      |                 ^~~~~~~~~
+krdp.c:216:19: warning: unused variable ‘cwaitsec’ [-Wunused-variable]
+  216 |      unsigned int cwaitsec = 15; // connect wait
+      |                   ^~~~~~~~
+krdp.c:214:12: warning: unused variable ‘flags’ [-Wunused-variable]
+  214 |      char *flags = "";
+      |            ^~~~~
+krdp.c:213:10: warning: unused variable ‘prived’ [-Wunused-variable]
+  213 |      int prived = 0;
+      |          ^~~~~~
+krdp.c:212:12: warning: unused variable ‘clientname’ [-Wunused-variable]
+  212 |      char *clientname = NULL;
+      |            ^~~~~~~~~~
+krdp.c:211:10: warning: unused variable ‘anonymous’ [-Wunused-variable]
+  211 |      int anonymous = 0;
+      |          ^~~~~~~~~
+krdp.c:208:9: warning: unused variable ‘lasthostused’ [-Wunused-variable]
+  208 |     int lasthostused = 0;
+      |         ^~~~~~~~~~~~
+krdp.c:207:10: warning: unused variable ‘lasthost’ [-Wunused-variable]
+  207 |     char lasthost[1024];
+      |          ^~~~~~~~
+krdp.c:206:9: warning: unused variable ‘serverhostindex’ [-Wunused-variable]
+  206 |     int serverhostindex = 0;
+      |         ^~~~~~~~~~~~~~~
+krdp.c:205:12: warning: unused variable ‘serverhostarray’ [-Wunused-variable]
+  205 |     char **serverhostarray = NULL;
+      |            ^~~~~~~~~~~~~~~
+krdp.c:204:11: warning: unused variable ‘serverhostlist’ [-Wunused-variable]
+  204 |     char *serverhostlist = NULL;
+      |           ^~~~~~~~~~~~~~
+krdp.c:197:10: warning: unused variable ‘tempname’ [-Wunused-variable]
+  197 |     char tempname[1024];
+      |          ^~~~~~~~
+krdp.c:195:9: warning: unused variable ‘printused’ [-Wunused-variable]
+  195 |     int printused;
+      |         ^~~~~~~~~
+krdp.c:194:10: warning: unused variable ‘princbuf’ [-Wunused-variable]
+  194 |     char princbuf[1024];
+      |          ^~~~~~~~
+krdp.c:193:9: warning: unused variable ‘needrename’ [-Wunused-variable]
+  193 |     int needrename = 0;
+      |         ^~~~~~~~~~
+krdp.c:184:10: warning: unused variable ‘op’ [-Wunused-variable]
+  184 |     char op = 'G';
+      |          ^~
+krdp.c: In function ‘pam_sm_authenticate’:
+krdp.c:823:7: warning: unused variable ‘i’ [-Wunused-variable]
+  823 |   int i;
+      |       ^
+krdp.c:822:9: warning: unused variable ‘oldgid’ [-Wunused-variable]
+  822 |   gid_t oldgid;
+      |         ^~~~~~
+krdp.c:821:9: warning: unused variable ‘olduid’ [-Wunused-variable]
+  821 |   uid_t olduid;
+      |         ^~~~~~
+krdp.c:820:7: warning: unused variable ‘didmkstemp’ [-Wunused-variable]
+  820 |   int didmkstemp = 0;
+      |       ^~~~~~~~~~
+krdp.c:818:13: warning: unused variable ‘realm_data’ [-Wunused-variable]
+  818 |   krb5_data realm_data;
+      |             ^~~~~~~~~~
+krdp.c:817:9: warning: unused variable ‘default_realm’ [-Wunused-variable]
+  817 |   char *default_realm = NULL;
+      |         ^~~~~~~~~~~~~
+krdp.c:816:9: warning: unused variable ‘specified_name’ [-Wunused-variable]
+  816 |   char *specified_name = NULL; // ccache name specified by user
+      |         ^~~~~~~~~~~~~~
+krdp.c:808:9: warning: unused variable ‘ccname’ [-Wunused-variable]
+  808 |   char *ccname = NULL;
+      |         ^~~~~~
+ld -x --shared -o pam_krdp.so pam_krdp.o -lkrb5 -lk5crypto -lcom_err -lkrb5support -ldl -lc
+echo no version newer than 2.2.5 should show. failure OK
+no version newer than 2.2.5 should show. failure OK
+readelf -a pam_krdp.so | grep GLIBC_ | grep -v 2.2.5
+000000006018  000100000007 R_X86_64_JUMP_SLO 0000000000000000 __snprintf_chk@GLIBC_2.3.4 + 0
+000000006198  003000000007 R_X86_64_JUMP_SLO 0000000000000000 __longjmp_chk@GLIBC_2.11 + 0
+0000000061e0  003800000007 R_X86_64_JUMP_SLO 0000000000000000 __strncat_chk@GLIBC_2.3.4 + 0
+     1: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __snprintf_chk@GLIBC_2.3.4 (2)
+    48: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __longjmp_chk@GLIBC_2.11 (5)
+    56: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __strncat_chk@GLIBC_2.3.4 (2)
+    28: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __snprintf_chk@@GLIBC_2.3
+    30: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __errno_location@@GLIBC_2
+    76: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __longjmp_chk@@GLIBC_2.11
+    86: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __strncat_chk@@GLIBC_2.3.
+  030:   5 (GLIBC_2.11)    4 (krb5_3_MIT)    4 (krb5_3_MIT)    4 (krb5_3_MIT) 
+  0x0030:   Name: GLIBC_2.11  Flags: none  Version: 5
+  0x0050:   Name: GLIBC_2.3.4  Flags: none  Version: 2

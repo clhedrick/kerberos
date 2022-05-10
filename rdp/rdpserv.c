@@ -142,7 +142,7 @@ char * read_item(int sock, char *olditem) {
                            sizeof(xmitlen))) <= 0) {
         if (retval == 0)
             errno = ECONNABORTED;
-        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
+        mylog(LOG_ERR, "net read failed--%s", error_message(errno));
         return NULL;
     }
 
@@ -270,8 +270,8 @@ main(int argc, char *argv[])
     krb5_error_code retval;
     krb5_principal server;
     char *cname;
-    char *service = "credserv";
-    short port = 755;             /* If user specifies port */
+    char *service = "host";
+    short port = 756;             /* If user specifies port */
     extern int opterr, optind;
     extern char * optarg;
     int ch;
@@ -513,7 +513,7 @@ main(int argc, char *argv[])
                            keytab,      /* default keytab is NULL */
                            &ticket);
     if (retval) {
-        mylog(LOG_ERR, "recvauth failed--%s", error_message(retval));
+        mylog(LOG_ERR, "recvauth failed 1--%s", error_message(retval));
         exit(1);
     }
 
@@ -524,8 +524,10 @@ main(int argc, char *argv[])
     uuid = read_item(sock, username);
 
     // if any previous reads failed, the later ones reeturn null
-    if (!uuid)
-        exit(1);
+    if (!uuid) {
+        mylog(LOG_ERR, "missing arguments in kerberized request");
+        goto cleanup;
+    }
 
     mylog(LOG_DEBUG, "operation for user %s uuid %s from host %s", username, uuid, ntoa(peername));
     // Get client name (i.e. principal by which client authenticated ) from ticket.
@@ -535,12 +537,12 @@ main(int argc, char *argv[])
     retval = krb5_unparse_name(context, ticket->enc_part2->client, &cname);
     if (retval){
         mylog(LOG_ERR, "unable make sense of client principal--%s", error_message(retval));
-        exit(1);
+        goto cleanup;
     }
 
     if (strncmp("host/", cname, 5) != 0) {
         mylog(LOG_ERR, "request wasn't authenticated at host");
-        exit(1);
+        goto cleanup;
     }
         
     // User is authenticated as a host. verify that the request came from that host
@@ -675,7 +677,9 @@ main(int argc, char *argv[])
 char *
 getcreds(krb5_context context, krb5_auth_context auth_context, char *username, char *uuid, char *myhostname, char *hostname, char *service, krb5_data *data, krb5_data *realm_data) {
     krb5_error_code r;
-    krb5_ccache ccache;
+    krb5_ccache ccache = NULL;
+    krb5_ccache tempcache;
+    krb5_creds creds;
     krb5_principal serverp = 0;
     char *default_realm = NULL;
     krb5_principal userprinc;
@@ -698,6 +702,36 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
 
     // we now have credentials in ccache. 
         
+    // we want to renew them, so the user has the full lifetime
+
+    // we have to make a credentials cache to put the renewed credentials in
+
+    if ((r = krb5_cc_new_unique(context, "MEMORY", "/tmp/jjjjj", &tempcache))) {
+        mylog(LOG_ERR, "unable to make credentials file for host %s", error_message(r));
+        return GENERIC_ERR;
+    }
+
+    if ((r = krb5_cc_get_principal(context, ccache, &userprinc)) < 0) {
+        mylog(LOG_ERR, "could not get user principal from cached");
+        return GENERIC_ERR;        
+    }
+
+    if ((r = krb5_cc_initialize(context, tempcache, userprinc))) {
+        mylog(LOG_ERR, "unable to initialized temp credentials file for host %s", error_message(r));
+        return GENERIC_ERR;
+    }             
+
+    if ((r = krb5_get_renewed_creds(context, &creds, userprinc, ccache, NULL))) {
+        mylog(LOG_ERR, "unable to renew credentials %s", error_message(r));
+        return GENERIC_ERR;
+    }        
+
+    if ((r = krb5_cc_store_cred(context, tempcache, &creds))) {
+        mylog(LOG_ERR, "unable to store renewed credentials %s", error_message(r));
+        return GENERIC_ERR;
+    }        
+    
+
     // for the forward, we need the local IP addresses in auth_content.
     /* fd is always 0 because the real one gets put onto 0 by dup2 */
     if ((r = krb5_auth_con_genaddrs(context, auth_context, 0,
@@ -706,17 +740,13 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         goto cleanup;
     }
 
-    if ((r = krb5_cc_get_principal(context, ccache, &userprinc)) < 0) {
-        mylog(LOG_ERR, "could not get user principal from cached");
-        goto cleanup;
-    }
-    
+   
     // Now we've got all the info to generate the forwarded credential.
     // This operation takes a credential appropriate for our system and
     // turns it into one appropriate for hostname.
 
     if ((r = krb5_fwd_tgt_creds(context, auth_context, hostname, userprinc, serverp,
-			        ccache, 1, data))) {
+			        tempcache, 1, data))) {
       mylog(LOG_ERR, "error getting forwarded credentials for user %s %s",username, error_message(r));
       goto cleanup;
     }
