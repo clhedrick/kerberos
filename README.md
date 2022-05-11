@@ -266,3 +266,7 @@ the credentials, since we have no way to tell how long guacamole still
 thinks there's a session. there should be a cron job to kill the
 tickets in /var/spool/guacamole after 2 hours.
 
+However I've reconsidered whether I really want to do this. FOr the
+moment all I'm using is guacamole-auth. In this version it checks for
+OTP users and clears their passwords. That causes the end system to
+give a normal password prompt. WIthout this they get a confusing error.
