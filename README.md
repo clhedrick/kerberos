@@ -246,3 +246,23 @@ to see GPU use, even though only Slurm jobs actually have access to the
 GPUs. This changes cgroup to one that can open gpus and then runs 
 nvidia-smi with no arguments. Must be installed setuid root
 
+## guacamole-auth and rdp
+
+Make guacamole work with two factor auth.
+
+guacamole-auth is an authentication plugin that uses /usr/libexec/skinit to
+authenticate and ldap to find the list of hosts. /usr/libexec/skinit
+does kinit -k -t /etc/krb5.keytab to set up a temporary ccache and
+kinit -T pointing to that cache. This is needed for two factor auth.
+
+The kerberos ticket is stored in /var/spool/guacamole with a name that
+includes a random uuid. That uuid is sent as the password.
+
+rdp/pam_krdp calls a service rdpserv on the guacamole server passing it
+the username and uuid. It gets back the ticket from /var/spool/guacamole.
+
+This only works for 2 hours after login. At some point we need to expire
+the credentials, since we have no way to tell how long guacamole still
+thinks there's a session. there should be a cron job to kill the
+tickets in /var/spool/guacamole after 2 hours.
+
