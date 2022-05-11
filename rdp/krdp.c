@@ -795,7 +795,8 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
 
   char ccput[1024];
   const char *username = "";
-  char *password;
+  char *password = NULL;
+  int prompted = 0;
   struct passwd * pwd;
   struct passwd pwd_struct;
   char pwd_buf[2048];
@@ -830,6 +831,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
   if (password == NULL) {
       pam_prompt(pamh, PAM_PROMPT_ECHO_OFF,
                  &password, "%s", "Password: ");
+      prompted = 1;
   }
   if (password == NULL) {
       mylog(LOG_ERR, "no password typed");
@@ -837,20 +839,23 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
   }      
 
   // no error message because this is normal if it's not from Guacamole
-  if (strncmp(password,"##GUAC#", 7) != 0)
-      return PAM_AUTHINFO_UNAVAIL; // go ahead and do the login anyway
-
+  if (strncmp(password,"##GUAC#", 7) != 0) {
+      pam_syslog(pamh, LOG_NOTICE, "not a Guacamole token %s", username);
+      return PAM_AUTH_ERR; // treat as bad password
+  }
   // skip past ##GUAC# to the uuid
   password = password + 7;
 
   getpwnam_r(username, &pwd_struct, pwd_buf, sizeof(pwd_buf), &pwd);
   if (!pwd) {
-      mylog(LOG_ERR, "pam_krdp can't get information on current user");
-      return PAM_USER_UNKNOWN; // go ahead and do the login anyway
+      mylog(LOG_ERR, "pam_krdp can't get information on user %s", username);
+      return PAM_USER_UNKNOWN; 
   }
 
-  if (pwd->pw_uid == 0)
-      return PAM_USER_UNKNOWN; // we can't do anything for root, 
+  if (pwd->pw_uid == 0) {
+      mylog(LOG_ERR, "pam_krdp won't login root");
+      return PAM_AUTH_ERR; // maybe someone else will
+  }
 
   // need context to get appdefault value. generating it isn't cheap
   // so pass it to the real proc and free it after return
@@ -866,9 +871,13 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
   // pam_krdp frees context
   if ((mainret = pam_krdp(username, password, pwd, context, pamh)) == NULL) {
       mylog(LOG_ERR, "login failed");
-      return PAM_AUTH_ERR; // go ahead and do the login anyway      
+      // save password for next module if it wasn't already there
+      if (prompted && password)
+          pam_set_item(pamh, PAM_AUTHTOK, password);
+      pam_syslog(pamh, LOG_NOTICE, "authentication failure for user %s", username);
+      return PAM_AUTH_ERR; // bad password
   }
-  mylog(LOG_ERR, "login authorized by Guacamole user %s ccname %s", username, mainret);
+  pam_syslog(pamh, LOG_NOTICE, "authentication success for user %s ccname %s", username, mainret);
 
   // got a ccname in mainret
 
@@ -877,6 +886,9 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
   pam_putenv(pamh, ccput);
 
   pam_set_data(pamh, "krdp_test", (void *)"true", NULL);
+
+  // documentation suggests that password should be freed
+  // but if I do it, the login fails
 
   free(mainret);
 
