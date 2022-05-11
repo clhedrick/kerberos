@@ -3,6 +3,8 @@ package org.apache.guacamole.auth;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
+import java.util.Set;
+import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.io.PrintWriter;
@@ -13,11 +15,14 @@ import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.environment.Environment;
 import org.apache.guacamole.environment.LocalEnvironment;
-import org.apache.guacamole.net.auth.simple.SimpleAuthenticationProvider;
-import org.apache.guacamole.net.auth.Credentials;
-import org.apache.guacamole.protocol.GuacamoleConfiguration;
+import org.apache.guacamole.net.auth.AbstractAuthenticatedUser;
+import org.apache.guacamole.net.auth.AbstractAuthenticationProvider;
+import org.apache.guacamole.net.auth.AuthenticationProvider;
 import org.apache.guacamole.net.auth.AuthenticatedUser;
+import org.apache.guacamole.net.auth.Credentials;
 import org.apache.guacamole.net.auth.UserContext;
+import org.apache.guacamole.protocol.GuacamoleConfiguration;
+
 import org.apache.guacamole.net.auth.simple.SimpleUserContext;
 
 import javax.naming.Context;
@@ -36,7 +41,88 @@ import javax.naming.directory.BasicAttribute;
  * of Guacamole's extension API. The credentials and connection information for
  * a single user are stored directly in guacamole.properties.
  */
-public class TutorialAuthenticationProvider extends SimpleAuthenticationProvider {
+public class TutorialAuthenticationProvider extends AbstractAuthenticationProvider {
+    
+
+    private class TutorialAuthenticatedUser extends AbstractAuthenticatedUser {
+
+        /**
+         * The credentials provided when this AuthenticatedUser was
+         * authenticated.
+         */
+        private final Credentials credentials;
+
+        /**
+         * The GuacamoleConfigurations that this AuthenticatedUser is
+         * authorized to use.
+         */
+        private final Map<String, GuacamoleConfiguration> configs;
+
+	private final LocalTime creation;
+
+        /**
+         * Creates a new SimpleAuthenticatedUser associated with the given
+         * credentials and having access to the given Map of
+         * GuacamoleConfigurations.
+         *
+         * @param credentials
+         *     The credentials provided by the user when they authenticated.
+         *
+         * @param configs
+         *     A Map of all GuacamoleConfigurations for which this user has
+         *     access. The keys of this Map are Strings which uniquely identify
+         *     each configuration.
+         */
+        public TutorialAuthenticatedUser(Credentials credentials, Map<String, GuacamoleConfiguration> configs) {
+
+            // Store credentials and configurations
+            this.credentials = credentials;
+            this.configs = configs;
+	    this.creation = LocalTime.now();
+
+            // Pull username from credentials if it exists
+            String username = credentials.getUsername();
+            if (username != null && !username.isEmpty())
+                setIdentifier(username);
+
+            // Otherwise generate a random username
+            else
+                setIdentifier(UUID.randomUUID().toString());
+
+        }
+
+        /**
+         * Returns a Map containing all GuacamoleConfigurations that this user
+         * is authorized to use. The keys of this Map are Strings which
+         * uniquely identify each configuration.
+         *
+         * @return
+         *     A Map of all configurations for which this user is authorized.
+         */
+        public Map<String, GuacamoleConfiguration> getAuthorizedConfigurations() {
+            return configs;
+        }
+
+        @Override
+        public AuthenticationProvider getAuthenticationProvider() {
+            return TutorialAuthenticationProvider.this;
+        }
+
+        @Override
+        public Credentials getCredentials() {
+	    if (creation.plusHours(2).isBefore(LocalTime.now())) {
+		credentials.setPassword("");
+	    } 
+
+            return credentials;
+        }
+
+        @Override
+        public Set<String> getEffectiveUserGroups() {
+            return Collections.<String>emptySet();
+        }
+
+    }
 
     // cache ldap results. they're alway the same, so no point spaming ldap
 
@@ -49,62 +135,51 @@ public class TutorialAuthenticationProvider extends SimpleAuthenticationProvider
         return "tutorial";
     }
 
-    @Override
-    public Map<String, GuacamoleConfiguration>
-	getAuthorizedConfigurations(Credentials credentials)
-	throws GuacamoleException {
+    public AuthenticatedUser authenticateUser(final Credentials credentials)
+            throws GuacamoleException {
 
-	// Get the Guacamole server environment
-	Environment environment = new LocalEnvironment();
+	String username = credentials.getUsername();
+	String password = credentials.getPassword();
 
-	// on second call user is already authenticated, so ignore this
-	// the caller will pass null for credentials to indicate that
-	if (credentials != null) {
+	// for some reason we are called with nulls before the login
+	// screen is put up
+	if (username == null || password == null)
+	    return null;
 
-	    String username = credentials.getUsername();
-	    String password = credentials.getPassword();
-
-	    // for some reason we are called with nulls before the login
-	    // screen is put up
-	    if (username == null || password == null)
-		return null;
-
-	    // authenticate user, and create credential cache for xrdp to fetch
-	    String uuid = UUID.randomUUID().toString();
-	    String cc = "/var/spool/guacamole/krb5guac_" + username + "_" + uuid;
-	    String [] cmd = {"/usr/local/bin/skinit", "-l", "1d", "-c", cc, username};
-	    Process p = null;
-	    try {
-		p = Runtime.getRuntime().exec(cmd);
-	    } catch (Exception e) {
-		System.out.println("unable to run skinit: " + e);
-	    }
-
-	    int retval = -1;
-	    try (PrintWriter writer = new PrintWriter(p.getOutputStream())) {
-		writer.println(password);
-		writer.close();
-		retval = p.waitFor();
-	    } catch(InterruptedException e2) {
-		System.out.println("Password check process interrupted");
-	    } finally {
-		p.destroy();
-	    }	    
-
-	    if (retval != 0) {
-		credentials.setPassword("");
-		return null;
-	    }
-
-	    credentials.setPassword("##GUAC#" + uuid);
-
+	// authenticate user, and create credential cache for xrdp to fetch
+	String uuid = UUID.randomUUID().toString();
+	String cc = "/var/spool/guacamole/krb5guac_" + username + "_" + uuid;
+	String [] cmd = {"/usr/local/bin/skinit", "-l", "1d", "-c", cc, username};
+	Process p = null;
+	try {
+	    p = Runtime.getRuntime().exec(cmd);
+	} catch (Exception e) {
+	    System.out.println("unable to run skinit: " + e);
 	}
+	
+	int retval = -1;
+	try (PrintWriter writer = new PrintWriter(p.getOutputStream())) {
+	    writer.println(password);
+	    writer.close();
+	    retval = p.waitFor();
+	} catch(InterruptedException e2) {
+	    System.out.println("Password check process interrupted");
+	} finally {
+	    p.destroy();
+	}	    
+
+	if (retval != 0) {
+	    credentials.setPassword("");
+	    return null;
+	}
+
+	credentials.setPassword("##GUAC#" + uuid);
 
 	// if we have cached configs within 10 minutes, use them
 	// otherwise continue and get new configurations
 	if (configUpdate != null && configSave != null &&
 	    configUpdate.plusMinutes(10).isAfter(LocalTime.now())) {
-	    return configSave;
+	    return new TutorialAuthenticatedUser(credentials, configSave);
 	}
 
 	// set up ldap connection to get list of hosts
@@ -190,7 +265,7 @@ public class TutorialAuthenticationProvider extends SimpleAuthenticationProvider
 	configSave = configs;
 	configUpdate = LocalTime.now();
 
-	return configs;
+	return new TutorialAuthenticatedUser(credentials, configs);
 
     }
     
@@ -200,16 +275,9 @@ public class TutorialAuthenticationProvider extends SimpleAuthenticationProvider
     public UserContext getUserContext(AuthenticatedUser authenticatedUser)
             throws GuacamoleException {
 
-        // Get configurations
-        Map<String, GuacamoleConfiguration> configs =
-	    getAuthorizedConfigurations(null);
-
-        // Return as unauthorized if not authorized to retrieve configs
-        if (configs == null)
-            return null;
-
         // Return user context restricted to authorized configs
-        return new SimpleUserContext(this, authenticatedUser.getIdentifier(), configs, true);
+        return new SimpleUserContext(this, authenticatedUser.getIdentifier(),
+	     ((TutorialAuthenticatedUser)authenticatedUser).getAuthorizedConfigurations(), true);
 
     }
 
