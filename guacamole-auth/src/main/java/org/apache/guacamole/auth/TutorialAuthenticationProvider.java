@@ -149,7 +149,9 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	// authenticate user, and create credential cache for xrdp to fetch
 	String uuid = UUID.randomUUID().toString();
 	String cc = "/var/spool/guacamole/krb5guac_" + username + "_" + uuid;
-	String [] cmd = {"/usr/local/bin/skinit", "-l", "1d", "-c", cc, username};
+	// special skinit that uses kinit -k -t /etc/krb5.keytab
+	// this is slightly more robust (and portable) than using kgetcred
+	String [] cmd = {"/usr/libexec/skinit", "-l", "1d", "-c", cc, username};
 	Process p = null;
 	try {
 	    p = Runtime.getRuntime().exec(cmd);
