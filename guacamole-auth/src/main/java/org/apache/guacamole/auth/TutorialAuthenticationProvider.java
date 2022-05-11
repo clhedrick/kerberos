@@ -110,10 +110,6 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 
         @Override
         public Credentials getCredentials() {
-	    if (creation.plusHours(2).isBefore(LocalTime.now())) {
-		credentials.setPassword("");
-	    } 
-
             return credentials;
         }
 
@@ -146,36 +142,9 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	if (username == null || password == null)
 	    return null;
 
-	// authenticate user, and create credential cache for xrdp to fetch
-	String uuid = UUID.randomUUID().toString();
-	String cc = "/var/spool/guacamole/krb5guac_" + username + "_" + uuid;
-	// special skinit that uses kinit -k -t /etc/krb5.keytab
-	// this is slightly more robust (and portable) than using kgetcred
-	String [] cmd = {"/usr/libexec/skinit", "-l", "1d", "-c", cc, username};
-	Process p = null;
-	try {
-	    p = Runtime.getRuntime().exec(cmd);
-	} catch (Exception e) {
-	    System.out.println("unable to run skinit: " + e);
-	}
-	
-	int retval = -1;
-	try (PrintWriter writer = new PrintWriter(p.getOutputStream())) {
-	    writer.println(password);
-	    writer.close();
-	    retval = p.waitFor();
-	} catch(InterruptedException e2) {
-	    System.out.println("Password check process interrupted");
-	} finally {
-	    p.destroy();
-	}	    
-
-	if (retval != 0) {
-	    credentials.setPassword("");
-	    return null;
-	}
-
-	credentials.setPassword("##GUAC#" + uuid);
+	// authenticate user with ldap. Use the connection to see if
+	// they have two factors. If so, to avoid an odd error, set
+	// their password to ""
 
 	// if we have cached configs within 10 minutes, use them
 	// otherwise continue and get new configurations
@@ -190,10 +159,8 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
 	env.put(Context.PROVIDER_URL, "ldap://krb4.cs.rutgers.edu");
 	env.put(Context.SECURITY_AUTHENTICATION, "simple");
-	//	env.put(Context.SECURITY_PRINCIPAL, "uid=" + username + ",cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu");
-	//	env.put(Context.SECURITY_CREDENTIALS, password);
-	env.put(Context.SECURITY_PRINCIPAL, "uid=ldap.admin,cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu");
-	env.put(Context.SECURITY_CREDENTIALS, "abcde12345!");
+	env.put(Context.SECURITY_PRINCIPAL, "uid=" + username + ",cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu");
+	env.put(Context.SECURITY_CREDENTIALS, password);
 
 	// Configurations to return
 	Map<String, GuacamoleConfiguration> configs =
@@ -203,12 +170,25 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	try {
 	    context = new InitialDirContext(env);
 
-	    // search for any item with guacConfigProtocol set
+	    // search for any OTP tokens owned by this person
 	    Attributes matchAttrs = new BasicAttributes(true);
+	    matchAttrs.put(new BasicAttribute("ipatokenOwner", "uid=" + username + ",cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu"));
+
+	    // see if they use two factor
+	    // if so clear the password. Trying to log them into the host will
+	    // fail, but with a confusing screen. Better not to try. Then they
+	    // get a normal login screen
+	    NamingEnumeration answer = context.search("cn=otp,dc=cs,dc=rutgers,dc=edu", matchAttrs);
+	    if (answer.hasMore()) {
+		credentials.setPassword("");
+	    }
+
+	    // now get the list of host configurations
+	    matchAttrs = new BasicAttributes(true);
 	    matchAttrs.put(new BasicAttribute("guacConfigProtocol"));
 
 	    // loop over config items. This is the list of hosts that will appear in the menu
-	    NamingEnumeration answer = context.search("cn=guac,dc=cs,dc=rutgers,dc=edu", matchAttrs);
+	    answer = context.search("cn=guac,dc=cs,dc=rutgers,dc=edu", matchAttrs);
 	    while (answer.hasMore()) {
 
 		// Create new configuration to add to the list of available hosts
@@ -259,7 +239,7 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 
 	    context.close();
 	} catch (Exception e) {
-	    System.out.println("can't get configuration info from ldap");
+	    // probably bad password
 	    return null;
 	}
 
