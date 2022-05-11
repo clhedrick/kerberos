@@ -136,6 +136,7 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 
 	String username = credentials.getUsername();
 	String password = credentials.getPassword();
+	boolean twoFactor = false;
 
 	// for some reason we are called with nulls before the login
 	// screen is put up
@@ -145,13 +146,6 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	// authenticate user with ldap. Use the connection to see if
 	// they have two factors. If so, to avoid an odd error, set
 	// their password to ""
-
-	// if we have cached configs within 10 minutes, use them
-	// otherwise continue and get new configurations
-	if (configUpdate != null && configSave != null &&
-	    configUpdate.plusMinutes(10).isAfter(LocalTime.now())) {
-	    return new TutorialAuthenticatedUser(credentials, configSave);
-	}
 
 	// set up ldap connection to get list of hosts
 	Hashtable<String, String> env = new Hashtable<String, String>();
@@ -181,6 +175,16 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	    NamingEnumeration answer = context.search("cn=otp,dc=cs,dc=rutgers,dc=edu", matchAttrs);
 	    if (answer.hasMore()) {
 		credentials.setPassword("");
+	    }
+
+	    // if we got here, auth worked.
+	    // otherwise an exception would be thrown
+
+	    // if we have cached configs within 10 minutes, use them
+	    // otherwise continue and get new configurations
+	    if (configUpdate != null && configSave != null &&
+		configUpdate.plusMinutes(10).isAfter(LocalTime.now())) {
+		return new TutorialAuthenticatedUser(credentials, configSave);
 	    }
 
 	    // now get the list of host configurations
