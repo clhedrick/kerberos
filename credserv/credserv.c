@@ -104,6 +104,7 @@ usage(char *name)
 
 int impersonate(krb5_context context, krb5_principal userprinc, char *realm, krb5_ccache ocache, char *ktname);
 
+// read specifid number of characters from a net connection
 static int
 net_read(int fd, char *buf, int len)
 {
@@ -135,6 +136,8 @@ int krb5_net_write (krb5_context, int, const char *, int);
 
 char * read_item(int sock, char *olditem);
 
+// read an argument from the network connection. The client, kgetcred, sends arguments
+// as a byte count and then binrary data.
 char * read_item(int sock, char *olditem) {
     int retval;
     short xmitlen;
@@ -143,6 +146,7 @@ char * read_item(int sock, char *olditem) {
     if (olditem == NULL)
         return NULL;
 
+    // read count
     if ((retval = net_read(sock, (char *)&xmitlen,
                            sizeof(xmitlen))) <= 0) {
         if (retval == 0)
@@ -151,6 +155,7 @@ char * read_item(int sock, char *olditem) {
         return NULL;
     }
 
+    // read data
     xmitlen = ntohs(xmitlen);
     if (!(item = (char *)malloc((size_t) xmitlen + 1))) {
         mylog(LOG_ERR, "no memory while allocating buffer to read from client");
@@ -344,6 +349,7 @@ main(int argc, char *argv[])
 
     memset(&usercreds, 0, sizeof(usercreds));
     memset(&hints, 0, sizeof(hints));
+    // these are default arguments for addrinfo
     hints.ai_family = AF_UNSPEC;
     hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_CANONNAME;
 
@@ -418,7 +424,10 @@ main(int argc, char *argv[])
 
     }
 
-    chdir("/tmp"); // should be irrelevant. but just in case
+    if (chdir("/tmp") != 0) { // should be irrelevant. but just in case
+        mylog(LOG_ERR, "chdir /tmp failed");
+    }
+        
     umask(027); // just to get something known, we shouldn't actually create any files
 
     /*
@@ -507,7 +516,7 @@ main(int argc, char *argv[])
     }
 
     // Mutual authentication, so we need credentials.
-    // Ours comes from /etc/krb5.conf
+    // Ours comes from /etc/krb5.keytab
 
     if (keytab == NULL) {
         if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
@@ -531,6 +540,7 @@ main(int argc, char *argv[])
         admingroup = NULL;
 
 
+    // create a service principal for host/HOSTNAME
     retval = krb5_sname_to_principal(context, NULL, service,
                                      KRB5_NT_SRV_HST, &server);
     if (retval) {
@@ -551,8 +561,10 @@ main(int argc, char *argv[])
     signal (SIGALRM, catch_alarm);
     alarm(60);  // a minute is more than enough
 
-    // get authenticated connection from client. Returns
-    // client's credentials in ticket.  Our comes from keytab
+    // Get authenticated connection from client. 
+    // Client's credentials are put into ticket and auth_context.  Ours comes from keytab
+    // auth_context is used to encrypt the ticket we generate so communication with
+    // the user is encrypted
 
     retval = krb5_recvauth(context, &auth_context, (krb5_pointer)&sock,
                            SAMPLE_VERSION, server,
@@ -567,7 +579,8 @@ main(int argc, char *argv[])
     // Get arguments from kgetcred: operation, username, principal, flags, and hostname
     // Not all operations use all three but it's easier to be uniform.
 
-    // op
+    // What operation is this? Data from the client starts with a one-character code for the
+    // operation. Most commonly "G" for get credentials
     if ((retval = net_read(sock, (char *)&op, 1)) <= 0) {
         if (retval == 0)
             errno = ECONNABORTED;
@@ -575,6 +588,7 @@ main(int argc, char *argv[])
         exit(1);
     }
 
+    // the rest of the arguments from the client
     username = read_item(sock, (char *)&op);
     principal = read_item(sock, (char *)username);
     flags = read_item(sock, (char *)principal);
@@ -674,20 +688,23 @@ main(int argc, char *argv[])
         errmsg = unregistercreds(context, auth_context, username, principal, myhostname, hostname, realhost, service, &data, cname, ticket);
 
     // return the results to the client
+    // we return a one-byte code saying whether it's an error message, a listing, etc.
     if (errmsg == NULL) {
         char status[1];
         mylog(LOG_DEBUG, "returning data to client %s for user %s length %d", ntoa(peername), username, data.length);
 
         if (op == 'G')
-            status[0] = 'c'; // credentials
+            status[0] = 'c'; // for G we are returning credentials
         else
-            status[0] = 'l'; // listing
+            status[0] = 'l'; // otherwise listing, i.e. text for the user
 
+        // write the one byte
         if ((retval = krb5_net_write(context, 0, (char *)status, 1)) < 0) {
             mylog(LOG_ERR, "%m: while writing len to client");
             exit(1);
         }
 
+        // now write the actual data as a count then the data
         xmitlen = htons(data.length);
         if ((retval = krb5_net_write(context, 0, (char *)&xmitlen,
                                  sizeof(xmitlen))) < 0) {
@@ -702,6 +719,7 @@ main(int argc, char *argv[])
     } else {
         // error message. return the message
         char status[1];
+        // the first byte is "e", meaning it's an error message
         status[0] = 'e'; // error message
         mylog(LOG_DEBUG, "returning error to client %s for user %s %s", ntoa(peername), username, errmsg);
 
@@ -710,6 +728,7 @@ main(int argc, char *argv[])
             exit(1);
         }
 
+        // now write the message, as a byte count and then the text
         xmitlen = htons(strlen(errmsg));
         if ((retval = krb5_net_write(context, 0, (char *)&xmitlen,
                                  sizeof(xmitlen))) < 0) {
@@ -738,7 +757,7 @@ main(int argc, char *argv[])
 
 // getcreds is called with host authentication.
 // The host tells us who the user is
-// We return the credentials they have registered for that host.
+// We return a kerberos ticket, if the user has authorized that host to get a ticket
 
 // returns NULL if OK, else error message
 char *
@@ -770,7 +789,10 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     int preflen = strlen(principal) + 1;
     char *impersonate_kt = NULL;
 
-    asprintf(&prefix, "%s=", principal);
+    if (asprintf(&prefix, "%s=", principal) < 0) {
+        mylog(LOG_ERR, "asprintf failed getcreds 1");
+        return GENERIC_ERR;
+    }
 
     // This is the one operation where we don't do permissions
     // checking. The code in the main body verified that the caller
@@ -783,6 +805,8 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
 
     // see if there is a relevant rule
     if (strcmp(username, "anonymous.user") == 0) {
+        // this is getcred -a, asking for am anonymous ticket. It's used
+        // to bootstrap skinit for users with two factors
         snprintf(repbuf, sizeof(repbuf)-1, "/etc/krb5.anonymous.keytab");
     } else {
         // we'll give out any credentials authorized for this user and host.
@@ -797,6 +821,8 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         // principals, except on secure machines.
 
         int found = 0;
+
+        // Look up rules in LDAP to see if this host is authorized for this user
 
         ld = krb_ldap_open(context, service, myhostname, default_realm);
 
@@ -828,14 +854,21 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
                 continue;
                 *ch = '\0';
                 // line - ch is host; verify right host
+                // if it starts with @ it's a netgroup
                 if (line[0] == '@') {
                     // @netgroup
                     if (!ldap_innetgroup(context, ld, default_realm, hostname, line+1))
+                        // no match, check the next rule
                         continue;
                 } else {
+                    // not a netgroup. either it is a hostname, which we check against the caller,
+                    // or *, which matches all hosts
                     if (strcmp(line, hostname) != 0 && strcmp(line, "*") != 0)
+                        // no match, check the next rule
                         continue;
                 }
+
+                // the hostname matched. Now see if the user does
 
                 princp = ch+1;
                 // next item is principal
@@ -844,11 +877,13 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
                 if (ch)
                     *ch = '\0';
                 if (strcmp(princp, principal) != 0)
+                    // no. try next rule
                     continue;
 
                 // got it
                 found = 1;
-                // rest is flags
+
+                // the rest of the rule is flags
                 if (ch)
                     flags = ch+1;
                 else
@@ -888,12 +923,18 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
     // or the keytab.
 
     krb5_appdefault_string(context, "credserv", realm_data, "impersonate", "", &impersonate_kt);
+    // kgetcred -a, which asks for anonymous, always uses the key table.
+    // otherwise look at the configuration in krb5.conf to see whether to use
+    // impersonation. Keytable mode is actually not being used except for
+    // anonymous, so I don't guarnatee it works.
     if (strcmp(username, "anonymous.user") != 0 &&
         impersonate_kt && strlen(impersonate_kt) > 0) {
+        // get credentials for this user into ccache
         // error message done in function
         if (impersonate(context, userprinc, realm, ccache, impersonate_kt) != 0)
             goto cleanup;
     } else {
+        // get credentials for this user from a key table registered in LDAP
         int found = 0;
 
         // will use key table. For anonymous users it's fixed. Otherwise need to get it from ldap
@@ -1003,6 +1044,11 @@ getcreds(krb5_context context, krb5_auth_context auth_context, char *username, c
         }
 
     }
+
+    // we now have credentials in ccache. For extra security, we
+    // restrict the credential to be usable on one specific host.
+    // initially we use our host. The library routine for forwarding
+    // credentials will adjust it to be the client system.
 
     if ((r = krb5_sname_to_principal(context, myhostname, NULL,
                                      KRB5_NT_SRV_HST, &serverp))) {
@@ -1346,10 +1392,17 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         char *newrule;
         mylog(LOG_DEBUG, "user %s principal %s host %s not in INDEX, adding", username, principal, hostname);
 
-        if (strcmp(flags, "") != 0)
-            asprintf(&newrule, "%s:%s:%s", hostname, principal, flags);
-        else
-            asprintf(&newrule, "%s:%s", hostname, principal);
+        if (strcmp(flags, "") != 0) {
+            if (asprintf(&newrule, "%s:%s:%s", hostname, principal, flags) < 0) {
+                mylog(LOG_DEBUG, "asprintf registercred 1");
+                return "memory allocation failed";
+            }                
+        } else {
+            if (asprintf(&newrule, "%s:%s", hostname, principal) < 0) {
+                mylog(LOG_DEBUG, "asprintf registercred 1");
+                return "memory allocation failed";
+            }                
+        }
 
         r = addRule(ld, dn, newrule);
 
@@ -1429,7 +1482,11 @@ registercreds(krb5_context context, krb5_auth_context auth_context, char *userna
         fseek(keytabf, 0, SEEK_SET);  //same as rewind(f);
         
         keydata = malloc(fsize + 1);
-        fread(keydata, fsize, 1, keytabf);
+        if (fread(keydata, fsize, 1, keytabf) != (size_t)fsize) {
+            mylog(LOG_ERR, "unable to read key table");
+            return "unable to read key table";
+        }
+            
         fclose(keytabf);
         unlink(princname);
     

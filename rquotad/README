@@ -4,6 +4,13 @@ It only checks quotas on file systems listed in /etc/quotas.conf,
 as there's no easy way to ask ZFS whether quotas are on for
 a file system.
 
+This is a quick and dirty hack. It removes the generic Linux
+code and replaces it with ZFS-specific code. For setting quotas
+it removes everything, since we don't use rquotad to set quotas.
+It's like that there will be merge conflicts, but if you realize
+all it's doing is removing all the existing code and replacing it
+with ZFS, it should be easy enough to fix the patch file. 
+
 It's part of the package quota.
 
 as root:

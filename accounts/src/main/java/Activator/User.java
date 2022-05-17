@@ -983,7 +983,8 @@ public class User {
 				if (!test) {
 				    // for testing, can put a test address in config file. It will
 				    // get all email rather than actual user
-				    if (Mail.sendMail(config.fromaddress, (config.testaddress == null ? toaddress
+				    if (Mail.sendMail(config.fromaddress, config.replytoaddress,
+						      (config.testaddress == null ? toaddress
  : config.testaddress), parts[0], parts[1]))
 					Files.write(warningPath, new byte[]{});
 				}
@@ -1032,8 +1033,9 @@ public class User {
 				    if (!test) {
 					// for testing, can put a test address in config file. It will
 					// get all email rather than actual user
-					Mail.sendMail(config.fromaddress, (config.testaddress == null ? toaddress
-									   : config.testaddress), parts[0], parts[1]);
+					Mail.sendMail(config.fromaddress, config.replytoaddress,
+						      (config.testaddress == null ? toaddress
+						       : config.testaddress), parts[0], parts[1]);
 				    }
 				}
 			    }

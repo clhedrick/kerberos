@@ -18,16 +18,28 @@
  */
 
 package Activator;
+import Activator.Config;
 import java.util.*;
-import javax.mail.*;
-import javax.mail.internet.*;
-import javax.activation.*;
+import java.io.File;
+import jakarta.mail.Transport;
+import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.Message;
+import jakarta.mail.Message.RecipientType;
+import jakarta.mail.Session;
+import org.simplejavamail.utils.mail.dkim.DkimSigner;
+import org.simplejavamail.utils.mail.dkim.DkimMessage;
+import org.simplejavamail.utils.mail.dkim.Canonicalization;
+import org.simplejavamail.utils.mail.dkim.SigningAlgorithm;
 
 
 public class Mail {
 
-    public static boolean sendMail(String from, String to, String subject, String body) {
+
+
+    public static boolean sendMail(String from, String replyto, String to, String subject, String body) {
 	// Assuming you are sending email from localhost
+	
 	String host = Config.getConfig().mailhost;
 
 	// Get system properties
@@ -46,8 +58,12 @@ public class Mail {
 	    // Set From: header field of the header.
 	    message.setFrom(new InternetAddress(from));
 
+	    // Reply-to
+	    if (replyto != null)
+		message.setHeader("Reply-To", replyto);
+
 	    // Set To: header field of the header.
-	    message.addRecipient(Message.RecipientType.TO, new InternetAddress(to));
+	    message.addRecipient(RecipientType.TO, new InternetAddress(to));
 
 	    // Set Subject: header field
 	    message.setSubject(subject);
@@ -55,10 +71,28 @@ public class Mail {
 	    // Now set the actual message
 	    message.setText(body);
 
-	    // Send message
-	    Transport.send(message);
-	    //	    System.out.println("Sent message successfully....");
-	}catch (MessagingException mex) {
+	    String dkimkey = Config.getConfig().dkimkey;
+	    String dkimselector = Config.getConfig().dkimselector;
+	    String dkimdomain = Config.getConfig().dkimdomain;
+	    if (dkimkey != null && dkimselector != null && dkimdomain != null & from.endsWith(dkimdomain)) {
+		DkimSigner dkimSigner = new DkimSigner(dkimdomain, dkimselector, new File(dkimkey));
+		dkimSigner.setIdentity(from);
+		dkimSigner.setHeaderCanonicalization(Canonicalization.SIMPLE);
+		dkimSigner.setBodyCanonicalization(Canonicalization.RELAXED);
+		dkimSigner.setSigningAlgorithm(SigningAlgorithm.SHA256_WITH_RSA);
+		dkimSigner.setLengthParam(true);
+		dkimSigner.setCopyHeaderFields(false);
+
+		var signed = new DkimMessage(message, dkimSigner);
+		Transport.send(signed);
+		System.out.println("Sent signed message to " + to);
+	    
+	    } else {
+		Transport.send(message);
+		System.out.println("Sent unsigned message to " + to );
+	    }
+
+	}catch (Exception mex) {
 	    mex.printStackTrace();
 	    return false;
 	}
@@ -66,7 +100,10 @@ public class Mail {
     }
 
     public static void main(String [] args) {    
-	sendMail("hedrick@rutgers.edu", "hedrick@cs.rutgers.edu", "test message", "This is a test from java");
+	String from = Config.getConfig().fromaddress;
+	String replyto = Config.getConfig().replytoaddress;
+
+	sendMail(from, replyto, "hedrick@cs.rutgers.edu", "test message", "This is a test from java");
     }
 
 }

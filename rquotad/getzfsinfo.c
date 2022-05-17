@@ -1,3 +1,9 @@
+/* 
+ * function getzfsinfo is intended to be called from rquootad. 
+ *  will get quota information for one file system, and one user
+ * The zfsinfo struct is the quota information returned
+ */
+
 #define _GNU_SOURCE 
 #include <sys/nvpair.h>
 #include <libnvpair.h>
@@ -16,6 +22,9 @@ struct zfsinfo {
  unsigned long bsoftlimit;
  unsigned long curspace;
 };
+
+// main entry point: get quota info for this file system and user
+// returns in zfsinfo, which is passed by the caller
 
 int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
   char propbuf[1024];
@@ -44,6 +53,9 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
     goto out;
   }
 
+  // parse /proc/mounts
+  // if we find a mountpoint for the specified Linux file system,
+  // set filesys to the ZFS file system mounted there
   while (getline(&line, &len, cf) != -1) {
     char *mountpoint;
     char *fsname;
@@ -93,6 +105,7 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
   
   // now have a zfs file system, filesys
   // see if it is in /etc/quotas.conf. Only report quotas if so
+
   if (regcomp(&fs_pat, "^[ \t]*:fs[ \t]*=[ \t]*([-a-zA-Z/0-9_+]+)[ \t]*$", REG_EXTENDED|REG_NEWLINE) != 0) {
     fprintf(stderr, "Can't compile fs_pat");
     goto out;
@@ -106,6 +119,11 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
     goto out;
   }
   
+  // parse /etc/quotas.conf, looking for an entry for filesys
+  // all this does is set havequotas if we find it.
+  // this is our way of deciding whether the specified ZFS
+  // file systems has quotas enabled.
+
   while (getline(&line, &len, cf) != -1) {
     regmatch_t match[5];
     int ret;
@@ -132,11 +150,22 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
     goto out;
   }
 
+  // we now have a ZFS file system and we know quotas
+  // are enabled for it. 
+
+  // get user info. we were passed a uid. We need the username
+
   if (getpwuid_r(uid, pwd, pwdbuf, sizeof(pwdbuf), &rpwd) != 0 ||
     ! rpwd) {
     fprintf(stderr, "can't find user %d\n", uid);
     goto out;
   }
+
+  // now get the ZFS attributes that have quotas for
+  // this user. There are several attributes, quota and amount
+  // used for disk space and number of files. Rquotad returns
+  // hard and soft quotas. ZFS doesn't actually have that,
+  // so we set soft to hard.
 
   libh = libzfs_init();
   if (!libh) {
@@ -149,6 +178,7 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
     goto out;
   }
 
+  // normal space quota
   asprintf(&attr, "userquota@%s", pwd->pw_name);
   if (!attr)
     goto out;
@@ -162,6 +192,7 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
   free(attr);
   attr = NULL;
 
+  // amount of space currently used
   asprintf(&attr, "userused@%s", pwd->pw_name);
   if (!attr)
     goto out;
@@ -171,6 +202,8 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
     zp->curspace = 0L;    
   free(attr);
   attr = NULL;
+
+  // quota on number of files allowed
 
   asprintf(&attr, "userobjused@%s", pwd->pw_name);
   if (!attr)
@@ -182,6 +215,8 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
     zp->curinodes = 0L;
   free(attr);
   attr = NULL;
+
+  // number of files currently used
 
   asprintf(&attr, "userobjquota@%s", pwd->pw_name);
   if (!attr)
@@ -199,6 +234,10 @@ int getzfsinfo (char *dirname, uid_t uid, struct zfsinfo *zp) {
     zp->ihardlimit = 0;
     zp->isoftlimit = 0;
   }
+
+  // we wrote data into a struct passed by the caller,
+  // so at this point we're done
+
   ret = 0;
 
 out:

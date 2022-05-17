@@ -21,6 +21,18 @@ together.  Many Kerberos-related tools work fine on their own. They
 just don't work together. Here are notes on the specific pieces we've
 had to do:
 
+## I am trying to simplify how some of this works. There is a directory
+"new" that has new versions, currently a renew script that doesn't depend
+upon any pam modules.
+
+However you might still want to use pam-fixcc to fix up the location
+of the ticket when you ssh. Ssh ignore /etc/krb5.conf, always putting
+the ticket in /tmp. This is a probem if you commonly use kinit with
+another principal, e.g. temporarily kinit as an administrative
+principal. Unless do something special, it will overwrite your normal
+ticket. KEYRING, KCM, or even DIR is a better place for your primary
+ticket.
+
 ## accounts
 
 This is a system for creating groups and accounts based on what role
@@ -41,36 +53,44 @@ membership periodically (we're doing it annually).
 
 ## credserv and kgetcred
 
-Kerberos works cleanly for interactive logins, but how do you get credentials
-for cron jobs? The usual documentation tells users to create key tables. There
-are two issues with this (1) security; if someone can get your key table, they can 
-be you anywhere at any time, and you'll probably never know it (2) at least with
-IPA, users with two factor authentication can't use key tables.
+Kerberos works cleanly for interactive logins, but how do you get
+credentials for cron jobs? The usual documentation tells users to
+create key tables. There are two issues with this (1) security; if
+someone can get your key table, they can be you anywhere at any time,
+and you'll probably never know it (2) at least with IPA, users with
+two factor authentication can't use key tables.
 
-We use a Kerberized client-server application. Credserv is the server. Kgetcred is the client. Kgetcred is intended to be called
-at the beginning of the cron job to get credentials and put them in KRB5CCNAME. However the same code is available in a pam module.
-If you use that, users won't need to call kgetcred themselves. Kgetcred also has options that let the user authorized systems that 
-can do this.
+We use a Kerberized client-server application. Credserv is the
+server. Kgetcred is the client. Kgetcred is intended to be called at
+the beginning of the cron job to get credentials and put them in
+KRB5CCNAME. However the same code is available in a pam module.  If
+you use that, users won't need to call kgetcred themselves. Kgetcred
+also has options that let the user authorized systems that can do
+this.
 
-Kgetcred will get Kerberos credentials for a specified user and put them in the cache defined by KRB5CCNAME. It must be called by root.
-The user must register that they want root to be able to get credentials for them
-on specific machine. The credentials are by default not forwardable and have the IP
-address of that machine built in. This provides a much more controlled approach than
-a key table. The server duplicates some of the KDC code, and generates credentials
-itself. That allows it to work for users with one-time passwords. Such users
-should think carefully before using this, but there are situations where it 
-makes sense. 
+Kgetcred will get Kerberos credentials for a specified user and put
+them in the cache defined by KRB5CCNAME. It must be called by root.
+The user must register that they want root to be able to get
+credentials for them on specific machine. The credentials are by
+default not forwardable and have the IP address of that machine built
+in. This provides a much more controlled approach than a key
+table. The server duplicates some of the KDC code, and generates
+credentials itself. That allows it to work for users with one-time
+passwords. Such users should think carefully before using this, but
+there are situations where it makes sense.
 
-There's a pam version of kgetcred, which we use for cron jobs. The user
-doesn't need to know how this works. Pam will see to it that cron issues
-credentials for their job, as long as they have registered that they
-want to cron to work on that machine.
+There's a pam version of kgetcred, which we use for cron jobs. The
+user doesn't need to know how this works. Pam will see to it that cron
+issues credentials for their job, as long as they have registered that
+they want to cron to work on that machine.
 
 This may also be useful as a sample if you want to know how to call
 LDAP from C using GSSAPI authentication. The documentation for this is
 not very easy to understand.
 
 ## renewd
+
+[this will be replaced by new/renewd]
 
 Our users tend to stay logged in a lot. We don't want them to have their
 credentials expire. (Remember, our home directories are on Kerberized NFS.)
@@ -85,12 +105,12 @@ to remove it. (We also run rpc.gssd with the option -T 600. That causes it
 to recheck credentials every 10 minutes. So after logout, access to your
 files via NFS is removed within 10 min.)
 
-We're trying to simplify the way this is done, so renewd and pam_reg_cc
-are likely to change. The code in both is specific to the credential
-cache mechanism, e.g, temp file, KEYRING, KCM. There's a library in common that has all the code that
-depends upon the mechanism. It should be possible to add a new one
-just by changing that library. Currently only types used on Linux are
-supported.
+We're trying to simplify the way this is done, so renewd and
+pam_reg_cc are likely to change. The code in both is specific to the
+credential cache mechanism, e.g, temp file, KEYRING, KCM. There's a
+library in common that has all the code that depends upon the
+mechanism. It should be possible to add a new one just by changing
+that library. Currently only types used on Linux are supported.
 
 This may also be useful as a sample if you want to know how to call LDAP using
 GSSAPI authenticaton from C. 
@@ -146,6 +166,8 @@ passing them to the other end, assuming they are renewable.
 That way you end up with credentials with their full lifetime.
 
 ## pam-reg-cc
+
+[this is not needed with new/renewd]
 
 This does two things: (1) It registers credentials to be
 renewed by renewd. See above (2) It normalizes them to work
@@ -208,10 +230,43 @@ patch for the LDAP server.
 
 ## rquotad
 
-This has nothing to do with Kerberos. It is a patch to rpc.rquotad to support quotas for ZFS file systems. 
-This particular version supports just ZFS, though supporting a mix of file system types would be easy.
+This has nothing to do with Kerberos. It is a patch to rpc.rquotad to
+support quotas for ZFS file systems.  This particular version supports
+just ZFS, though supporting a mix of file system types would be easy.
 
 ## svcgssd
 
 Fixes a bug that causes group changes not to show up on Kerberized NFS servers
 
+## nvidia-wrap
+
+Nothing do with kerberos. Program for use on systems where SLURM controls
+access to GPUs. We want interactive users to be able to use nvidia-smi
+to see GPU use, even though only Slurm jobs actually have access to the
+GPUs. This changes cgroup to one that can open gpus and then runs 
+nvidia-smi with no arguments. Must be installed setuid root
+
+## guacamole-auth and rdp
+
+Make guacamole work with two factor auth.
+
+guacamole-auth is an authentication plugin that uses /usr/libexec/skinit to
+authenticate and ldap to find the list of hosts. /usr/libexec/skinit
+does kinit -k -t /etc/krb5.keytab to set up a temporary ccache and
+kinit -T pointing to that cache. This is needed for two factor auth.
+
+The kerberos ticket is stored in /var/spool/guacamole with a name that
+includes a random uuid. That uuid is sent as the password.
+
+rdp/pam_krdp calls a service rdpserv on the guacamole server passing it
+the username and uuid. It gets back the ticket from /var/spool/guacamole.
+
+This only works for 2 hours after login. At some point we need to expire
+the credentials, since we have no way to tell how long guacamole still
+thinks there's a session. there should be a cron job to kill the
+tickets in /var/spool/guacamole after 2 hours.
+
+However I've reconsidered whether I really want to do this. FOr the
+moment all I'm using is guacamole-auth. In this version it checks for
+OTP users and clears their passwords. That causes the end system to
+give a normal password prompt. WIthout this they get a confusing error.

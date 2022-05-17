@@ -1,0 +1,16 @@
+This is intended to be used with Guacamole. It kerberizes the
+rdp connection.
+
+When the user logs in, Guacamole gets a kerberos ticket, and
+saves is in /var/spool/guacamole/krb5guac_USER_UUID where UUID
+is a random UUID. That UUID is saved as the password.
+
+The pam module is added to xrdp_sesman as sufficient. It calls
+back rdpserv on the Guacammole server, passing username and UUID.
+If it matches a saved ticket, that ticket is sent back, and
+the pam module sets it up as the user's Kerberos credentials.
+
+There should be a cron job that kills the tickets in
+/var/spool/guacamole after a while, maybe an hour. At that point any
+new connections will fail and the user will need to go through a full
+login.

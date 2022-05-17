@@ -55,6 +55,27 @@ To install:
   test-services is only authorized for test-cas, I think
 * install activate in /usr/local/bin. may need to change java location
 
+For DKIM:
+  * generate keys:
+     openssl genrsa -out dkim.pem 1024
+(might be better with 2048)
+  * convert private key to der for the dkim software:
+     openssl pkcs8 -topk8 -nocrypt -in dkim.pem -out dkim.der -outform der
+  * convert public key to text for DNS:
+     openssl rsa -in dkim.pem -pubout
+text record is
+  v=DKIM1;g=*;k=rsa;p=XXX;s=email;t=s
+  where XXX is the output of the 3rd openssl command
+     However for 2048 bit keys, it's too long. Split it in 2
+     and add it as "xxxxx""xxxx". Client will concatenate them.
+add it as a text record on email._domainkey.HOSTNAME. that makes "email" the selector
+configuration in /etc/activator.config
+  dkimkey /etc/dkim.test-service - this is a copy of dkim.der, the private key
+  dkimselector email - this is the selector used in the DNS record name
+  dkimdomain test-services.cs.rutgers.edu - this is the hostname used in the DNS record
+The code will sign any message whose from address ends in the dkim domain. You can
+set replytoaddress if you need replies to go elsewhere
+
 You can debug .JSP files by editing them directly in tomcat/webapps/ROOT
 However once they work, you must copy them to src/main/webapp/ here, or
 the next maven deploy will wipe out the changes.
@@ -191,6 +212,14 @@ create permission: Rutgers do all to group
    click "all" for granted rights. nothing else
 Add this permission to Privilege Group Administrators.
 this is neded to allow rename of group to group-suspeneded and back
+
+Ansible script checks to see whether the right setup has been
+done for a host. To do that, coresysadmins must have role
+create role Rutgers: coresysadmins
+add to coresysadmins
+create privilege: Rutgers: Read Service Delegations
+add to Rutgers: coresyadmins
+add permission System: Read Service Delegations
 
 Also, to update the firewall on the kerberos servers, the host running
 this must be allowed to ssh to the firewall. The user syncipt on each

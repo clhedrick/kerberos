@@ -1,0 +1,22 @@
+.TH PAM_REG_CC 8
+.SH NAME
+pam-fixcc \- copy credential cache from /tmp into KEYRING or KCM
+.SH DESCRIPTION
+.I  pam-fixcc
+.PP
+In some versions of Linux, sshd puts kerberos credentials in /tmp.
+We really want it in KEYRING or KCM, so users can kinit as foo-admin
+without loosing their normal credentials. Overwriting the normal
+credentials could cause them to lose access to their files.
+.PP
+This should only be used for sshd, and only on systems where
+.PP
+1. sshd puts credentials in /tmp
+.PP
+2. /etc/krb5.conf specifies something like default_ccache_name = KEYRING:persistent:%{uid},
+i.e. a collection. The code will probably not work if there's a random
+part in default_ccache_name
+.PP
+This should be used with the bash version of renewd. You must use pam_reg_cc with
+the C version of renewd.
+

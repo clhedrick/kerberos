@@ -243,6 +243,7 @@ int main(int argc, char *argv[])
     char *principal = NULL;
     int needrename = 0;
     char princbuf[1024];
+    int printused;
     char realname[1024];
     char realccname[1024];
     char tempname[1024];
@@ -862,12 +863,15 @@ int main(int argc, char *argv[])
     // principal - if not specified by user
     if (!principal) {
         // no principal specified. username
-        snprintf(princbuf, sizeof(princbuf) -1, "%s@%s", username, default_realm);
+        printused = snprintf(princbuf, sizeof(princbuf) -1, "%s@%s", username, default_realm);
         principal = princbuf;
     } else if (!strchr(principal, '@')) {
         // principal without @, add default realm
-        snprintf(princbuf, sizeof(princbuf) -1, "%s@%s", principal, default_realm);
+        printused = snprintf(princbuf, sizeof(princbuf) -1, "%s@%s", principal, default_realm);
         principal = princbuf;        
+    }
+    if (printused >= (int)(sizeof(princbuf) -1)) {
+        mylog(LOG_DEBUG, "princpal truncated %s %s", username, default_realm);
     }
 
     written = write_item(sock, principal, strlen(principal), written);
@@ -1003,8 +1007,11 @@ int main(int argc, char *argv[])
                 // cc exists; in KEYRING we can just store, but in /tmp create a new one and rename it
                 // have to copy names, because cc_get_name is invalid after close
                 // fortunately FILE: is the default, so we can just use the name for cc_resolv
-                strncpy(realname, krb5_cc_get_name(context, ccache), sizeof(realname));
-                snprintf(tempname, sizeof(tempname) - 1, "%s.%lu", realname, (unsigned long) getpid());
+                strncpy(realname, krb5_cc_get_name(context, ccache), sizeof(realname) -1);
+                printused = snprintf(tempname, sizeof(tempname) - 1, "%s.%lu", realname, (unsigned long) getpid());
+                if (printused >= (int)(sizeof(tempname) - 1)) {
+                    mylog(LOG_DEBUG, "cc name truncated %s %lu", realname, (unsigned long) getpid());
+                }
 
                 krb5_cc_close(context, ccache);
                 ccache = NULL;
@@ -1042,9 +1049,13 @@ int main(int argc, char *argv[])
             // return to PAM. If the cache is a temporary which
             // will have to be renamed, use the real name, i.e.
             // the one it will end up as.
-            snprintf(realccname, sizeof(realccname), "%s:%s", 
+            printused = snprintf(realccname, sizeof(realccname), "%s:%s", 
                      krb5_cc_get_type(context, ccache),
                      (needrename ? realname : krb5_cc_get_name(context, ccache)));
+            if (printused >= (int)(sizeof(realccname))) {
+                    mylog(LOG_DEBUG, "ccname truncated %s %s", krb5_cc_get_type(context, ccache), (needrename ? realname : krb5_cc_get_name(context, ccache)));
+            }
+            
 
             // close it before we do rename and chown
             krb5_cc_close(context,ccache);

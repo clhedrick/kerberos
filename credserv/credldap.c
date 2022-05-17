@@ -98,12 +98,20 @@ void mylog (int level, const char *format, ...) {
  * callback for sasl_interactive_bind
  * taken from IPA source. I don't see any way to have guessed this from 
  * documentation.
+ * Normally Kerberos will prompt the user. That won't work for servers.
+ * This callback passes in something equivalent to a prompt, and we have to pass back the data
+ * that the user would have types.
+ *
+ * The protocol allows the application to have private data that this code doesn't
+ * understand. We put the principal that we're trying to authenticate as the private
+ * data. We can then pull the username and realm from that.
  */
 
 static int ldap_sasl_interact(LDAP *ld, unsigned flags, void *priv_data, void *sit)
 {
     sasl_interact_t *in = NULL;
     int ret = LDAP_OTHER;
+    // the private dat is a kerberos principal
     krb5_principal princ = (krb5_principal)priv_data;
     krb5_context krbctx;
     char *outname = NULL;
@@ -111,8 +119,10 @@ static int ldap_sasl_interact(LDAP *ld, unsigned flags, void *priv_data, void *s
 
     if (!ld) return LDAP_PARAM_ERROR;
 
+    // go through the list of "prompts" 
     for (in = sit; in && in->id != SASL_CB_LIST_END; in++) {
         switch(in->id) {
+            // asks for username. We get the username from the kerberos principal
         case SASL_CB_USER:
             krberr = krb5_init_context(&krbctx);
 
@@ -141,11 +151,13 @@ static int ldap_sasl_interact(LDAP *ld, unsigned flags, void *priv_data, void *s
             krb5_free_context(krbctx);
 
             break;
+            // asks for realm. We get the realm from the kerberos principal
         case SASL_CB_GETREALM:
             in->result = princ->realm.data;
             in->len = princ->realm.length;
             ret = LDAP_SUCCESS;
             break;
+            // let's hope they don't ask for anything else
         default:
             in->result = NULL;
             in->len = 0;
@@ -155,6 +167,7 @@ static int ldap_sasl_interact(LDAP *ld, unsigned flags, void *priv_data, void *s
     return ret;
 }
 
+// we want to nake an LDAP3 call using SASL with GSSAPI as the mechanism
 int  auth_method    = LDAP_AUTH_SASL;
 int desired_version = LDAP_VERSION3;
 
@@ -191,7 +204,7 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
     krb5_appdefault_string(context, "credserv", &realm_data, "ldapurl", "ldaps://localhost", &ldapurl);
 
     // first we have to set up a credentials file with creds for the credserv/HOST
-    // that's used by the GSSAPI authentication
+    // that's used by the GSSAPI authentication. The credentials should be in /etc/krb5.keytab
 
     if ((retval = krb5_kt_resolve(context, "/etc/krb5.keytab", &keytab))) {
         mylog(LOG_ERR, "unable to open /etc/krb5.keytab");
@@ -226,6 +239,7 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
         goto err;
     }
 
+    // set KRB5CCNAME to point to the credential cache we just set up
     oldval = getenv("KRB5CCNAME");
     // memory is inside libc, doesn't get returned
     // putenv may overwrite, so copy it
@@ -235,7 +249,10 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
     }
     resetenv = 1;
 
-    asprintf(&putstr, "KRB5CCNAME=MEMORY:%s", krb5_cc_get_name(context, cache));
+    if (asprintf(&putstr, "KRB5CCNAME=MEMORY:%s", krb5_cc_get_name(context, cache)) < 0) {
+        mylog(LOG_ERR, "ldap_initialize failed");
+    }
+            
     putenv(putstr);
     // can't release this string, as it becomes part of the env
 
@@ -256,6 +273,13 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
         goto err;
     }
 
+    // uses the callback above to specify the username and realm. Note that the principal (bind_princ) is
+    // passes as the application-specific private data. Our callback uses it to get the info it needs.
+    // the callback can prompt for password, but that can't work here. It turns out that they will
+    // use a ticket from KRB5CCNAME, so we make sure that is set up.
+    // Credserv handles each request in a separate process, so that's safe.It doesn't appear that
+    // openldap has a way to pass credentials in other than the enviornment variable.
+    // ldap_sasl_bind_s seems to be able to pass credentials directly, but I couldn't make it work
     ret = ldap_sasl_interactive_bind_s(ld, NULL, "GSSAPI", NULL, NULL, LDAP_SASL_QUIET, ldap_sasl_interact, bind_princ);
     if (ret != LDAP_SUCCESS) {
         mylog(LOG_ERR, "ldap_sasl_bind_s: %s", ldap_err2string(ret));
@@ -270,7 +294,9 @@ LDAP *krb_ldap_open(krb5_context context, char *service, char *hostname, char *r
  ok:
     if (resetenv) {
         if (oldvalcopy) {
-            asprintf(&putstr, "KRB5CCNAME=%s", oldvalcopy);
+            if (asprintf(&putstr, "KRB5CCNAME=%s", oldvalcopy) < 0) {
+                mylog(LOG_ERR, "asprintf failed");
+            }
             putenv(putstr); // becomes part of env, don't free it
             free(oldvalcopy); // but this is no longer needed
         } else {
@@ -304,9 +330,13 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm, char *user, struct 
     realm_data.data = realm;
     realm_data.length = strlen(realm);
 
+    // do an LDAP seacrch for uid=USER
+
     krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
 
-    asprintf(&filter, "(uid=%s)", user);
+    if (asprintf(&filter, "(uid=%s)", user) < 0) {
+        mylog(LOG_ERR, "asprintf failed");
+    }
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
         mylog(LOG_ERR, "ldap_search_s failed");
@@ -315,6 +345,8 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm, char *user, struct 
     }
     free(filter);
 
+    // make sure it was found. Ldap can return multiple entries, but there will onky be one for a given UID
+    // so the first entry is what we want
     entry = ldap_first_entry(ld, msg);
     if (entry == NULL) {
         mylog(LOG_ERR, "no ldap entry for %s", user);
@@ -325,6 +357,8 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm, char *user, struct 
 
     *rules = NULL; // if no rules defined
     *keytab = NULL; // if no keytab defined
+    // go through the attributes returned looking for the credserv rule and key table.
+    // if found, set up the return value for them
     for (attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
         if (strcmp(attr, "csRutgersEduCredservRule") == 0) {
             *rules = ldap_get_values_len(ld, entry, attr);
@@ -340,6 +374,8 @@ int getLdapData(krb5_context context, LDAP *ld, char* realm, char *user, struct 
     return 0;
 
 }
+
+// see if the user is a member of admingroup, a group that defines them as privileged
 
 int isPrived(krb5_context context, LDAP *ld, char* realm, char *userprinc, char *admingroup) {
     char* filter;
@@ -358,15 +394,22 @@ int isPrived(krb5_context context, LDAP *ld, char* realm, char *userprinc, char 
 
     krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
 
+    // we probably have user@CS.RUTGERS.EDU. We need just the uesrname
+    // make an LDAP filter uid=USER
     cp = strchr(userprinc, '@');
     if (cp) {
         *cp = '\0';
-        asprintf(&filter, "(uid=%s)", userprinc);
+        if (asprintf(&filter, "(uid=%s)", userprinc) < 0) {
+            mylog(LOG_ERR, "asprintf failed");
+        }
         *cp = '@';
     } else
-        asprintf(&filter, "(uid=%s)", userprinc);
+        if (asprintf(&filter, "(uid=%s)", userprinc) < 0) {
+            mylog(LOG_ERR, "asprintf failed");
+        }
 
 
+    // now search for the user's data
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
         mylog(LOG_ERR, "ldap_search_s failed");
         free(filter);
@@ -374,26 +417,32 @@ int isPrived(krb5_context context, LDAP *ld, char* realm, char *userprinc, char 
     }
     free(filter);
 
+    // ldap could return more than one entry, but uid's are unique, so there's 0 or 1
     entry = ldap_first_entry(ld, msg);
     if (entry == NULL) {
         mylog(LOG_ERR, "no ldap entry for %s", userprinc);
         return 0;
     }
 
+    // look through the attributes for memberOf. Check whether they're a member of the specific group
     for (attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
         if (strcmp(attr, "memberOf") == 0) {
             int i;
             members = ldap_get_values_len(ld, entry, attr);
             for (i = 0; members[i]; i++) {
+                // the value will be of the form cn=GRUUP,ou- ....
+                // find just the group name
                 char *member = members[i]->bv_val;
                 char *sp = strchr(member, ',');
                 unsigned int complen = strlen(member) - 3;
                 // number of chars after cn= before ,
                 if (sp)
                     complen = sp - member - 3;
+                // see if it matches. Must start with cn= and have the right group name
                 if (strncmp(member, "cn=", 3) == 0 &&
                     strlen(admingroup) == complen &&
                     strncmp(member+3, admingroup, complen) == 0) {
+                    // found the admin group, so they are privileged
                     prived = 1;
                 }
             }                
@@ -438,7 +487,9 @@ char *getnetgroup(krb5_context context, LDAP *ld, char *realm, char* netgroup) {
 
     krb5_appdefault_string(context, "credserv", &realm_data, "altbase", "", &base);
 
-    asprintf(&filter, "(&(objectclass=ipanisnetgroup)(cn=%s))", netgroup);
+    if (asprintf(&filter, "(&(objectclass=ipanisnetgroup)(cn=%s))", netgroup) < 0) {
+        mylog(LOG_ERR, "asprintf failed");
+    }
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
         mylog(LOG_ERR, "ldap_search_s failed");
@@ -457,7 +508,9 @@ char *getnetgroup(krb5_context context, LDAP *ld, char *realm, char* netgroup) {
         if (strcasecmp(attr, "ipaUniqueID") == 0) {
             members = ldap_get_values_len(ld, entry, attr);
             if (members[0]) {
-                asprintf(&retval, "%s", members[0]->bv_val);
+                if (asprintf(&retval, "%s", members[0]->bv_val) < 0) {
+                    mylog(LOG_ERR, "asprintf failed");
+                }
             }
         }
         ldap_memfree(attr);
@@ -470,7 +523,7 @@ char *getnetgroup(krb5_context context, LDAP *ld, char *realm, char* netgroup) {
 
 }
 
-// return 1 if true, netgroup is uniqueid
+// return 1 if this host is in the netgroup, netgroup is uniqueid, not the netgroup name
 int hostinnetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char* netgroup) {
     char* filter;
     LDAPMessage* msg;
@@ -489,7 +542,9 @@ int hostinnetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char
 
     krb5_appdefault_string(context, "credserv", &realm_data, "ldapbase", "", &base);
 
-    asprintf(&filter, "(&(objectclass=ipahost)(cn=%s))", host);
+    if (asprintf(&filter, "(&(objectclass=ipahost)(cn=%s))", host) < 0) {
+        mylog(LOG_ERR, "asprintf failed");
+    }
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
         mylog(LOG_ERR, "ldap_search_s failed");
@@ -504,7 +559,9 @@ int hostinnetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char
         return 0;
     }
 
-    asprintf(&target, "ipaUniqueID=%s,", netgroup);
+    if (asprintf(&target, "ipaUniqueID=%s,", netgroup) < 0) {
+        mylog(LOG_ERR, "asprintf failed");
+    }
     targetlen = strlen(target);
     for (attr = ldap_first_attribute(ld, entry, &ber); attr != NULL; attr = ldap_next_attribute(ld, entry, ber)) {
         if (strcasecmp(attr, "memberOf") == 0) {
@@ -530,6 +587,7 @@ int hostinnetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char
 
 }
 
+// see if this host is in this netgroup
 int ldap_innetgroup(krb5_context context, LDAP *ld, char *realm, char *host, char* netgroup) {
     int retval;
 
@@ -597,8 +655,11 @@ int deleteRule(LDAP *ld, char *dn, char *rule) {
     return 0;
 }
 
-// update the key table for a user.
+// update the key table for a user. It's the LDAP attribute csRutgersEduCredservKeytab
 // this will create a new one or update the existing one
+// this was used before we figured out impersonation. We still put key tables in LDAP for
+// the user, but don't actually use them. (In fact the key table we put in is currently
+// "fake keytab". It would probably be better just to remove all the key table code. 
 
 int replaceKeytab(LDAP *ld, char *dn, struct berval **keytab, struct berval *newkeytab) {
     LDAPMod rulemod;
@@ -664,7 +725,9 @@ int deleteKeytab(LDAP *ld, char *dn, struct berval **keytab, char *principal) {
     int preflen = strlen(principal) + 1;
     int i;
 
-    asprintf(&prefix, "%s=", principal);
+    if (asprintf(&prefix, "%s=", principal) < 0) {
+        mylog(LOG_ERR, "asprintf failed");        
+    }
 
     // remove any value for this principal
     if (keytab && keytab[0] != NULL) {
@@ -693,6 +756,7 @@ int deleteKeytab(LDAP *ld, char *dn, struct berval **keytab, char *principal) {
     return 0;
 }
 
+// for testing
 #ifdef MAIN
 int main(int argc, char *argv[]) {
 
@@ -766,7 +830,9 @@ int main(int argc, char *argv[]) {
 
     /* search from this point */
      
-    asprintf(&filter, "(uid=%s)", targetuser);
+    if (asprintf(&filter, "(uid=%s)", targetuser) < 0) {
+        mylog(LOG_ERR, "asprintf failed");
+    }
 
     if (ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &msg) != LDAP_SUCCESS) {
         perror("ldap_search_s" );

@@ -414,7 +414,7 @@ public class Cleanup {
 
 		    // for testing, can put a test address in config file. It will
 		    // get all email rather than actual user
-		    if (Mail.sendMail(config.fromaddress, 
+		    if (Mail.sendMail(config.fromaddress, config.replytoaddress, 
 				      (config.testaddress == null ? toaddress : config.testaddress), 
 				      (config.testaddress == null ? "" : (toaddress + ": ")) + 
 				          subject, 
