@@ -176,6 +176,12 @@ public class GroupsController {
 	}	    
 	if (name != null)
 	    name = name.toLowerCase().trim();
+	if (name != null && name.matches("^[a-z]{1,8}([0-9]+)?$")) {
+	    messages.add("Name of new group should not look like a NetID. Consider adding one of ._-");
+	    return groupsGet(request, response, model);
+	}
+	    
+
 
 	boolean sharing = "on".equals(sharingSt);
 	boolean guests = "on".equals(guestSt);
