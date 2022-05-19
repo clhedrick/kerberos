@@ -126,7 +126,7 @@ public class GroupController {
 		}
 		universityData = universityDataList.get(0);
 		String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/user/bin"};
-		if (!User.createUser(name, conf, universityData, false, logger, env))
+		if (!User.createUser(name, conf, universityData, false, logger, env, subject, messages))
 		    return "fail";
 		// notify users
 		// replace %u with uid

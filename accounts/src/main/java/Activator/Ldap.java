@@ -105,7 +105,7 @@ public class Ldap {
 		    logmsg.append("\n");
 		}
 		try {
-		    logger.info(logmsg);
+		    logger.debug(logmsg);
 		} catch (Exception e) {
 		}
 

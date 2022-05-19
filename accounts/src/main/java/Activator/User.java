@@ -369,7 +369,7 @@ public class User {
 	return false;
     }
 
-    public static boolean createUser(String username, Config config, Map<String,List<String>> universityData, boolean test, Logger logger, String[] env) {
+    public static boolean createUser(String username, Config config, Map<String,List<String>> universityData, boolean test, Logger logger, String[] env, Subject subj, List<String>messages) {
 	var uid = Uid.allocateUid(username, config);
 
 	var firstl = universityData.get("givenname");
@@ -381,10 +381,58 @@ public class User {
 	var gecosl = universityData.get("cn");
 	var gecos = (gecosl == null) ? "-" : gecosl.get(0).trim();
 	
-	logger.info("ipa user-add " + username + " --uid=" + uid + " --gidnumber=" + config.defaultgid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
+	// first create group if needed
+	var owner = "uid=" + username + ",cn=users," + config.accountbase;
+
+	var action = new JndiAction(null, new String[]{"objectclass=*", "cn=" + username + ",cn=groups," + config.accountbase, "owner", "gidnumber"});
+	//	var action = new JndiAction(null, new String[]{"(cn=" + username + ")", null, "owner", "gidnumber"});
+	Subject.doAs(subj, action);
+	String gid = null;
+	if (action.val != null && action.val.size() > 0) {
+	    if (messages != null)
+		messages.add("Group with your name already exists. Please contact " + config.helpmail + " and tell them what ths message says.");
+	    logger.error("Group with this name already exists");
+	    return false;
+	} else {
+	    logger.info("ipa group-add " + username + " --owners=" + username);
+	    if (!test) {
+		var outlist = new ArrayList<String>();
+		if (docommand.docommand (new String[]{"/bin/ipa", "group-add", username, "--owners=" + username}, env, null, outlist, true) != 0) {
+		    if (messages != null)
+			messages.add("Unable to create group with your name. Please contact " + config.helpmail + " and tell them what ths message says.");
+		    logger.error("Unable to create group with this name.");
+		    return false;
+		}
+		if (outlist == null)
+		    return false;
+		for (var outitem: outlist) {
+		    if (outitem.matches("^ *GID:.*")) {
+			var items = outitem.split(":");
+			if (items.length < 2){
+			    return false;
+			}
+			gid = items[1].trim();
+		    }
+		}		    
+		if (gid == null) {
+		    if (messages != null)
+			messages.add("Unable to find GID or new group. Please contact " + config.helpmail + " and tell them what ths message says.");
+		    logger.error("Unable to find GID of new group.");
+		    return false;
+		}
+	    } else {
+		gid = "dummy";
+	    }
+	}
+
+	logger.info("ipa user-add " + username + " --uid=" + uid + " --gidnumber=" + gid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
 	if (!test) {
-	    if (docommand.docommand (new String[]{"/bin/ipa", "user-add", username, "--uid=" + uid, "--gidnumber=" + config.defaultgid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"}, env) != 0)
+	    if (docommand.docommand (new String[]{"/bin/ipa", "user-add", username, "--uid=" + uid, "--gidnumber=" + gid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"}, env) != 0) {
+		if (messages != null)
+		    messages.add("Unable to create user. Please contact " + config.helpmail + " and tell them what ths message says.");
+		logger.error("Unable to create user.");
 		return false;
+	    }
 	}
 	return true;
     }
@@ -869,7 +917,7 @@ public class User {
 		    //   he activates on a cluster where he can login
 		    // we also don't create users for cleanup. We wait until they activate
 		    if (!cleanup && action.val.size() == 0 && userAllowedClusters.contains(requestedCluster))
-			ok = ok & createUser(username, config, universityData, test, logger, env);
+			ok = ok & createUser(username, config, universityData, test, logger, env, subj, null);
 
 		    // if user exists in both data, update attributes if any have changed
 		    if (action.val.size() > 0 && lu.oneVal(universityData.get("uid")) != null)
