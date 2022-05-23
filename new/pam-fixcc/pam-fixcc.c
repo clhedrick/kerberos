@@ -72,6 +72,10 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   char *prop = NULL;
   int isnew = 0;
 
+  // ccname could be null if called from sudo
+  if (ccname == NULL)
+    return PAM_SUCCESS;
+
   // get basic user and kerberos info
   ret = krb5_init_context(&context);
   if (ret) goto err;
