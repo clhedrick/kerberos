@@ -182,10 +182,10 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 
 	    // if we have cached configs within 10 minutes, use them
 	    // otherwise continue and get new configurations
-	    if (configUpdate != null && configSave != null &&
-		configUpdate.plusMinutes(10).isAfter(LocalTime.now())) {
-		return new TutorialAuthenticatedUser(credentials, configSave);
-	    }
+	    //	    if (configUpdate != null && configSave != null &&
+	    //		configUpdate.plusMinutes(10).isAfter(LocalTime.now())) {
+	    //		return new TutorialAuthenticatedUser(credentials, configSave);
+	    //	    }
 
 	    // now get the list of host configurations
 	    matchAttrs = new BasicAttributes(true);
