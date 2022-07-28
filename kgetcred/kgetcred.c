@@ -413,10 +413,6 @@ int main(int argc, char *argv[])
 #else
      clearenv();
 #endif
-     if (krb5ccname) {
-         setenv("KRB5CCNAME", krb5ccname, 1);
-         krb5ccname = NULL;  // let environment variable handle it
-     }
 #endif
     // end of non-PAM   
 
@@ -426,6 +422,15 @@ int main(int argc, char *argv[])
             mylog(LOG_ERR, "while initializing krb5 %s", error_message(retval));
             goto done;
         }
+#ifndef PAM
+        // it's not clear why this is needed, but I assume I added it for some reason
+        // previously it set the environment variable before the context init, but in
+        // Ubuntu 22, init_context seems to ignore the environment variable if setuid
+        if (krb5ccname) {
+            krb5_cc_set_default_name(context, krb5ccname);
+            krb5ccname = NULL;  // let environment variable handle it
+        }
+#endif
     }
 
     if ((retval = krb5_get_default_realm(context, &default_realm))) {
