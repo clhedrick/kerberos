@@ -113,7 +113,7 @@ public class GroupController {
 		    messages.add(String.format("User %s isn't in our system.", name));
 		    return "fail";
 		}
-		
+
 		Activator.Ldap ldap = new Activator.Ldap();
 		List<Map<String,List<String>>> universityDataList = ldap.lookup("(uid=" + name + ")", conf);
 		Map<String,List<String>> universityData = null;
@@ -165,11 +165,21 @@ public class GroupController {
 	
     }
 
-    public String getUserDisplay(String userDn, Subject subject, GSSCredential gssapi, DirContext ctx, Config config) {
+    public String getUserDisplay(String userDn, Subject subject, GSSCredential gssapi, DirContext ctx, Config config, List<String>  roles) {
 	Logger logger = null;
 	logger = LogManager.getLogger();
 	int i;
 	String searchDn = userDn;
+
+	String username = lu.dn2user(userDn);
+
+	Activator.Ldap ldap = new Activator.Ldap();
+	List<Map<String,List<String>>> universityDataList = ldap.lookup("(uid=" + username + ")", config);
+	if (universityDataList != null && universityDataList.size() > 0) {
+	    Map<String,List<String>> universityData = universityDataList.get(0);
+	    if (universityData.get("employeetype") != null)
+		roles.addAll(universityData.get("employeetype"));
+	}
 
 	common.JndiAction action = new common.JndiAction(gssapi, new String[]{"(objectclass=*)", userDn, "gecos"});
 	// we're holding the context open, so use it
@@ -244,6 +254,7 @@ public class GroupController {
 
 	Map<String, List<String>> attrs = null;
 	Map<String,String> memberNames = new HashMap<String,String>();
+	Map<String,List<String>> memberRoles = new HashMap<String,List<String>>();
 	boolean needsReview = false;
 
 	Set<?>privs = (Set<?>)request.getSession().getAttribute("privs");
@@ -311,9 +322,11 @@ public class GroupController {
 	    // now have all the people displayed on the page
 	    // build a map from DN to what we want to display
 	    for (String member: people) {
-		String display = getUserDisplay(member, subject, gssapi, ctx, aconfig);
+		List<String>roles = new ArrayList<String>();
+		String display = getUserDisplay(member, subject, gssapi, ctx, aconfig, roles);
 		// put it in the map
 		memberNames.put(member, display);
+		memberRoles.put(member, roles);
 	    }
 
 	    // see if needs review. don't bother if no members
@@ -336,6 +349,7 @@ public class GroupController {
 	model.addAttribute("clusters", aconfig.clusters);
 	model.addAttribute("group", attrs);
 	model.addAttribute("membernames", memberNames);
+	model.addAttribute("memberroles", memberRoles);
 	model.addAttribute("needsreview", needsReview);
 	model.addAttribute("isloginmanager", isLoginManager);
 	model.addAttribute("lu", new Util());

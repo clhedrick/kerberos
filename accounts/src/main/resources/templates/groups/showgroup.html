@@ -106,7 +106,7 @@ Make sure you add at least one member to the group.
 <div class="inset" style="margin-top:0.5em">
 <div th:if="${group['member'] != null}">
 <div th:each="m: ${group['member']}">
-<span th:text="${membernames.get(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/><br/>
+<span th:text="${membernames.get(m)}"/> <img role="button" tabindex="0" style="height:1em;margin-left:1em" src="delete.png" th:alt="${'Delete member ' + lu.dn2user(m)}" class="deleteMemberButton"/><input type="hidden" name="deleteName" th:value="${lu.dn2user(m)}"/> <span th:if="${memberroles.get(m) != null and memberroles.get(m).size() > 0}" th:text="${memberroles.get(m)}" style="margin-left:1em"/><br/>
 </div>
 </div>
 <div th:if="${needsreview or group['businesscategory'] != null and group['businesscategory'].contains('suspended')}" class="warning" style="margin-top:1em">
