@@ -47,6 +47,8 @@ public class Config {
     public String dburl2 = null;
     public String dbuser = null;
     public String dbpass = null;
+    public String netdbdriver = null;
+    public String netdburl = null;
     public String csrolequery = null;
     public String csroleattr = null;
     public String uidtable =  null;
@@ -171,6 +173,10 @@ public class Config {
 			dbuser = atoms[1];
 		    if (atoms[0].equals("dbpass"))
 			dbpass = atoms[1];
+		    if (atoms[0].equals("netdbdriver"))
+			netdbdriver = atoms[1];
+		    if (atoms[0].equals("netdburl"))
+			netdburl = atoms[1];
 		    if (atoms[0].equals("csrolequery"))
 			csrolequery = atoms[1];
 		    if (atoms[0].equals("csroleattr"))

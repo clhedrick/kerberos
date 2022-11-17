@@ -121,6 +121,8 @@ $(document).ready(function(){
 <div> <button class="editbutton" type="button">Edit</button> </div>
 <div class="itemlist-entry1"><label><span class="hidden">Delete</span><input type="checkbox" name="del" th:value="${s.cn[0]}"/></label> </div>
 <div class="itemlist-entry2"> <a th:href="@{showhosts(subnet=${s.cn[0] + '/' + s.dhcpnetmask[0]})}"><span class="subnetname" th:text="${s.cn[0] + '/' + s.dhcpnetmask[0]}"/></a></div>
+<div class="itemlist-entry3 option" th:if="${s['vlan']}" th:text="${s['vlan'][0]}"/>
+<div class="itemlist-entry3 option" th:if="${s['description']}" th:text="${s['description'][0]}"/>
 <div class="itemlist-entry3 option" th:if="${s['dhcpoption']}"  th:text="${s['dhcpoption']}"/>
 </div>
 </fieldset>

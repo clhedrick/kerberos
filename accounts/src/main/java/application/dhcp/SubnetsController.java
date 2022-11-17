@@ -73,6 +73,13 @@ import Activator.Config;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.commons.net.util.SubnetUtils;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+
 
 @Controller
 public class SubnetsController {
@@ -144,6 +151,69 @@ public class SubnetsController {
 	try {Files.deleteIfExists(temppath);}catch(Exception ignore){}
 	return true;
     }    
+
+    // add vlan number and description from net database to each sunet
+    void addSubnetInfo(List<Map<String,List<String>>> subnets) {
+	var conf = Config.getConfig();
+
+	Logger logger = null;
+	logger = LogManager.getLogger();
+
+	Connection connect = null;
+	PreparedStatement preparedStatement = null;
+	
+	try {
+	    Class.forName(conf.netdbdriver);
+	    connect = DriverManager.getConnection(conf.netdburl);
+	    preparedStatement = connect
+	       .prepareStatement("select vlan, description from vlans where ip = ?");
+	} catch (Exception e) {
+	    logger.error("Can't connect to netdb " + e);
+	    return;
+	}
+	    
+
+	for (var subnet: subnets) {
+	    var address = "";
+	    try {
+		var ip = subnet.get("cn").get(0);
+		var mask = subnet.get("dhcpnetmask").get(0);
+		address = ip + "/" + mask;
+	    } catch (Exception ignore) {
+		;
+	    }
+	    
+	    try {
+
+		preparedStatement.setString(1, address);
+
+		var resultSet = preparedStatement.executeQuery();
+		if (resultSet != null && resultSet.next()) {
+		    var vlan = resultSet.getString(1);
+		    var description = resultSet.getString(2);
+		    // format of a subnet is map of lists, so we have to create
+		    // ome-element lists
+		    var vlans = new ArrayList<String>();
+		    vlans.add(vlan);
+		    subnet.put("vlan", vlans);
+		    var descriptions = new ArrayList<String>();
+		    descriptions.add(description);
+		    subnet.put("description", descriptions);
+		}		
+	    
+	    } catch (Exception e) {
+		logger.error("Can't get subnet data from netdb " + e);
+	    }
+
+	}
+
+	try {
+	    connect.close();
+	} catch (Exception ignore) {
+	    ;
+	}
+    }
+
     
     @GetMapping("/dhcp/showsubnets")
     public String subnetsGet(HttpServletRequest request, HttpServletResponse response, Model model) {
@@ -176,6 +246,7 @@ public class SubnetsController {
 
 	// look at the results of the LDAP query
 	var subnets = action.data;
+	addSubnetInfo(subnets);
 	Collections.sort(subnets, (g1, g2) -> DhcpHostsController.getIntAddress(g1,"cn").compareTo(DhcpHostsController.getIntAddress(g2, "cn")));
 
 	// set up model for JSTL to output
