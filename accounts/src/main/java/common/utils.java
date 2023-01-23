@@ -40,7 +40,7 @@ import java.text.SimpleDateFormat;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.Date;
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Random;
 
 public class utils {

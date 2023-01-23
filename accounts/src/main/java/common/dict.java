@@ -36,7 +36,7 @@ import common.utils;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import javax.servlet.jsp.JspWriter;
+import jakarta.servlet.jsp.JspWriter;
 
 public class dict {
 

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#export PATH=/etc/alternatives/java_sdk_11/bin:"$PATH"
-#export JAVA_HOME=/etc/alternatives/java_sdk_11
-#/usr/local/maven/bin/mvn clean package
+export PATH="/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH"
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+/usr/local/bin/mvn clean package
 mvn clean package
 
 

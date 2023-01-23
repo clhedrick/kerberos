@@ -19,7 +19,7 @@
 
 package common;
 import java.io.*;
-import javax.servlet.jsp.JspWriter;
+import jakarta.servlet.jsp.JspWriter;
 import java.io.PrintStream;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
