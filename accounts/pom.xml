@@ -113,7 +113,7 @@
       <artifactId>utils-mail-dkim</artifactId>
       <version>3.0.0</version>
     </dependency>
-<!-- seems to be tuiltin 
+<!--
     <dependency>
       <groupId>com.sun.mail</groupId>
       <artifactId>jakarta.mail</artifactId>
@@ -125,7 +125,7 @@
       <artifactId>simple-java-mail</artifactId>
       <version>7.7.1</version>
     </dependency>
-<!-- seems to be builtin
+<!--
     <dependency>
       <groupId>com.sun.activation</groupId>
       <artifactId>jakarta.activation</artifactId>
@@ -136,6 +136,16 @@
       <groupId>org.mariadb.jdbc</groupId>
       <artifactId>mariadb-java-client</artifactId>
       <version>3.1.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-logging</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 
