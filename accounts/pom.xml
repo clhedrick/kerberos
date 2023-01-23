@@ -113,21 +113,25 @@
       <artifactId>utils-mail-dkim</artifactId>
       <version>3.0.0</version>
     </dependency>
+<!-- seems to be tuiltin 
     <dependency>
       <groupId>com.sun.mail</groupId>
       <artifactId>jakarta.mail</artifactId>
       <version>2.0.1</version>
     </dependency>
+-->
     <dependency>
       <groupId>org.simplejavamail</groupId>
       <artifactId>simple-java-mail</artifactId>
       <version>7.7.1</version>
     </dependency>
+<!-- seems to be builtin
     <dependency>
       <groupId>com.sun.activation</groupId>
       <artifactId>jakarta.activation</artifactId>
       <version>2.0.1</version>
     </dependency>
+-->
     <dependency>
       <groupId>org.mariadb.jdbc</groupId>
       <artifactId>mariadb-java-client</artifactId>
