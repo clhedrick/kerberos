@@ -70,6 +70,9 @@ public class ChangepassController {
 	return ret;
     }
 
+    // This is protected by CAS. The URL must appear in cas.request-wrapper-url-patterns,
+    // cas.authentication-url-patterns, and cas.validation-url-patterns in applications.properties
+
     @GetMapping("/changepass/changepass")
     public String changepassGet(@RequestParam(value="cluster", required=false) String cluster,
 				HttpServletRequest request, HttpServletResponse response, Model model) {

@@ -50,6 +50,9 @@ public class ActivateController {
 	return ret;
     }
 
+    // This is protected by CAS. The URL must appear in cas.request-wrapper-url-patterns,
+    // cas.authentication-url-patterns, and cas.validation-url-patterns in applications.properties
+
     @GetMapping("/activate/activate")
     public String activateGet(HttpServletRequest request, HttpServletResponse response, Model model) {
 	List<String> clusters = new ArrayList<String>();	    
