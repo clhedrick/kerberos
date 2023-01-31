@@ -250,6 +250,12 @@ to use CAS have to be configured in
 ./src/main/resources/application.properties
 This is a new approach, that doesn't require web.xml.
 
+Note that applications.properties needs the name of the CAS server and
+the current host. These are configured in tomcat's setenv.sh, which is
+deployed by ansible with a template, giving the right value for each
+host. applications.properties uses the ${} syntax to refer to the
+environment variables set in setenv.sh.
+
 The Group management code is authenticated by our Kerberos. Operations
 are done with the user's Kerberos credentials. Thus what the user can
 do is controlled by LDAP ACL's based on his identity. Of course the
