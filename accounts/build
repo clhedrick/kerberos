@@ -2,7 +2,7 @@
 
 export PATH="/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH"
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-/usr/local/bin/mvn clean package
+#/usr/local/bin/mvn clean package
 mvn clean package
 
 

@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.text.SimpleDateFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.charset.Charset;
 import java.io.PrintWriter;
 import java.io.IOException;
@@ -102,7 +103,7 @@ public class SubnetsController {
 	var charset = Charset.forName("US-ASCII");
 	Path temppath = null;
 	try {
-	    temppath = Files.createTempFile("dhcpcheck", null);
+	    temppath = Files.createTempFile(Paths.get("/tmp"),"dhcpcheck", null);
 	} catch (IOException x) {
 	    messages.add("Can't create temp file " + x);
 	    logger.error("Can't create temp file " + x);
