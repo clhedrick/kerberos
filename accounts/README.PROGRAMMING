@@ -5,7 +5,7 @@ the application, and a quick introduction to the infrastructure on
 which it's based.
 
 The application is written in Java, with Spring Boot. This is the
-simplet web framework I could find. It's also part of Spring, which is
+simplest web framework I could find. It's also part of Spring, which is
 a huge project with lots of features. Spring Boot sets up reasonable
 defaults.  I've changed almost nothing from the defaults. But you've
 got all of Spring available if you need it.
@@ -174,7 +174,7 @@ there.  At least if you use th:action to define the action attribute
 of the FORM tag.
 
 * Spring handles HTTP basic authentication, based on LDAP,
-which is used by the enrollhosts function
+which is used by the enrollhosts function.
 
 Spring security is set up in
 src/main/java/application/SpringSecurityConfig.java
@@ -244,8 +244,11 @@ applicatinos, we can't authenticate thoee parts using our own system,
 since people activating or setting a password may not have passwords
 in our system yet.
 
-CAS is set up in src/main/webapp/WEB-INF/web.xml. The setup in web.xml
-specifies the specific set of URLs that are covered by CAS.
+CAS is enabled by the @EnableCasClient annotation forathe main program
+/src/main/java/application/Application.java. The parts that are going
+to use CAS have to be configured in
+./src/main/resources/application.properties
+This is a new approach, that doesn't require web.xml.
 
 The Group management code is authenticated by our Kerberos. Operations
 are done with the user's Kerberos credentials. Thus what the user can
@@ -411,15 +414,16 @@ to use LDAP authentication.
 These two classes are in the package "application." The controllers
 must be in the same package, or possibly a subpackage.
 
-src/main/resources/application.properties is Spring's main configuration
-file. If we were using a database, it would let you specify the database
-information. It can also have configuration for other things, such as
-Thymeleaf. Currently the only thing in it is a line disabling Thymeleaf's
-caching. This is for ease in development It lets you edit the Thymeleaf
-templates and have the changes take effect immediately.  By default you
-have to redeploy every time you change a template. It also sets the 
-Thymeleaf mode to HTML. By default it would be XML. There's no reason to
-require XML structure that the HTML spec doesn't require.
+src/main/resources/application.properties is Spring's main
+configuration file. If we were using a database, it would let you
+specify the database information. It can also have configuration for
+other things, such as Thymeleaf. Currently the only thing in it is a
+line disabling Thymeleaf's caching, and the URLs protected by
+CAS. This is for ease in development It lets you edit the Thymeleaf
+templates and have the changes take effect immediately.  By default
+you have to redeploy every time you change a template. It also sets
+the Thymeleaf mode to HTML. By default it would be XML. There's no
+reason to require XML structure that the HTML spec doesn't require.
 
 ---------------------
 
@@ -480,7 +484,7 @@ But I'd check the release notes for the version of Tomcat and
 Spring Boot you're using to see what versiosn of Java are supported.
 You can typically upgrade to newer Javas, but I'd be careful.
 
-If you go for a few years without upgrading Spring Boot and the other
+xIf you go for a few years without upgrading Spring Boot and the other
 modules, you'll still want to keep Java up to date.  That may involve
 using newer versions of Java than are supported.  It will probably
 work OK, but sometimes compatibility options have to be set up in
