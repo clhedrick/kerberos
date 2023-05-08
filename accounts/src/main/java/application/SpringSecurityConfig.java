@@ -26,6 +26,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.ldap.core.support.BaseLdapPathContextSource;
+import org.springframework.ldap.core.support.LdapContextSource;
+import org.springframework.security.config.ldap.LdapBindAuthenticationManagerFactory;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.context.annotation.Bean;
@@ -50,6 +55,8 @@ import Activator.Config;
 @Configuration
 public class SpringSecurityConfig {
 
+    // new style lambda version, so it will survive
+    // newer versions of Spring
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 	http
@@ -59,44 +66,53 @@ public class SpringSecurityConfig {
 	    // in the ajp connector
 	    // authenticated user will show up as request.getRemoteUser()
 	    // for mod_auth_gssapi it will be the kerberos principal
-	    .jee().and()
-	    .httpBasic().and().authorizeHttpRequests()
+	    .jee(Customizer.withDefaults())
+	    .httpBasic(Customizer.withDefaults())
+	    .authorizeHttpRequests(authorize->authorize
 	    // ldap user auth for request is optional
 	    // it's only used for /enrollhosts, but
 	    // it's more complex to do it just for that
 	    // than to recognize it anywhere. Of course
 	    // the code won't pay attention to it anywhere else
-	    .requestMatchers("/enrollhosts").permitAll()
-	    .requestMatchers("/**").permitAll()
+	      .requestMatchers("/enrollhosts").permitAll()
+              .requestMatchers("/**").permitAll())
 	    // need to disable CSRF for DELETE to work
-	    .and()
-	    .csrf().ignoringRequestMatchers("/enrollhosts/**")
-	    .ignoringRequestMatchers("/groups/login");
+	    .csrf(csrf->csrf
+	      .ignoringRequestMatchers("/enrollhosts/**")
+	      .ignoringRequestMatchers("/groups/login"));
 	
 	return http.build();
     }
 
-    // when basic auth is used, this specifies what it is; LDAP in this case
-    @Autowired
-    public void configure(AuthenticationManagerBuilder auth) throws Exception {
-	// in config file, suffix starts with comma
-	var suffix = "/" + Config.getConfig().usersuffix.trim().substring(1);
+    // usual documentation says to use AuthenticationManagerBuilder,
+    // but that is being deprecated. I trust this will continue
+    // to work.
+    @Bean
+    public LdapContextSource getContextSource() {
+    	  LdapContextSource contextSource = new LdapContextSource();
 
-	// for some reason a base has to be specified with ldaps.
-	// note that the URL can be ldaps://server1, ldap2://server2, so need
-	// to add base to each of them. allow space and comma separation in config file
-	// the syntax here is just space
-	var url = Config.getConfig().kerbldapurl.trim().replaceAll("[ ,]+", suffix + " ") + suffix;
+	  // note that the URL can be ldaps://server1, ldap2://server2
+	  // so need to change , to space. Suffix here doesn't seem to work
+	  var url = Config.getConfig().kerbldapurl.trim().replaceAll("[ ,]+", " ");
 
-	var logger = LogManager.getLogger();
-	System.out.println("ldap URL for Spring security: " + url);
+	  var logger = LogManager.getLogger();
+	  System.out.println("ldap URL for Spring security: " + url);
 
-	auth
-	    .ldapAuthentication()
-	    .contextSource()
-	    .url(url)
-	    .and()
-	    .userDnPatterns("uid={0}");
+	  contextSource.setUrl(url);
+	  contextSource.afterPropertiesSet(); //needed otherwise you will have a NullPointerException in spring
+
+	  return contextSource;
+    }
+
+
+    @Bean
+    AuthenticationManager ldapAuthenticationManager(
+            BaseLdapPathContextSource contextSource) {
+
+        LdapBindAuthenticationManagerFactory factory = 
+            new LdapBindAuthenticationManagerFactory(contextSource);
+        factory.setUserDnPatterns("uid={0}" + Config.getConfig().usersuffix.trim());
+        return factory.createAuthenticationManager();
     }
 
 }
