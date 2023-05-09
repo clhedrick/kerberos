@@ -99,6 +99,7 @@ public class SpringSecurityConfig {
 	  System.out.println("ldap URL for Spring security: " + url);
 
 	  contextSource.setUrl(url);
+	  // may not be needed within Spring Security
 	  contextSource.afterPropertiesSet(); //needed otherwise you will have a NullPointerException in spring
 
 	  return contextSource;

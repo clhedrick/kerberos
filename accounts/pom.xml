@@ -16,7 +16,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.0.1</version>
+    <version>3.0.6</version>
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
 
@@ -34,13 +34,13 @@
     <dependency>
       <groupId>org.apache.tomcat</groupId>
       <artifactId>tomcat-jsp-api</artifactId>
-      <version>10.1.5</version>
+      <version>10.1.8</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.tomcat</groupId>
       <artifactId>tomcat-servlet-api</artifactId>
-      <version>10.1.5</version>
+      <version>10.1.8</version>
     </dependency>
     <dependency>
       <groupId>jstl</groupId>
@@ -72,11 +72,11 @@
       <artifactId>cas-client-core</artifactId>
       <version>4.0.1</version>
     </dependency>
-<dependency>
-   <groupId>org.apereo.cas.client</groupId>
-   <artifactId>cas-client-support-springboot</artifactId>
-   <version>4.0.1</version>
-</dependency>
+    <dependency>
+      <groupId>org.apereo.cas.client</groupId>
+      <artifactId>cas-client-support-springboot</artifactId>
+      <version>4.0.1</version>
+    </dependency>
     <dependency>
       <groupId>org.hsqldb</groupId>
       <artifactId>hsqldb</artifactId>
@@ -128,7 +128,7 @@
     <dependency>
       <groupId>org.simplejavamail</groupId>
       <artifactId>simple-java-mail</artifactId>
-      <version>7.7.1</version>
+      <version>8.1.0</version>
     </dependency>
 <!--
     <dependency>
@@ -140,7 +140,7 @@
     <dependency>
       <groupId>org.mariadb.jdbc</groupId>
       <artifactId>mariadb-java-client</artifactId>
-      <version>3.1.1</version>
+      <version>3.1.4</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
