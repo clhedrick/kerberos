@@ -67,7 +67,7 @@ class UserComparator implements Comparator {
 <head>
 <title>Rutgers User Lookup</title>
 <link href="../usertool.css" rel="stylesheet" type="text/css">
-<script type="text/javascript" src="../jquery-3.4.1.min.js" ></script>
+<script type="text/javascript" src="../jquery-3.6.4.min.js" ></script>
 </head>
 <body>
 <div id="masthead"></div>
