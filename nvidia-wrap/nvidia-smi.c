@@ -36,10 +36,20 @@ int main(int argc, char *argv[], char *env[])
     asprintf(&value, "%u\n", pid);
     
   // write pid into this file to put pid in a cgroup with no restrictions
+    // cgroups 1
     char *cfile = "/sys/fs/cgroup/devices/system.slice/tasks";
+    // cgroups 2
+    char *cfile2 = "/sys/fs/cgroup/system.slice/cgroup.procs";
+
 
   // open file and write pid to it
     FILE *fd = fopen(cfile, "w");
+    if (!fd)
+      fd = fopen(cfile2, "w");
+    if (!fd) {
+      printf("Unable to open cgroups file\n");
+      exit(1);
+    }
     fputs(value, fd);
     fclose(fd);
 
