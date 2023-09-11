@@ -60,6 +60,8 @@ public class Uid {
     }
 
     public static long allocateUid(String netid, Config config) {
+	if (config.uidtable == null)
+	    return -1;
 	try (
 	     RandomAccessFile file = new RandomAccessFile(config.uidtable, "rw");
 	     FileChannel channel = file.getChannel();

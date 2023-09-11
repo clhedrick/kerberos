@@ -384,50 +384,67 @@ public class User {
 	// first create group if needed
 	var owner = "uid=" + username + ",cn=users," + config.accountbase;
 
-	var action = new JndiAction(null, new String[]{"objectclass=*", "cn=" + username + ",cn=groups," + config.accountbase, "owner", "gidnumber"});
-	//	var action = new JndiAction(null, new String[]{"(cn=" + username + ")", null, "owner", "gidnumber"});
-	Subject.doAs(subj, action);
+	// if got uid from uid table, we're managing numbers
+	// create private group for user
 	String gid = null;
-	if (action.val != null && action.val.size() > 0) {
-	    if (messages != null)
-		messages.add("Group with your name already exists. Please contact " + config.helpmail + " and tell them what ths message says.");
-	    logger.error("Group with this name already exists");
-	    return false;
-	} else {
-	    logger.info("ipa group-add " + username + " --owners=" + username);
-	    if (!test) {
-		var outlist = new ArrayList<String>();
-		if (docommand.docommand (new String[]{"/bin/ipa", "group-add", username, "--owners=" + username}, env, null, outlist, true) != 0) {
-		    if (messages != null)
-			messages.add("Unable to create group with your name. Please contact " + config.helpmail + " and tell them what ths message says.");
-		    logger.error("Unable to create group with this name.");
-		    return false;
-		}
-		if (outlist == null)
-		    return false;
-		for (var outitem: outlist) {
-		    if (outitem.matches("^ *GID:.*")) {
-			var items = outitem.split(":");
-			if (items.length < 2){
-			    return false;
-			}
-			gid = items[1].trim();
-		    }
-		}		    
-		if (gid == null) {
-		    if (messages != null)
-			messages.add("Unable to find GID or new group. Please contact " + config.helpmail + " and tell them what ths message says.");
-		    logger.error("Unable to find GID of new group.");
-		    return false;
-		}
+	if (uid >= 0) {
+	    var action = new JndiAction(null, new String[]{"objectclass=*", "cn=" + username + ",cn=groups," + config.accountbase, "owner", "gidnumber"});
+	//	var action = new JndiAction(null, new String[]{"(cn=" + username + ")", null, "owner", "gidnumber"});
+	    Subject.doAs(subj, action);
+	    if (action.val != null && action.val.size() > 0) {
+		if (messages != null)
+		    messages.add("Group with your name already exists. Please contact " + config.helpmail + " and tell them what ths message says.");
+		logger.error("Group with this name already exists");
+		return false;
 	    } else {
-		gid = "dummy";
+		logger.info("ipa group-add " + username + " --owners=" + username);
+		if (!test) {
+		    var outlist = new ArrayList<String>();
+		    if (docommand.docommand (new String[]{"/bin/ipa", "group-add", username, "--owners=" + username}, env, null, outlist, true) != 0) {
+			if (messages != null)
+			    messages.add("Unable to create group with your name. Please contact " + config.helpmail + " and tell them what ths message says.");
+			logger.error("Unable to create group with this name.");
+			return false;
+		    }
+		    if (outlist == null)
+			return false;
+		    for (var outitem: outlist) {
+			if (outitem.matches("^ *GID:.*")) {
+			    var items = outitem.split(":");
+			    if (items.length < 2){
+				return false;
+			    }
+			    gid = items[1].trim();
+			}
+		    }		    
+		    if (gid == null) {
+			if (messages != null)
+			    messages.add("Unable to find GID or new group. Please contact " + config.helpmail + " and tell them what ths message says.");
+			logger.error("Unable to find GID of new group.");
+			return false;
+		    }
+		} else {
+		    gid = "dummy";
+		}
 	    }
 	}
 
-	logger.info("ipa user-add " + username + " --uid=" + uid + " --gidnumber=" + gid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
+	if (uid >= 0)
+	    // we're managing numbers, specify uid and gid
+	    logger.info("ipa user-add " + username + " --uid=" + uid + " --gidnumber=" + gid + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
+	else
+	    // let IPA allocate uid and gid
+	    logger.info("ipa user-add " + username + " --first=" + first + " --last=" + last + " --gecos=" + gecos + " --random");
+	    
 	if (!test) {
-	    if (docommand.docommand (new String[]{"/bin/ipa", "user-add", username, "--uid=" + uid, "--gidnumber=" + gid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"}, env) != 0) {
+	    String[] command;
+
+	    if (uid >= 0)
+		command = new String[]{"/bin/ipa", "user-add", username, "--uid=" + uid, "--gidnumber=" + gid, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"};
+	    else
+		command = new String[]{"/bin/ipa", "user-add", username, "--first=" + first, "--last=" + last, "--gecos=" + gecos, "--random"};
+		
+	    if (docommand.docommand (command , env) != 0) {
 		if (messages != null)
 		    messages.add("Unable to create user. Please contact " + config.helpmail + " and tell them what ths message says.");
 		logger.error("Unable to create user.");
