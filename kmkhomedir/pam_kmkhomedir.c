@@ -504,7 +504,7 @@ int main(int argc, char *argv[])
     if (server)
         krb5_free_principal(context, server); 
     if (ccache)
-        krb5_cc_close(context, ccache);
+        krb5_cc_destroy(context, ccache);
     if (have_cred)
         krb5_free_cred_contents(context, &hostcreds);
     if (hostkeytab)
@@ -672,12 +672,9 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       }
       return PAM_SUCCESS;
   }
-  pam_syslog(pamh, LOG_ERR, "point 1");
 
   // at this point directory doesn't exist. no other error
   message = pam_kmkhomedir(dir, pwd, serverhost);
-
-  pam_syslog(pamh, LOG_ERR, "point 2");
 
   if (strlen(message) > 0) {
       pam_syslog(pamh, LOG_ERR, "%s", message);
@@ -691,7 +688,7 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
       pam_syslog(pamh, LOG_INFO, "copy files for %d %d", pwd->pw_uid, errnum);
       seteuid(0);
   } else {
-      pam_syslog(pamh, LOG_ERR, "wrong uid %d", geteuid());
+      pam_syslog(pamh, LOG_INFO, "can't copy skel %d %d %d %s", is_homedir, geteuid(), pwd->pw_uid, skeldir);
   }
 
   // if the create succeeded, note that we've done it
