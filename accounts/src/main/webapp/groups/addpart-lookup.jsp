@@ -85,9 +85,7 @@ function choose(netid) {
 
 <% 
 
-  org.springframework.security.web.csrf.DefaultCsrfToken token = 
-     (org.springframework.security.web.csrf.DefaultCsrfToken)
-     request.getAttribute("_csrf");
+ org.springframework.security.web.csrf.CsrfToken token = (org.springframework.security.web.csrf.CsrfToken) request.getAttribute("_csrf");
 
   String netidadded = request.getParameter("netidadded");
 
