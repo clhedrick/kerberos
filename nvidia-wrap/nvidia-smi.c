@@ -39,13 +39,13 @@ int main(int argc, char *argv[], char *env[])
     // cgroups 1
     char *cfile = "/sys/fs/cgroup/devices/system.slice/tasks";
     // cgroups 2
-    char *cfile2 = "/sys/fs/cgroup/system.slice/cgroup.procs";
-
+    char *cfile2 = "/sys/fs/cgroup/cgroup.procs";
 
   // open file and write pid to it
     FILE *fd = fopen(cfile, "w");
-    if (!fd)
+    if (!fd) {
       fd = fopen(cfile2, "w");
+    }
     if (!fd) {
       printf("Unable to open cgroups file\n");
       exit(1);
