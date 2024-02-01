@@ -48,13 +48,15 @@ h1 {
 }
 h2 {
   padding-top:1em;
-  font: 16pt 
+  font-family: 'PT Serif',Georgia,serif;
+  font-size: 16pt;
   margin-bottom: 0.25em;
   color: black;
   font-weight: 700;
 }
 h3 {
-  font: 14pt 'PT Serif',Georgia,serif;
+  font-family: 'PT Serif',Georgia,serif;
+  font-size: 14pt;
   margin-bottom: 0.25em;
   color: black;
   text-transform: uppercase;
@@ -155,4 +157,16 @@ summary {
   font: 12pt "Arial", Helvetica;
   margin-bottom: 0.25em;
   color: #8c1515;
+}
+.gridform {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    grid-gap: 5px;
+}
+.gridform label {
+    grid-column: 1 / 2;
+}
+.gridform input,
+.gridform button {
+    grid-column: 2 / 3;
 }
