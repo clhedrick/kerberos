@@ -2,48 +2,64 @@ body {
   margin: 0px;
   font-family: helvetica, arial
 }
+p,li {
+  line-height: 1.2em
+}
+
 #masthead {
-  background-position: 13px 6px;
-  background-image: url(red_banner2.png);
+  background-position: 22px 19px;
+  background-image: url(red_banner.png);
   background-repeat: no-repeat;
-  background-size: 660px 77px;
-  background-color: rgb(204,0,41);
+  background-size: 347px 60px;
+  background-color: rgb(256,256,256);
   height:100px;
 }
 #masthead:before {
   position:absolute;
-  top: 10px;
+  top: 25px;
   right:0px;
   display:block;
+  font-family: "Source Sans Pro",Helvetica,Arial,sans-serif;
   font-size:24px;
-  font-weight: lighter;
+  font-weight: 700;
   padding-right:20px;
-  color:white;
+  color: rgb(204,0,51);
   content:"Department of Computer Science";
 }
 #main {
   margin-top: 3em;
-  margin-left: 5em;
+  margin-left: 7em;
   margin-right: 5em;
+  max-width:38em
 }
 a:link, a:visited, a:hover {
- color: #a00;
+    color: rgb(142,13,24);
 }
 a:hover, a:active {
- color: red;
+    color: rgb(204,0,51);
 }
 h1 {
-  font: lighter 24pt "Arial", Helvetica;
+  font-family: 'PT Serif',Georgia,serif;
+  font-size: 36 pt;
   margin-top:0.5em;
-  margin-bottom: 0.75em;
+  margin-bottom: 1em;
+  color: black;
+  font-weight: 700;
 }
 h2 {
-  font: 16pt Arial, Helvetica;
+  padding-top:1em;
+  font: 16pt 
   margin-bottom: 0.25em;
+  color: black;
+  font-weight: 700;
 }
 h3 {
-  font: 12pt Arial, Helvetica;
+  font: 14pt 'PT Serif',Georgia,serif;
   margin-bottom: 0.25em;
+  color: black;
+  text-transform: uppercase;
+  letter-spacing: 1pt;
+  font-weight: 700;
 }
 .addarea {
   display: inline-block;
@@ -68,14 +84,6 @@ h3 {
   padding-right: 1em;
   border: 1px solid;
   border-color: #aaa;
-}
-.note {
--moz-border-radius: 1em;
--webkit-border-radius: 1em;
-border-radius: 1em;
-padding:0em 1em 0em 1em;
-border: solid black 1px;
-background-color: #ffffdd;
 }
 .hidden {
   position:absolute;
@@ -110,50 +118,41 @@ background-color: #ffffdd;
   background-color: #ffd;
   margin-left: 0.5em;
 }
-.warning {
-  padding:0em 0.5em 0em 0.5em;
-  border: solid #b00 1px;
-  background-color: #fbb;
-  margin-left: 0.5em;
-}
 .footer {
-  margin: 2em 0
+  margin: 2em 0 
 }
-.itemlist {
-    list-style-type:none;
-    padding-left:1em;
+pre {
+  white-space: pre-wrap;  
 }
-.itemlist-row {
-    display:flex;
+
+tbody tr:nth-of-type(even) {
+      background-color:#f0f7ff;
 }
-.itemlist-entry2 {
-    margin-left: 1px;
+
+tbody tr:nth-of-type(odd) {
+      background-color:#fff;
 }
-.itemlist-entry3 {
-    margin-left: 15px;
+
+table {
+  width: 100%;
+  border-collapse: collapse;
 }
-.itemlist-entry3a {
-    margin-left: 40px;
-    text-indent: -32px;
-    margin-right:0px;
+
+code {
+    font-family: monospace;
+    color: teal;
+    font-size: 14px;
 }
-.edithost {
-    margin-top: 1em;
-    margin-bottom: 1em;
-    margin-left: 2em;
+summary {
+  padding-top:1em;
+  font: 16pt "Arial", Helvetica;
+  margin-bottom: 0.25em;
+  color: #8c1515;
 }
-/* screen reader shows, but not normal browser */
-.hidden {
-    position:absolute;
-    left:-10000px;
-    top:auto;
-    width:1px;
-    height:1px;
-    overflow:hidden;
-}
-/* fieldset with no visible features */
-.transparent-fieldset {
-    border:none;
-    margin:0px;
-    padding:0px;
+
+.smallsum {
+  padding-top:1em;
+  font: 12pt "Arial", Helvetica;
+  margin-bottom: 0.25em;
+  color: #8c1515;
 }
