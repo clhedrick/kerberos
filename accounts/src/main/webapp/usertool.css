@@ -1,28 +1,28 @@
 body {
   margin: 0px;
-  font-family: helvetica, arial
+  font-family: Verdana,arial, helvetica
 }
 p,li {
   line-height: 1.2em
 }
 
 #masthead {
-  background-position: 22px 19px;
+  background-position: 19px 17px;
   background-image: url(red_banner.png);
   background-repeat: no-repeat;
-  background-size: 347px 60px;
+  background-size: 260px 45px;
   background-color: rgb(256,256,256);
   height:100px;
 }
 #masthead:before {
   position:absolute;
-  top: 25px;
+  top: 18px;
   right:0px;
   display:block;
-  font-family: "Source Sans Pro",Helvetica,Arial,sans-serif;
-  font-size:24px;
+  font-family: "MetaMedium-Roman","Source Sans Pro",Helvetica,Arial,sans-serif;
+  font-size:18px;
   font-weight: 700;
-  padding-right:20px;
+  padding-right:22px;
   color: rgb(204,0,51);
   content:"Department of Computer Science";
 }
@@ -39,28 +39,27 @@ a:hover, a:active {
     color: rgb(204,0,51);
 }
 h1 {
-  font-family: 'PT Serif',Georgia,serif;
-  font-size: 36 pt;
+  font-family: Palatino,'Palatino Linotype','PT Serif',Georgia,serif;
+  font-size: 32pt;
   margin-top:0.5em;
   margin-bottom: 1em;
   color: black;
   font-weight: 700;
 }
 h2 {
-  padding-top:1em;
-  font-family: 'PT Serif',Georgia,serif;
-  font-size: 16pt;
+  padding-top:0.5em;
+  font-family: Palatino,'Palatino Linotype','PT Serif',Georgia,serif;
+  font-size: 22pt;
   margin-bottom: 0.25em;
   color: black;
   font-weight: 700;
 }
 h3 {
-  font-family: 'PT Serif',Georgia,serif;
-  font-size: 14pt;
+  font-family: Palatino,'Palatino Linotype','PT Serif',Georgia,serif;
+  font-size: 16pt;
+  margin-top: 2em;
   margin-bottom: 0.25em;
   color: black;
-  text-transform: uppercase;
-  letter-spacing: 1pt;
   font-weight: 700;
 }
 .addarea {
