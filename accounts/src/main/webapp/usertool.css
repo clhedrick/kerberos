@@ -8,18 +8,22 @@ p,li {
   line-height: 1.2em
 }
 
+
 #masthead {
   background-position: 19px 17px;
   background-image: url(red_banner.png);
   background-repeat: no-repeat;
-  background-size: 260px 45px;
+  background-size: min(260px,40%);
   background-color: rgb(256,256,256);
   height:100px;
 }
+@media only screen and (min-width: 640px) {
 #masthead:before {
   position:absolute;
   top: 18px;
   right:0px;
+  width:50%;
+  text-align:right;
   display:block;
   font-family: "MetaMedium-Roman","Source Sans Pro",Helvetica,Arial,sans-serif;
   font-size:18px;
@@ -27,6 +31,7 @@ p,li {
   padding-right:22px;
   color: rgb(204,0,51);
   content:"Department of Computer Science";
+}
 }
 #main {
   margin-top: 3em;
