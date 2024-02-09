@@ -13,31 +13,57 @@ p,li {
   background-position: 19px 17px;
   background-image: url(red_banner.png);
   background-repeat: no-repeat;
-  background-size: min(260px,40%);
+  background-size: 223px;
   background-color: rgb(256,256,256);
   height:100px;
 }
 @media only screen and (min-width: 640px) {
 #masthead:before {
   position:absolute;
-  top: 18px;
-  right:0px;
-  width:50%;
-  text-align:right;
+  top: 27px;
+  left: 280px;
+  text-align:left;
   display:block;
-  font-family: "MetaMedium-Roman","Source Sans Pro",Helvetica,Arial,sans-serif;
-  font-size:18px;
-  font-weight: 700;
+  font-family: "Source Sans Pro",Helvetica,Arial,sans-serif;
+  font-size:12px;
+  font-weight: 400;
   padding-right:22px;
-  color: rgb(204,0,51);
+  color: black;
+  content:"Department of Computer Science";
+}
+}
+@media only screen and (max-width: 640px) {
+#masthead:before {
+  position:absolute;
+  top: 64px;
+  left: 17px;
+  text-align:left;
+  display:block;
+  font-family: "Source Sans Pro",Helvetica,Arial,sans-serif;
+  font-size:14px;
+  font-weight: 400;
+  padding-right:22px;
+  color: black;
   content:"Department of Computer Science";
 }
 }
 #main {
-  margin-top: 3em;
-  margin-left: 7em;
-  margin-right: 5em;
-  max-width:38em
+  margin-top: 0;
+  margin-left: min(4em,4%);
+  margin-right: min(4em,4%);
+  max-width:38em;
+}
+@media only screen and (min-width: 500px) {
+#main {
+    margin-left: 2.5em;
+    margin-right: 2.5em;
+}
+}
+@media only screen and (min-width: 700px) {
+#main {
+    margin-left: 4em;
+    margin-right: 4em;
+}
 }
 a:link, a:visited, a:hover {
     color: rgb(142,13,24);
