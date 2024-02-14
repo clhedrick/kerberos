@@ -72,7 +72,7 @@ a:hover, a:active {
     color: rgb(204,0,51);
 }
 h1 {
-  font-family: Georgia,'PT Serif',serif;
+  font-family: 'PT Serif',Georgia,serif;
   font-size: 32pt;
   margin-top:0.5em;
   margin-bottom: 1em;
@@ -81,14 +81,14 @@ h1 {
 }
 h2 {
   padding-top:0.5em;
-  font-family: Georgia,'PT Serif',serif;
+  font-family: 'PT Serif',Georgia,serif;
   font-size: 22pt;
   margin-bottom: 0.25em;
   color: black;
   font-weight: 700;
 }
 h3 {
-  font-family: Georgia,'PT Serif',serif;
+  font-family: 'PT Serif',Georgia,serif;
   font-size: 16pt;
   margin-top: 2em;
   margin-bottom: 0.25em;
