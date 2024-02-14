@@ -120,7 +120,7 @@ $(document).ready(function(){
 </script>
 </head>
 <div role="banner" id="masthead"></div>
-<div role="main" id="main">
+<div role="main" style="max-width:100%" id="main">
 
 <div role="alert" class="messages" th:if="${messages?.size()}">
 <p th:each="msg : ${messages}" th:text="${msg}" />
