@@ -16,7 +16,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.2.0</version>
+    <version>3.2.5</version>
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
 
@@ -34,13 +34,13 @@
     <dependency>
       <groupId>org.apache.tomcat</groupId>
       <artifactId>tomcat-jsp-api</artifactId>
-      <version>10.1.17</version>
+      <version>10.1.23</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.tomcat</groupId>
       <artifactId>tomcat-servlet-api</artifactId>
-      <version>10.1.17</version>
+      <version>10.1.23</version>
     </dependency>
     <dependency>
       <groupId>jstl</groupId>
@@ -55,7 +55,7 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-text</artifactId>
-      <version>1.11.0</version>
+      <version>1.12.0</version>
     </dependency>
     <dependency>
       <groupId>commons-net</groupId>
@@ -70,12 +70,12 @@
     <dependency>
       <groupId>org.apereo.cas.client</groupId>
       <artifactId>cas-client-core</artifactId>
-      <version>4.0.3</version>
+      <version>4.0.4</version>
     </dependency>
     <dependency>
       <groupId>org.apereo.cas.client</groupId>
       <artifactId>cas-client-support-springboot</artifactId>
-      <version>4.0.3</version>
+      <version>4.0.4</version>
     </dependency>
     <dependency>
       <groupId>org.hsqldb</groupId>
@@ -116,7 +116,7 @@
     <dependency>
       <groupId>org.simplejavamail</groupId>
       <artifactId>utils-mail-dkim</artifactId>
-      <version>3.0.0</version>
+      <version>3.2.0</version>
     </dependency>
 <!--
     <dependency>
@@ -128,7 +128,7 @@
     <dependency>
       <groupId>org.simplejavamail</groupId>
       <artifactId>simple-java-mail</artifactId>
-      <version>8.1.0</version>
+      <version>8.10.1</version>
     </dependency>
 <!--
     <dependency>
@@ -140,7 +140,7 @@
     <dependency>
       <groupId>org.mariadb.jdbc</groupId>
       <artifactId>mariadb-java-client</artifactId>
-      <version>3.1.4</version>
+      <version>3.3.3</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
