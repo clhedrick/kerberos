@@ -99,6 +99,19 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 
 	//	System.out.println("tutoral password " + search_password);
 	
+	String allowed_group = environment.getRequiredProperty(
+	    TutorialGuacamoleProperties.ALLOWED_GROUP
+        );   
+
+	String user_base = environment.getRequiredProperty(
+	    TutorialGuacamoleProperties.USER_BASE
+        );   
+
+	String guac_data = environment.getRequiredProperty(
+	    TutorialGuacamoleProperties.GUAC_DATA
+        );   
+
+
 	env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
 	env.put(Context.PROVIDER_URL, provider_url);
 	env.put(Context.SECURITY_AUTHENTICATION, "simple");
@@ -120,13 +133,13 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	    matchAttrs.put(new BasicAttribute("memberOf"));
 	    matchAttrs.put(new BasicAttribute("cn"));	    
 
-	    Attributes ans = context.getAttributes("uid=" + username + ",cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu");
+	    Attributes ans = context.getAttributes("uid=" + username + "," + user_base);
 
 	    for (NamingEnumeration ae = ans.getAll(); ae.hasMore();) {
 		Attribute attr = (Attribute)ae.next();
 		if (attr.getID().equals("memberOf")) {
 		    for (NamingEnumeration e = attr.getAll(); e.hasMore();)
-			if (e.next().toString().equals("cn=login-ilab,cn=groups,cn=accounts,dc=cs,dc=rutgers,dc=edu"))
+			if (e.next().toString().equals(allowed_group))
 			    ok = true;
 		}
 	    }
@@ -151,7 +164,7 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	    matchAttrs.put(new BasicAttribute("guacConfigProtocol"));
 
 	    // loop over config items. This is the list of hosts that will appear in the menu
-	    NamingEnumeration answer = context.search("cn=guac,dc=cs,dc=rutgers,dc=edu", matchAttrs);
+	    NamingEnumeration answer = context.search(guac_data, matchAttrs);
 	    while (answer.hasMore()) {
 		//		System.out.println("tutoral item");
 

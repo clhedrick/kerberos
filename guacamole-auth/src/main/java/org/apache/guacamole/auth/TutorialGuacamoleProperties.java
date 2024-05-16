@@ -41,6 +41,30 @@ public class TutorialGuacamoleProperties {
 
     };
 
+    public static final StringGuacamoleProperty ALLOWED_GROUP = 
+        new StringGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "rutgers-ldap-allowed-group"; }
+
+    };
+
+    public static final StringGuacamoleProperty USER_BASE = 
+        new StringGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "rutgers-ldap-user-base"; }
+
+    };
+
+    public static final StringGuacamoleProperty GUAC_DATA = 
+        new StringGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "rutgers-ldap-guac-data"; }
+
+    };
+
 
     public static final StringGuacamoleProperty TUTORIAL_USER = 
         new StringGuacamoleProperty() {
