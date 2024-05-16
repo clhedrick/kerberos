@@ -17,6 +17,31 @@ public class TutorialGuacamoleProperties {
     /**
      * The only user to allow.
      */
+    public static final StringGuacamoleProperty PROVIDER_URL = 
+        new StringGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "rutgers-ldap-url"; }
+
+    };
+
+    public static final StringGuacamoleProperty SEARCH_DN = 
+        new StringGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "rutgers-ldap-search-dn"; }
+
+    };
+
+    public static final StringGuacamoleProperty SEARCH_PASSWORD = 
+        new StringGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "rutgers-ldap-search-password"; }
+
+    };
+
+
     public static final StringGuacamoleProperty TUTORIAL_USER = 
         new StringGuacamoleProperty() {
 

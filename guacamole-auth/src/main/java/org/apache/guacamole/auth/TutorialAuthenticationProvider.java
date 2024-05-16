@@ -24,6 +24,8 @@ import org.apache.guacamole.net.auth.UserContext;
 import org.apache.guacamole.protocol.GuacamoleConfiguration;
 
 import org.apache.guacamole.net.auth.simple.SimpleUserContext;
+import org.apache.guacamole.net.auth.credentials.GuacamoleInvalidCredentialsException;
+import org.apache.guacamole.net.auth.credentials.CredentialsInfo;
 
 import javax.naming.Context;
 import javax.naming.directory.InitialDirContext;
@@ -43,82 +45,7 @@ import javax.naming.directory.BasicAttribute;
  */
 public class TutorialAuthenticationProvider extends AbstractAuthenticationProvider {
     
-
-    private class TutorialAuthenticatedUser extends AbstractAuthenticatedUser {
-
-        /**
-         * The credentials provided when this AuthenticatedUser was
-         * authenticated.
-         */
-        private final Credentials credentials;
-
-        /**
-         * The GuacamoleConfigurations that this AuthenticatedUser is
-         * authorized to use.
-         */
-        private final Map<String, GuacamoleConfiguration> configs;
-
-	private final LocalTime creation;
-
-        /**
-         * Creates a new SimpleAuthenticatedUser associated with the given
-         * credentials and having access to the given Map of
-         * GuacamoleConfigurations.
-         *
-         * @param credentials
-         *     The credentials provided by the user when they authenticated.
-         *
-         * @param configs
-         *     A Map of all GuacamoleConfigurations for which this user has
-         *     access. The keys of this Map are Strings which uniquely identify
-         *     each configuration.
-         */
-        public TutorialAuthenticatedUser(Credentials credentials, Map<String, GuacamoleConfiguration> configs) {
-
-            // Store credentials and configurations
-            this.credentials = credentials;
-            this.configs = configs;
-	    this.creation = LocalTime.now();
-
-            // Pull username from credentials if it exists
-            String username = credentials.getUsername();
-            if (username != null && !username.isEmpty())
-                setIdentifier(username);
-
-            // Otherwise generate a random username
-            else
-                setIdentifier(UUID.randomUUID().toString());
-
-        }
-
-        /**
-         * Returns a Map containing all GuacamoleConfigurations that this user
-         * is authorized to use. The keys of this Map are Strings which
-         * uniquely identify each configuration.
-         *
-         * @return
-         *     A Map of all configurations for which this user is authorized.
-         */
-        public Map<String, GuacamoleConfiguration> getAuthorizedConfigurations() {
-            return configs;
-        }
-
-        @Override
-        public AuthenticationProvider getAuthenticationProvider() {
-            return TutorialAuthenticationProvider.this;
-        }
-
-        @Override
-        public Credentials getCredentials() {
-            return credentials;
-        }
-
-        @Override
-        public Set<String> getEffectiveUserGroups() {
-            return Collections.<String>emptySet();
-        }
-
-    }
+    private Map<String, GuacamoleConfiguration> globalconfigs;
 
     // cache ldap results. they're alway the same, so no point spaming ldap
 
@@ -130,55 +57,87 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
     public String getIdentifier() {
         return "tutorial";
     }
+    
+    // not currently doing this
+    // if we have cached configs within 10 minutes, use them
+    // otherwise continue and get new configurations
+    //      if (configUpdate != null && configSave != null &&
+    //          configUpdate.plusMinutes(10).isAfter(LocalTime.now())) {
+    //          return new TutorialAuthenticatedUser(credentials, configSave);
+    //      }
 
-    public AuthenticatedUser authenticateUser(final Credentials credentials)
+    // cas is going to do the auth
+
+    @Override
+    public UserContext getUserContext(AuthenticatedUser authenticatedUser)
             throws GuacamoleException {
 
-	String username = credentials.getUsername();
-	String password = credentials.getPassword();
-	boolean twoFactor = false;
+	Environment environment = LocalEnvironment.getInstance();
 
-	// for some reason we are called with nulls before the login
-	// screen is put up
-	if (username == null || password == null)
-	    return null;
+        String username = authenticatedUser.getCredentials().getUsername();
 
-	// authenticate user with ldap. Use the connection to see if
-	// they have two factors. If so, to avoid an odd error, set
-	// their password to ""
-
+	//        System.out.println("tutoral getusercontext");
+	
 	// set up ldap connection to get list of hosts
 	Hashtable<String, String> env = new Hashtable<String, String>();
 
+	String provider_url = environment.getRequiredProperty(
+	    TutorialGuacamoleProperties.PROVIDER_URL
+        );   
+
+	//	System.out.println("tutoral url " + provider_url);
+	
+	String search_dn = environment.getRequiredProperty(
+	    TutorialGuacamoleProperties.SEARCH_DN
+        );   
+
+	//	System.out.println("tutoral dn " + search_dn);
+	
+	String search_password = environment.getRequiredProperty(
+	    TutorialGuacamoleProperties.SEARCH_PASSWORD
+        );   
+
+	//	System.out.println("tutoral password " + search_password);
+	
 	env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
-	env.put(Context.PROVIDER_URL, "ldap://krb4.cs.rutgers.edu");
+	env.put(Context.PROVIDER_URL, provider_url);
 	env.put(Context.SECURITY_AUTHENTICATION, "simple");
-	env.put(Context.SECURITY_PRINCIPAL, "uid=" + username + ",cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu");
-	env.put(Context.SECURITY_CREDENTIALS, password);
+	env.put(Context.SECURITY_PRINCIPAL, search_dn);
+	env.put(Context.SECURITY_CREDENTIALS, search_password);
 
 	// Configurations to return
 	Map<String, GuacamoleConfiguration> configs =
 	    new HashMap<String, GuacamoleConfiguration>();
 
 	DirContext context = null;
+	boolean ok = false;
 	try {
 	    context = new InitialDirContext(env);
 
-	    // search for any OTP tokens owned by this person
+	    // see if the user is in login-ilab
 	    Attributes matchAttrs = new BasicAttributes(true);
-	    matchAttrs.put(new BasicAttribute("ipatokenOwner", "uid=" + username + ",cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu"));
 
-	    // see if they use two factor
-	    // if so clear the password. Trying to log them into the host will
-	    // fail, but with a confusing screen. Better not to try. Then they
-	    // get a normal login screen
-	    NamingEnumeration answer = context.search("cn=otp,dc=cs,dc=rutgers,dc=edu", matchAttrs);
-	    if (answer.hasMore()) {
-		credentials.setPassword("");
+	    matchAttrs.put(new BasicAttribute("memberOf"));
+	    matchAttrs.put(new BasicAttribute("cn"));	    
+
+	    Attributes ans = context.getAttributes("uid=" + username + ",cn=users,cn=accounts,dc=cs,dc=rutgers,dc=edu");
+
+	    for (NamingEnumeration ae = ans.getAll(); ae.hasMore();) {
+		Attribute attr = (Attribute)ae.next();
+		if (attr.getID().equals("memberOf")) {
+		    for (NamingEnumeration e = attr.getAll(); e.hasMore();)
+			if (e.next().toString().equals("cn=login-ilab,cn=groups,cn=accounts,dc=cs,dc=rutgers,dc=edu"))
+			    ok = true;
+		}
 	    }
 
-	    // if we got here, auth worked.
-	    // otherwise an exception would be thrown
+	    if (! ok)  {
+		context.close();
+		System.out.println("user " + username + " logged in but no CS account");
+		throw new GuacamoleInvalidCredentialsException("Invalid login.",
+							       CredentialsInfo.USERNAME_PASSWORD);
+	    }
+	    //	    System.out.println("tutoral getconfig");
 
 	    // if we have cached configs within 10 minutes, use them
 	    // otherwise continue and get new configurations
@@ -192,8 +151,9 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	    matchAttrs.put(new BasicAttribute("guacConfigProtocol"));
 
 	    // loop over config items. This is the list of hosts that will appear in the menu
-	    answer = context.search("cn=guac,dc=cs,dc=rutgers,dc=edu", matchAttrs);
+	    NamingEnumeration answer = context.search("cn=guac,dc=cs,dc=rutgers,dc=edu", matchAttrs);
 	    while (answer.hasMore()) {
+		//		System.out.println("tutoral item");
 
 		// Create new configuration to add to the list of available hosts
 		GuacamoleConfiguration config = new GuacamoleConfiguration();
@@ -242,28 +202,16 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	    configs.put("-geneva", config);	    
 
 	    context.close();
+
+	} catch (GuacamoleInvalidCredentialsException e) {
+	    // rethrow
+	    throw new GuacamoleInvalidCredentialsException("Invalid login.",
+							   CredentialsInfo.USERNAME_PASSWORD);
 	} catch (Exception e) {
-	    // probably bad password
-	    return null;
 	}
 
-	// save new value in cache
-	configSave = configs;
-	configUpdate = LocalTime.now();
-
-	return new TutorialAuthenticatedUser(credentials, configs);
-
-    }
-    
-    // just like the real one but with null credentials
-
-    @Override
-    public UserContext getUserContext(AuthenticatedUser authenticatedUser)
-            throws GuacamoleException {
-
         // Return user context restricted to authorized configs
-        return new SimpleUserContext(this, authenticatedUser.getIdentifier(),
-	     ((TutorialAuthenticatedUser)authenticatedUser).getAuthorizedConfigurations(), true);
+	return new SimpleUserContext(this, authenticatedUser.getIdentifier(), configs, true);
 
     }
 
