@@ -1,6 +1,8 @@
 #!/bin/sh
 
-echo xyzzy2
+# this is basically skinit. But systemd puts tomcat in
+# a protected environment. kgetcred doesn't work, and /tmp
+# doesn't work. 
 
 # kinit for users with 2FA. Need to get an anonymous credential and
 # use it to armor the cache.
@@ -13,7 +15,8 @@ echo xyzzy2
 PATH=/usr/bin:/bin
 ANONCC=/var/lib/tomcat9/work/cc$$
 
-# no way to keep pem file up to date, so safe to use kgetcred
+# ldap.admin is a user that is not able to do anything
+# it exists just to create this kind of anonymous ticket
 KRB5CCNAME="$ANONCC" kinit ldap.admin <<EOF
 abcde12345!
 EOF
