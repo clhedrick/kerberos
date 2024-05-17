@@ -1,0 +1,34 @@
+#!/bin/sh
+
+echo xyzzy2
+
+# kinit for users with 2FA. Need to get an anonymous credential and
+# use it to armor the cache.
+
+# also, kinit doesn't work well with KEYRING if KRB5CCNAME is set to a specific cache
+# in a keyring. It may overwrite the existing credentials, or just fail.
+
+# ANONCC will be used to armor
+
+PATH=/usr/bin:/bin
+ANONCC=/var/lib/tomcat9/work/cc$$
+
+# no way to keep pem file up to date, so safe to use kgetcred
+KRB5CCNAME="$ANONCC" kinit ldap.admin <<EOF
+abcde12345!
+EOF
+
+# make sure we remove the cache where anonymous is put, if the user ^C's out
+
+trap 'KRB5CCNAME="$ANONCC" kdestroy' 2
+
+# the actual kinit
+kinit -T "$ANONCC" -c "$ANONCC" "$@" 
+
+STAT=$?
+
+KRB5CCNAME="$ANONCC" kdestroy
+
+exit $STAT
+
+
