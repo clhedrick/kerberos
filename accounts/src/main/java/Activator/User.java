@@ -196,7 +196,55 @@ public class User {
 	return isCourseOkForCluster(group, config.managed);
     }
 
+    // caches for groups. Without this, activate can do lots of ldap
+    // queries and is very slow. For the moment these are prepopulated
+    // only for single-user requests.
+
+    // cache for manually maintained login groups, groupname to list of clusers
+    // null if it's not a manually maintained login group
     private Map<String, Set<String>> loginClusterCache = new HashMap<String, Set<String>>();
+    // cache for groups that exist. Just populated for this user's groups
+    private Set<String> groupCache = new HashSet<String>();
+
+    // for single user, speed things up by doing a single query to populate cache
+    public void populateCaches(String username, Subject subj, Config config) {
+	// faster just to find all login groups
+	var action = new JndiAction(null, new String[]{"(&(businessCategory=login)(!(businesscategory=suspended)))", "", "dn", "cn", "host"});
+	Subject.doAs(subj, action);
+	if (action.val != null && action.val.size() > 0) {
+	    for (var group: action.val) {
+		var groupdn = group.get("dn").get(0);
+		var groupName = dn2group(groupdn);
+		// this is only for manual groups. ignore if auto
+		if (isCourseGroup(groupName, config) || config.managed.groups.contains(groupName)) {
+		    continue;
+		}
+		var host = group.get("host");
+		var clusters = (host == null) ? new HashSet<String>() : new HashSet<String>(host);
+		loginClusterCache.put(groupName, clusters);
+	    }
+	}
+
+	// for group exists cache, faster to use all group user is a member of
+	action = new JndiAction(null, new String[]{"(uid=" + username + ")", "", "memberof"});
+	Subject.doAs(subj, action);
+	if (action.val != null && action.val.size() > 0) {
+	    // better be just one user with this uid
+	    var userent = action.val.get(0);
+	    var userGroups = userent.get("memberof");
+	    if (userGroups != null) {
+		for (var groupDn: userGroups) {
+		    var groupName = dn2group(groupDn);		    
+		    groupCache.add(groupName);
+		    // if not a login group, cache the null
+		    // this saves having to lookup each group
+		    if (!loginClusterCache.containsKey(groupName))
+			loginClusterCache.put(groupName, null);			
+		}
+	    }
+	}
+
+    }
 
     // See what clusters this group is allowed on, input is DN specifying the group
     // Only for manually maintained groups
@@ -268,6 +316,8 @@ public class User {
 
     // Does group exist. Used for automatic groups, so won't be in the cache
     public boolean groupExists(String groupName, Subject subj, Config config) {
+	if (groupCache.contains(groupName))
+	    return true;
 
 	// ldapsearch with the group dn as base and a test for whether it's login
 	var action = new JndiAction(null, new String[]{"(cn=" + groupName + ")", "", "cn"});
@@ -682,6 +732,7 @@ public class User {
 		uidList.add(username);
 		userMap.put("uid", uidList);
 		users.add(userMap);
+		user.populateCaches(username, subj, config);
 	    }
 
 	    for (var userMap: users) {
