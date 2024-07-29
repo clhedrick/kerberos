@@ -54,6 +54,18 @@ your University password.</p>
 <p> It is preferable to use a password that's different from your University
 password, but we're not going to force you to do that.</p>
 
+<h2> Use University password </h2>
+
+<p> If you check this box, we will use your University password. In that case the
+  rest of this page is irrelevant. You will use <b>netid.rutgers.edu</b> to manage
+  your password.
+<form th:action="@{/changepass/changepass}" method="post">
+<p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="university" th:checked="${universityPassword}"/> Use your University password for Computer Science.</label></legend></p>
+<input type="hidden" name="action" value="university"/>
+<input type="submit" value="Set or clear"/>
+</form>
+
+
 <h2> How to set or reset your password </h2>
 
 <p> This web application lets you reset your CS password as long as you
@@ -103,6 +115,7 @@ don't force you to change it in the first place).</li>
 <label>New password: <input type="password" name="pass1"/></label><br/>
 <label>Type it again to verify: <input type="password" name="pass2"/></label>
 <p></p>
+<input type="hidden" name="action" value="password"/>
 <input type="submit" value="Set Password"/>
 </form>
 
