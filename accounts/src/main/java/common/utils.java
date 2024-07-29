@@ -200,7 +200,7 @@ public class utils {
 	//createTimestamp: 20170119210315Z
 
 	// Create the ldap query.
-	JndiAction action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(uid=" + username + "))", "", "krbLastPwdChange", "createTimestamp"});
+	JndiAction action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(uid=" + username + "))", "", "krbLastPwdChange", "createTimestamp", "ipatokenradiusconfiglink"});
 	// execute the query authenticated with our Kerberos credentials
 	Subject.doAs(subj, action);
 
@@ -209,9 +209,15 @@ public class utils {
 	// to be able to change their password
 	if (action.val != null && action.val.size() > 0) {
 
-	//krbLastPwdChange: 20170320203913Z
-	//createTimestamp: 20170119210315Z
+	    // if using radius we don't need to set a password
+	    var radiuslink = lu.oneVal(action.val.get(0).get("ipatokenradiusconfiglink"));
+	    if (radiuslink != null)
+		return false;
 
+	    //krbLastPwdChange: 20170320203913Z
+	    //createTimestamp: 20170119210315Z
+
+	    
 	    Date createDate = parseLdapDate(lu.oneVal(action.val.get(0).get("createtimestamp")));
 	    Date lastChange = parseLdapDate(lu.oneVal(action.val.get(0).get("krblastpwdchange")));
 
