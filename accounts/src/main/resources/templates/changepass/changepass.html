@@ -50,9 +50,21 @@ your University password.</p>
 
 <h2> Use University password </h2>
 
-<p> If you check this box, we will use your University password. In that case the
-  rest of this page is irrelevant. You will use <b>netid.rutgers.edu</b> to manage
+<p th:if="${!universityPassword}">
+If you check this box, we will use your University password.
+  In that case the
+  rest of this page is irrelevant.
+  You will use <b>netid.rutgers.edu</b> to manage
   your password.
+</p>
+<p th:if="${universityPassword}">
+  Because this box is checked, you should go to
+  <a href="https://netid.rutgers.edu">netid.rutgers.edu</a>
+  to change your password. If you want a separate password
+  for computer science systems, you can uncheck the box and click "Submit".
+  Then you'll have to come back here to set a password.
+</span>
+
 <form th:action="@{/changepass/changepass}" method="post">
 <p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="university" th:checked="${universityPassword}"/> Use your University password for Computer Science.</label></legend></p>
 <input type="hidden" name="action" value="university"/>
@@ -60,6 +72,8 @@ your University password.</p>
 </form>
 
 
+<div th:if="${!universityPassword}">
+<div th:if="${cluster == null}">
 <h2> How to set or reset your password </h2>
 
 <p> This web application lets you reset your CS password as long as you
@@ -113,6 +127,7 @@ don't force you to change it in the first place).</li>
 <input type="submit" value="Set Password"/>
 </form>
 
+</div>
 </div>
 <div th:insert="~{accessibility :: footer}"></div>
 </div>
