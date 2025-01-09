@@ -310,29 +310,34 @@ public class HostsController {
 	    return errmsg.getBytes();
 	}
 
-	logger.info("ipa service-add nfs/" + hostname);
-	messages = new ArrayList<String>();
-	if (docommand.docommand (new String[]{"/bin/ipa", "service-add", "nfs/" + hostname}, env, messages) != 0) {
-	    boolean exists = false;
-	    String errmsg = "Error: ";
-	    for (String m:messages) {
-		errmsg += " " + m;
-		if (m.contains("already exists"))
-		    exists = true;
-	    }
-	    if (!exists)
-		return errmsg.getBytes();
-	}
+	// normal hosts don't need nfs/hostname. host/hostname will be
+	// used instead. For nfs servers this will increment the version
+	// number for an existing server. So it's best to leave this 
+	// principal to be done manually
 
-	logger.info("ipa-getkeytab -p nfs/" + hostname + " -k /tmp/" + hostname + ".kt");
-	messages = new ArrayList<String>();
-	if (docommand.docommand (new String[]{"/sbin/ipa-getkeytab", "-p", "nfs/" + hostname, "-k", "/tmp/" + hostname + ".kt"}, env, messages) != 0) {
-	    String errmsg = "Error: ";
-	    for (String m:messages) {
-		errmsg += " " + m;
-	    }
-	    return errmsg.getBytes();
-	    }
+	//	logger.info("ipa service-add nfs/" + hostname);
+	//	messages = new ArrayList<String>();
+	//	if (docommand.docommand (new String[]{"/bin/ipa", "service-add", "nfs/" + hostname}, env, messages) != 0) {
+	//	    boolean exists = false;
+	//	    String errmsg = "Error: ";
+	//	    for (String m:messages) {
+	//		errmsg += " " + m;
+	//		if (m.contains("already exists"))
+	//		    exists = true;
+	//	    }
+	//	    if (!exists)
+	//		return errmsg.getBytes();
+	//	}
+
+	//	logger.info("ipa-getkeytab -p nfs/" + hostname + " -k /tmp/" + hostname + ".kt");
+	//	messages = new ArrayList<String>();
+	//	if (docommand.docommand (new String[]{"/sbin/ipa-getkeytab", "-p", "nfs/" + hostname, "-k", "/tmp/" + hostname + ".kt"}, env, messages) != 0) {
+	//	    String errmsg = "Error: ";
+	//	    for (String m:messages) {
+	//		errmsg += " " + m;
+	//	    }
+	//	    return errmsg.getBytes();
+	//	    }
 
 	try {
 	    File file = new File("/tmp/" + hostname + ".kt");
