@@ -1,4 +1,70 @@
-#!/bin/sh
+#!/bin/bash
+
+# this is makeacct.sh plus a slightly modifyed skinit
+
+PATH=/usr/bin:/bin
+USER="$1"
+
+######## makeacct
+
+# if they don't exist, call the service to
+# make them. We need to wait until they
+# show up, or login will fail because they
+# won't be in the group. Sssd will refresh
+# group membership, but won't wait until the
+# user exists. So we only wait for the user
+# jupyterhub will also blow up if the user
+# doesn't exist, but won't care about groups
+# it's the account section of pam that needs
+# the group
+
+export KRB5CCNAME=/var/lib/tomcat9/work/krb5makeaccount$$
+
+#checks that user exists and is in login-ilab
+
+if ! /usr/libexec/checklogin.py $USER ; then
+    
+  # user doesn't exist or isn't enabled for ilab
+
+  kinit -k -t /etc/krb5.keytab host/`hostname`@CS.RUTGERS.EDU
+
+  # this will create them if they are in any CS course
+  # and add groups for cs courses
+  if ret=`curl --negotiate -u : https://services.cs.rutgers.edu/makeaccount/"$USER"/ilab 2>/dev/null`; then
+      logger -t makeaccount -p auth.info "created user $USER $ret"
+  else
+      ret=""
+      logger -t makeaccount -p auth.info "failed to create user $USER"
+  fi
+  
+  kdestroy
+
+  # no point continuing if creation failed
+  if ! [[ "$ret" =~ ^success ]] && ! [[ "$ret" =~ ^user\ is\ activated\ already ]] ; then
+     exit 1
+  fi
+
+  # wait until user shows upa
+  # most of this is sssd caching, but
+  # it could also take time to sync between
+  # IPA servers
+
+  sleep 4
+  limit=15
+  while ! getent passwd "$USER" >/dev/null; do
+    if test $limit -lt 1 ; then
+        logger -t makeaccount -p auth.info "timed out waiting to find user $USER"
+	break 
+    fi
+    sleep 4
+    limit=$(($limit - 1))
+  done
+  logger -t makeaccount -p auth.info waiting done for user $USER        
+
+fi
+
+###### skinit
+
 
 # this is basically skinit. But systemd puts tomcat in
 # a protected environment. kgetcred doesn't work, and /tmp
@@ -12,7 +78,6 @@
 
 # ANONCC will be used to armor
 
-PATH=/usr/bin:/bin
 ANONCC=/var/lib/tomcat9/work/cc$$
 
 # ldap.admin is a user that is not able to do anything
@@ -26,7 +91,7 @@ EOF
 trap 'KRB5CCNAME="$ANONCC" kdestroy' 2
 
 # the actual kinit
-kinit -T "$ANONCC" -c "$ANONCC" "$@" 
+kinit -T "$ANONCC" -c "$ANONCC" "$USER" 
 
 STAT=$?
 
