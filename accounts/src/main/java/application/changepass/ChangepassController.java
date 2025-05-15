@@ -77,8 +77,11 @@ public class ChangepassController {
     public String changepassGet(@RequestParam(value="cluster", required=false) String cluster,
 				HttpServletRequest request, HttpServletResponse response, Model model) {
 	String user = request.getRemoteUser();
+	user = Uid.localUid(user, Activator.Config.getConfig());
 
-	model.addAttribute("allowchange", utils.allowChangePassword(user));
+	var passwordInfo = utils.getPasswordInfo(user);
+	model.addAttribute("allowchange", passwordInfo.allowChangePassword);
+	model.addAttribute("universityPassword", passwordInfo.universityPassword);
 	String pass = genpassword.generate(10);
 	for (int i = 0; i < 1000; i++) {
 	    if (dict.checkdict(null, pass)) {
@@ -94,8 +97,10 @@ public class ChangepassController {
     }
 
     @PostMapping("/changepass/changepass")
-    public String changepassSubmit(@RequestParam(value="pass1") String newpass,
-				   @RequestParam(value="pass2") String newpass2,
+    public String changepassSubmit(@RequestParam(required = false, value="pass1") String newpass,
+				   @RequestParam(required = false, value="pass2") String newpass2,
+				   @RequestParam(required = false, value="university") String university,
+				   @RequestParam(value="action") String action,
 				   HttpServletRequest request, HttpServletResponse response,
 				   Model model) {
 	Logger logger = null;
@@ -106,23 +111,91 @@ public class ChangepassController {
 
 	String user = request.getRemoteUser();
 	int retval = -1;
-	user = Uid.localUid(user, Activator.Config.getConfig());
+	var mappeduser = Uid.localUid(user, Activator.Config.getConfig());
 
 	List<String> messages = new ArrayList<String>();
 
 	// stupid. to simulate goto
 	while (true) {
 
-	    if (user == null) {
+	    if (mappeduser == null) {
 		messages.add("Username is prohibited");
 		break;
 	    }
 
-	    if (!utils.allowChangePassword(user)) {
+	    var passwordInfo = utils.getPasswordInfo(mappeduser);
+	    if (!passwordInfo.allowChangePassword) {
 		messages.add("You have requested that we disable automatic password changes for your account. Please come in person to our help desk or systems staff to change your password.");
 		break;
 	    }
 
+	    if ("university".equals(action)) {
+		boolean current = passwordInfo.universityPassword;
+		boolean desired = ("on".equals(university) || "true".equals(university));
+		// if nothing to do)
+		if (current == desired)
+		    break;
+
+		String[] cmd;
+		if (desired) {
+		    cmd = new String[] {"/bin/ipa", "user-mod", mappeduser, "--radius=univ-password", "--radius-username=" + user };
+		    logger.info("/bin/ipa user-mod " + mappeduser + " --radius=univ-password --radius-username= " + user );
+		} else {
+		    cmd = new String[] {"/bin/ipa", "user-mod", mappeduser, "--radius="};
+		    logger.info("/bin/ipa user-mod " + mappeduser + "--radius=");
+		}
+
+		Process p = null;
+		try {
+		    String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
+		    p = Runtime.getRuntime().exec(cmd, env);
+		    try (
+			 BufferedReader reader2 = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+			 ) {
+			retval = p.waitFor();
+			
+			// 2 is non-existent user. We have our eown error for that.
+			// otherwise give them the actual error
+			
+			if (retval != 0) {
+			    String line=reader2.readLine();
+			    
+			    while (line != null) {    
+				messages.add(line);
+				logger.error(line);
+				line = reader2.readLine();
+			    }
+			}
+			reader2.close();
+			
+		    }
+		    catch(IOException e1) {
+			logger.error("Error talking to process to change password");
+			messages.add("Error talking to process to change password");
+		    }
+		    catch(InterruptedException e2) {
+			logger.error("Password change process interrupted");
+			messages.add("Password change process interrupted");
+		    } 
+		} catch(Exception e) {
+		    logger.error("Unable to execute ipa password command");
+		    messages.add("Unable to execute ipa password command");
+		} finally {
+		    if (p != null)
+			p.destroy();
+		}
+		
+		if (retval == 0) {
+		    logger.info("User " + mappeduser + " change of University password ok");
+		    messages.add("Changed.");
+		    break;
+		}
+		
+		// only one action at a time, so done
+		break;
+
+	    }
+	    
 	    if (newpass == null) {
 		messages.add("No password specified");
 		break;
@@ -141,7 +214,7 @@ public class ChangepassController {
 	    }
 	    
 	    if (!dict.checkdict(null, testpass)) {
-		logger.info("User " + user + " new password in dictionary");
+		logger.info("User " + mappeduser + " new password in dictionary");
 		messages.add("Password is in our dictionary of common passwords");
 		break;
 	    }
@@ -151,10 +224,8 @@ public class ChangepassController {
 //	   break;
 //       }
 
-	    String [] cmd = {"/bin/ipa", "passwd", user};
+	    String [] cmd = {"/bin/ipa", "passwd", mappeduser};
 	    
-	    logger.info("ipa passwd " + user);
-
 	    Process p = null;
 	    try {
 		String env[] = {"KRB5CCNAME=/tmp/krb5ccservices", "PATH=/bin:/usr/bin"};
@@ -200,11 +271,11 @@ public class ChangepassController {
 	    }
 
 	    if (retval == 2) {
-		logger.info("User " + user + " attempted password change but not in our system");
+		logger.info("User " + mappeduser + " attempted password change but not in our system");
 		break;
 	    }
 	    if (retval == 0) {
-		logger.info("User " + user + " password change ok");
+		logger.info("User " + mappeduser + " password change ok");
 		messages.add("Password changed.");
 		break;
 	    }

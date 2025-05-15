@@ -165,7 +165,7 @@ those things.
      attributes ipatokenOwner, ipatokenUniqueID, objectClass
   add permission Rutgers read radius configuration
      sybtree cn=radiusproxy,dc=cs,dc=rutgers,dc=edu
-     attributes cn, ipatokenRadiusServer, objectClass
+     attributes cn, ipatokenRadiusServer, objectClass, ipatokenreadusconfiglink
   add permission Rutgers write user businesscategory
      type user
      attribute businesscategoryc

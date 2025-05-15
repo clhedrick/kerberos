@@ -31,29 +31,49 @@
 <p> You have successfully created an account on cluster <span th:text="${cluster}"/>. In order
 to login, you also need to create a password. This password will be good on 
 systems in Computer Science labs and office. (In contrast, most of our
-web applications use your University password.)</p>
-
-<p> It is preferable to use a password that's different from your University
-password, but we're not going to force you to do that.</p>
+  web applications use your University password.)</p>
 </div>
 
 <div th:if="${cluster == null}">
 <h1> Set or reset password for Computer Science Dept systems </h1>
 
-<p> The Computer Science Department has passwords that are separate
-from University passwords. This allows us to provide improved security
-for your data.</p>
+<p> The Computer Science Department has passwords that can be separate
+from University passwords.</p>
 
 <p>The CS Dept password is used for login to computers in labs and in offices. In contrast to these login passwords, most of our web applications use your University password. </p>
 
-<p>This form allows you to set or reset your CS Dept password.</p>
+<p>This form allows you to set or reset your CS Dept password. You can also choose to
+use your University password for CS Dept systems.</p>
 
 <p> We don't ask for your old password, because you have already logged in with
 your University password.</p>
 
-<p> It is preferable to use a password that's different from your University
-password, but we're not going to force you to do that.</p>
+<h2> Use University password </h2>
 
+<p th:if="${!universityPassword}">
+If you check this box, we will use your University password.
+  In that case the
+  rest of this page is irrelevant.
+  You will use <b>netid.rutgers.edu</b> to manage
+  your password.
+</p>
+<p th:if="${universityPassword}">
+  Because this box is checked, you should go to
+  <a href="https://netid.rutgers.edu">netid.rutgers.edu</a>
+  to change your password. If you want a separate password
+  for computer science systems, you can uncheck the box and click "Submit".
+  Then you'll have to come back here to set a password.
+</span>
+
+<form th:action="@{/changepass/changepass}" method="post">
+<p><legend style="margin:0px; padding: 0px"><label><input type="checkbox" name="university" th:checked="${universityPassword}"/> Use your University password for Computer Science.</label></legend></p>
+<input type="hidden" name="action" value="university"/>
+<input type="submit" value="Set or clear"/>
+</form>
+
+
+<div th:if="${!universityPassword}">
+<div th:if="${cluster == null}">
 <h2> How to set or reset your password </h2>
 
 <p> This web application lets you reset your CS password as long as you
@@ -103,9 +123,11 @@ don't force you to change it in the first place).</li>
 <label>New password: <input type="password" name="pass1"/></label><br/>
 <label>Type it again to verify: <input type="password" name="pass2"/></label>
 <p></p>
+<input type="hidden" name="action" value="password"/>
 <input type="submit" value="Set Password"/>
 </form>
 
+</div>
 </div>
 <div th:insert="~{accessibility :: footer}"></div>
 </div>

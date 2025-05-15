@@ -45,6 +45,12 @@ import java.util.Random;
 
 public class utils {
 
+    public static class PasswordInfo {
+	public boolean allowChangePassword;
+	public boolean universityPassword;
+    }
+
+
     // in milliseconds. If password change within this of creation,
     // assume it is the random password set at account creation.
    static long FUZZ = 3000;
@@ -61,12 +67,12 @@ public class utils {
             Map<String, String> options = new HashMap<String, String>(); 
             options.put("useKeyTab", "true"); 
 	    try {
-		options.put("principal", "host/" + InetAddress.getLocalHost().getCanonicalHostName() + "@" + Config.getConfig().kerberosdomain); 
+		options.put("principal", "HTTP/" + InetAddress.getLocalHost().getCanonicalHostName() + "@" + Config.getConfig().kerberosdomain); 
 	    } catch (Exception e){
 		System.out.println("Can't find our hostname " + e);
 	    }
             options.put("refreshKrb5Config", "true"); 
-	    options.put("keyTab", "/etc/krb5.keytab");
+	    options.put("keyTab", "/etc/krb5.keytab.http");
  
             return new AppConfigurationEntry[]{ 
 		new AppConfigurationEntry("com.sun.security.auth.module.Krb5LoginModule",
@@ -87,7 +93,7 @@ public class utils {
     // For those users we set businessCategory=noautopasswordchange
     // This routine checks for that attribute.
 
-    public static boolean allowChangePassword(String username) {
+    public static PasswordInfo getPasswordInfo(String username) {
 	Logger logger = null;
 	logger = LogManager.getLogger();
 
@@ -100,22 +106,22 @@ public class utils {
 	    lc.login();
 	} catch (LoginException le) {
 	    logger.error("Cannot create LoginContext. " + le.getMessage());
-	    return false;
+	    return null;
 	} catch (SecurityException se) {
 	    logger.error("Cannot create LoginContext. " + se.getMessage());
-	    return false;
+	    return null;
 	}
 
 	// Subject is Java's internal version of a credentials cache
 	Subject subj = lc.getSubject();  
 	if (subj == null) {
 	    logger.error("Login failed");
-	    return false;
+	    return null;
 	}
 
 	// Create the ldap query.
 	JndiAction action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(uid=" + username
- + "))", "", "businesscategory"});
+	    + "))", "", "businesscategory", "ipatokenradiusconfiglink"});
 	// execute the query authenticated with our Kerberos credentials
 	Subject.doAs(subj, action);
 
@@ -123,12 +129,19 @@ public class utils {
 	// if there's no entry this is a new user, and we have
 	// to be able to change their password
 	if (action.val != null && action.val.size() > 0) {
+	    var passwordInfo = new PasswordInfo();
+
 	    ArrayList categories = action.val.get(0).get("businesscategory");
-	    if (categories != null && categories.contains("noautopasswordchange"))
-		return false;
+	    passwordInfo.allowChangePassword = (categories == null || ! categories.contains("noautopasswordchange"));
+
+	    var radiusconfig = action.val.get(0).get("ipatokenradiusconfiglink");
+	    passwordInfo.universityPassword = (radiusconfig != null && radiusconfig.contains("cn=univ-password,cn=radiusproxy,dc=cs,dc=rutgers,dc=edu"));
+
+	    return passwordInfo;
+
 	}
 
-	return true;
+	return null;
 	
     }
 
@@ -187,7 +200,7 @@ public class utils {
 	//createTimestamp: 20170119210315Z
 
 	// Create the ldap query.
-	JndiAction action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(uid=" + username + "))", "", "krbLastPwdChange", "createTimestamp"});
+	JndiAction action = new JndiAction(null, new String[]{"(&(objectclass=inetorgperson)(uid=" + username + "))", "", "krbLastPwdChange", "createTimestamp", "ipatokenradiusconfiglink"});
 	// execute the query authenticated with our Kerberos credentials
 	Subject.doAs(subj, action);
 
@@ -196,9 +209,15 @@ public class utils {
 	// to be able to change their password
 	if (action.val != null && action.val.size() > 0) {
 
-	//krbLastPwdChange: 20170320203913Z
-	//createTimestamp: 20170119210315Z
+	    // if using radius we don't need to set a password
+	    var radiuslink = lu.oneVal(action.val.get(0).get("ipatokenradiusconfiglink"));
+	    if (radiuslink != null)
+		return false;
 
+	    //krbLastPwdChange: 20170320203913Z
+	    //createTimestamp: 20170119210315Z
+
+	    
 	    Date createDate = parseLdapDate(lu.oneVal(action.val.get(0).get("createtimestamp")));
 	    Date lastChange = parseLdapDate(lu.oneVal(action.val.get(0).get("krblastpwdchange")));
 
