@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
     setuid(1003);
 
     krb5_init_context(&context);
-    krb5_parse_name(context, "nfs/koko.lcsr.rutgers.edu", &server);
+    krb5_parse_name(context, "nfs/communis.lcsr.rutgers.edu", &server);
 
     
     ret = ccselect_nfs_choose(context, (krb5_ccselect_moddata)data, server, &cache, &princ);

@@ -492,7 +492,8 @@ PAM_EXTERN int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, cons
   // 4. register the cache for renewal
   //
 
-  register_for_delete(pamh, ccname, pwd->pw_uid);
+  // not needed with script, and causes selinix to complain
+  //  register_for_delete(pamh, ccname, pwd->pw_uid);
 
   //
   // 5. except for cron, see if the ticket lifetime is too small, and warn user.
