@@ -1,0 +1,186 @@
+*** quota-4.09/rquota_server.c	2019-07-30 11:28:39.000000000 -0400
+--- quota-4.09.ok/rquota_server.c	2025-05-21 15:11:50.908263516 -0400
+***************
+*** 55,60 ****
+--- 55,73 ----
+  
+  extern char nfs_pseudoroot[PATH_MAX];
+  
++ struct zfsinfo {
++   
++  unsigned long ihardlimit;
++  unsigned long isoftlimit;
++  unsigned long curinodes;
++  unsigned long bhardlimit;
++  unsigned long bsoftlimit;
++  unsigned long curspace;
++ };
++ 
++ extern int getzfsinfo (char *filesys, uid_t uid, struct zfsinfo *zp);
++ 
++ 
+  /*
+   * Global unix authentication credentials.
+   */
+***************
+*** 154,234 ****
+  	int id, qcmd, type;
+  	struct quota_handle *handles[2] = { NULL, NULL };
+  
+- 	/*
+- 	 * First check authentication.
+- 	 */
+- 	if (lflags & TYPE_EXTENDED) {
+- 		arguments.ext_args = (ext_setquota_args *) argp;
+- 
+- 		id = arguments.ext_args->sqa_id;
+- 		if (unix_cred->aup_uid != 0) {
+- 			result.status = Q_EPERM;
+- 			return (&result);
+- 		}
+- 
+- 		qcmd = arguments.ext_args->sqa_qcmd;
+- 		type = arguments.ext_args->sqa_type;
+- 		if (arguments.ext_args->sqa_pathp[0] != '/')
+- 			sstrncpy(pathname, nfs_pseudoroot, PATH_MAX);
+- 		sstrncat(pathname, arguments.ext_args->sqa_pathp, PATH_MAX);
+- 		servnet2utildqblk(&dqblk, &arguments.ext_args->sqa_dqblk);
+- 	}
+- 	else {
+- 		arguments.args = (setquota_args *) argp;
+- 
+- 		id = arguments.args->sqa_id;
+- 		if (unix_cred->aup_uid != 0) {
+- 			result.status = Q_EPERM;
+- 			return (&result);
+- 		}
+- 
+- 		qcmd = arguments.args->sqa_qcmd;
+- 		type = USRQUOTA;
+- 		if (arguments.args->sqa_pathp[0] != '/')
+- 			sstrncpy(pathname, nfs_pseudoroot, PATH_MAX);
+- 		sstrncat(pathname, arguments.args->sqa_pathp, PATH_MAX);
+- 		servnet2utildqblk(&dqblk, &arguments.args->sqa_dqblk);
+- 	}
+- 
+- 	result.status = Q_NOQUOTA;
+- 	result.setquota_rslt_u.sqr_rquota.rq_bsize = RPC_DQBLK_SIZE;
+- 
+- 	if (init_mounts_scan(1, &pathp, MS_QUIET | MS_NO_MNTPOINT | MS_NFS_ALL | ((flags & FL_AUTOFS) ? 0 : MS_NO_AUTOFS)) < 0)
+- 		goto out;
+- 	if (!(mnt = get_next_mount())) {
+- 		end_mounts_scan();
+- 		goto out;
+- 	}
+- 	if (!(handles[0] = init_io(mnt, type, -1, 0))) {
+- 		end_mounts_scan();
+- 		goto out;
+- 	}
+- 	end_mounts_scan();
+- 	if (!(dquot = handles[0]->qh_ops->read_dquot(handles[0], id)))
+- 		goto out;
+- 	if (qcmd == QCMD(Q_RPC_SETQLIM, type) || qcmd == QCMD(Q_RPC_SETQUOTA, type)) {
+- 		dquot->dq_dqb.dqb_bsoftlimit = dqblk.dqb_bsoftlimit;
+- 		dquot->dq_dqb.dqb_bhardlimit = dqblk.dqb_bhardlimit;
+- 		dquot->dq_dqb.dqb_isoftlimit = dqblk.dqb_isoftlimit;
+- 		dquot->dq_dqb.dqb_ihardlimit = dqblk.dqb_ihardlimit;
+- 		dquot->dq_dqb.dqb_btime = dqblk.dqb_btime;
+- 		dquot->dq_dqb.dqb_itime = dqblk.dqb_itime;
+- 	}
+- 	if (qcmd == QCMD(Q_RPC_SETUSE, type) || qcmd == QCMD(Q_RPC_SETQUOTA, type)) {
+- 		dquot->dq_dqb.dqb_curspace = dqblk.dqb_curspace;
+- 		dquot->dq_dqb.dqb_curinodes = dqblk.dqb_curinodes;
+- 	}
+- 	if (handles[0]->qh_ops->commit_dquot(dquot, COMMIT_LIMITS) == -1) {
+- 		free(dquot);
+- 		goto out;
+- 	}
+- 	free(dquot);
+- 	result.status = Q_OK;
+- out:
+- 	dispose_handle_list(handles);
+- #else
+- 	result.status = Q_EPERM;
+  #endif
+  	return (&result);
+  }
+  
+--- 167,175 ----
+  	int id, qcmd, type;
+  	struct quota_handle *handles[2] = { NULL, NULL };
+  
+  #endif
++  	result.status = Q_EPERM;
++ 
+  	return (&result);
+  }
+  
+***************
+*** 242,250 ****
+--- 183,194 ----
+  	struct dquot *dquot = NULL;
+  	struct mount_entry *mnt;
+  	char pathname[PATH_MAX] = {0};
++ 	char fixedpath[PATH_MAX] = {0};
+  	char *pathp = pathname;
+  	int id, type;
+  	struct quota_handle *handles[2] = { NULL, NULL };
++ 	struct util_dqblk dq_dqb;
++ 	struct zfsinfo zfsinfo;
+  
+  	/*
+  	 * First check authentication.
+***************
+*** 283,309 ****
+  	}
+  
+  	result.status = Q_NOQUOTA;
+  
+- 	if (init_mounts_scan(1, &pathp, MS_QUIET | MS_NO_MNTPOINT | MS_NFS_ALL | ((flags & FL_AUTOFS) ? 0 : MS_NO_AUTOFS)) < 0)
+- 		goto out;
+- 	if (!(mnt = get_next_mount())) {
+- 		end_mounts_scan();
+- 		goto out;
+- 	}
+- 	if (!(handles[0] = init_io(mnt, type, -1, IOI_READONLY))) {
+- 		end_mounts_scan();
+- 		goto out;
+- 	}
+- 	end_mounts_scan();
+- 	if (!(lflags & ACTIVE) || QIO_ENABLED(handles[0]))
+- 		dquot = handles[0]->qh_ops->read_dquot(handles[0], id);
+- 	if (dquot) {
+- 		result.status = Q_OK;
+- 		result.getquota_rslt_u.gqr_rquota.rq_active =
+- 			QIO_ENABLED(handles[0]) ? TRUE : FALSE;
+- 		servutil2netdqblk(&result.getquota_rslt_u.gqr_rquota, &dquot->dq_dqb);
+- 		free(dquot);
+- 	}
+  out:
+  	dispose_handle_list(handles);
+  	return (&result);
+--- 227,250 ----
+  	}
+  
+  	result.status = Q_NOQUOTA;
++ 	result.status = Q_OK;
++ 	result.getquota_rslt_u.gqr_rquota.rq_active = TRUE;
++ 	
++ 	if (getzfsinfo (pathname, id, &zfsinfo) != 0) {
++ 	  	result.status = Q_NOQUOTA;
++ 		return (&result);
++ 	}
++ 
++ 	dq_dqb.dqb_ihardlimit = zfsinfo.ihardlimit;
++ 	dq_dqb.dqb_isoftlimit = zfsinfo.isoftlimit;
++ 	dq_dqb.dqb_curinodes = zfsinfo.curinodes;
++ 	dq_dqb.dqb_bhardlimit = zfsinfo.bhardlimit;
++ 	dq_dqb.dqb_bsoftlimit = zfsinfo.bsoftlimit;
++ 	dq_dqb.dqb_curspace = zfsinfo.curspace;
++ 	dq_dqb.dqb_btime = 0;
++ 	dq_dqb.dqb_itime = 0;
++ 	servutil2netdqblk(&result.getquota_rslt_u.gqr_rquota, &dq_dqb);
+  
+  out:
+  	dispose_handle_list(handles);
+  	return (&result);

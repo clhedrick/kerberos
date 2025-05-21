@@ -1,0 +1,43 @@
+*** quota-4.09/Makefile	2025-05-21 15:36:04.310756432 -0400
+--- quota-4.09.ok/Makefile	2025-05-21 15:27:33.591637220 -0400
+***************
+*** 212,218 ****
+  	svc_socket.c
+  am_rpc_rquotad_OBJECTS = rquota_server.$(OBJEXT) \
+  	rquota_svc.$(OBJEXT) svc_socket.$(OBJEXT)
+! rpc_rquotad_OBJECTS = $(am_rpc_rquotad_OBJECTS)
+  rpc_rquotad_DEPENDENCIES = libquota.a \
+  	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+  	$(RPCLIBS) $(am__DEPENDENCIES_1)
+--- 212,218 ----
+  	svc_socket.c
+  am_rpc_rquotad_OBJECTS = rquota_server.$(OBJEXT) \
+  	rquota_svc.$(OBJEXT) svc_socket.$(OBJEXT)
+! rpc_rquotad_OBJECTS = $(am_rpc_rquotad_OBJECTS)  getzfsinfo.o
+  rpc_rquotad_DEPENDENCIES = libquota.a \
+  	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+  	$(RPCLIBS) $(am__DEPENDENCIES_1)
+***************
+*** 746,751 ****
+--- 746,752 ----
+  
+  rpc_rquotad_LDADD = \
+  	libquota.a \
++ 	-lzfs \
+  	$(INTLLIBS) \
+  	$(WRAP_LIBS) \
+  	$(RPCLIBS) \
+***************
+*** 768,773 ****
+--- 769,779 ----
+  all: $(BUILT_SOURCES) config.h
+  	$(MAKE) $(AM_MAKEFLAGS) all-recursive
+  
++ getzfsinfo: getzfsinfo.c
++ 	gcc -DMAIN -o getzfsinfo -I/usr/include/libzfs -I/usr/include/libspl getzfsinfo.c -lzfs
++ getzfsinfo.o: getzfsinfo.c
++ 	gcc -fPIC -c -I/usr/include/libzfs -I/usr/include/libspl getzfsinfo.c -lzfs
++ 
+  .SUFFIXES:
+  .SUFFIXES: .c .o .obj
+  am--refresh: Makefile

@@ -1,0 +1,14 @@
+dnf download --source quota
+rpm -ivh quota-4.09-4.el9.src.rpm
+; will create ~/rpmbuild
+rpmbuild -ba rpmbuild/SPECS/quota.spec
+; will build the package in ~/rpmbuild/BUILD/quota...
+
+; go to rpmbuild/BUILD/quota-4.09
+; add getzfsinfo.c
+; patch Makefile and rquota_server.c
+
+make
+
+; will give you a new rpc.rquotad
+
