@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.io.*;
 import java.io.PrintWriter;
 import java.util.Calendar;
 import java.time.LocalTime;
@@ -68,9 +69,115 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 
     // cas is going to do the auth
 
+    private class TutorialAuthenticatedUser extends AbstractAuthenticatedUser {
+
+        /**
+         * The credentials provided when this AuthenticatedUser was
+         * authenticated.
+         */
+        private final Credentials credentials;
+
+	/*
+         * Creates a new SimpleAuthenticatedUser associated with the given
+         * credentials and having access to the given Map of
+         * GuacamoleConfigurations.
+         *
+         * @param credentials
+         *     The credentials provided by the user when they authenticated.
+         *
+         */
+        public TutorialAuthenticatedUser(Credentials credentials) {
+
+            // Store credentials and configurations
+            this.credentials = credentials;
+
+            // Pull username from credentials if it exists
+            String username = credentials.getUsername();
+            if (username != null && !username.isEmpty())
+                setIdentifier(username);
+
+            // Otherwise generate a random username
+            else
+                setIdentifier(UUID.randomUUID().toString());
+
+        }
+
+        @Override
+        public AuthenticationProvider getAuthenticationProvider() {
+            return TutorialAuthenticationProvider.this;
+        }
+
+        @Override
+        public Credentials getCredentials() {
+            return credentials;
+        }
+
+        @Override
+        public Set<String> getEffectiveUserGroups() {
+            return Collections.<String>emptySet();
+        }
+
+    }
+
+
+    public AuthenticatedUser authenticateUser(final Credentials credentials)
+            throws GuacamoleException {
+
+	String username = credentials.getUsername();
+	String password = credentials.getPassword();
+	boolean twoFactor = false;
+
+	if (username == null || password == null)
+	    return null;
+
+	String [] cmd = {"/usr/libexec/checkpass", username};
+
+	try {
+            Process p = Runtime.getRuntime().exec(cmd);
+	    try (PrintWriter writer = new PrintWriter(p.getOutputStream());
+		 BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+		 BufferedReader reader2 = new BufferedReader(new InputStreamReader(p.getErrorStream()))) {
+		writer.println(password);
+		writer.flush();
+                writer.close();
+		if (false) {
+		    String line=reader.readLine();
+		    while (line != null) {
+			System.out.println(line);
+			line = reader.readLine();
+		    }
+		    line=reader2.readLine();
+		    while (line != null) {
+			System.out.println(line);
+			line = reader2.readLine();
+		    }
+		}
+
+                int retval = p.waitFor();
+                if (retval != 0) {
+		    System.out.println("login failed for " + username + " " + retval);
+		    return null;
+		}
+		System.out.println("login ok for " + username);
+	    }
+	} catch (Exception e) {
+	    System.out.println("Exception " + e);
+	}
+
+	return new TutorialAuthenticatedUser(credentials);
+
+    }
+
+
     @Override
     public UserContext getUserContext(AuthenticatedUser authenticatedUser)
             throws GuacamoleException {
+
+	if (configUpdate != null && configSave != null &&
+	    configUpdate.plusMinutes(10).isAfter(LocalTime.now())) {
+	    System.out.println("returning saved config");
+	    return new SimpleUserContext(this, authenticatedUser.getIdentifier(), configSave, true);
+	}
 
 	Environment environment = LocalEnvironment.getInstance();
 
@@ -147,7 +254,7 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	    if (! ok)  {
 		context.close();
 		System.out.println("user " + username + " logged in but no CS account");
-		throw new GuacamoleInvalidCredentialsException("Invalid login.",
+		throw new GuacamoleInvalidCredentialsException("Password OK, but you don't have an active CS account.",
 							       CredentialsInfo.USERNAME_PASSWORD);
 	    }
 	    //	    System.out.println("tutoral getconfig");
@@ -216,12 +323,16 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 
 	    context.close();
 
+	    configSave = configs;
+	    configUpdate = LocalTime.now();
+
 	} catch (GuacamoleInvalidCredentialsException e) {
 	    // rethrow
 	    throw new GuacamoleInvalidCredentialsException("Invalid login.",
 							   CredentialsInfo.USERNAME_PASSWORD);
 	} catch (Exception e) {
 	}
+	System.out.println("returning new config");
 
         // Return user context restricted to authorized configs
 	return new SimpleUserContext(this, authenticatedUser.getIdentifier(), configs, true);
