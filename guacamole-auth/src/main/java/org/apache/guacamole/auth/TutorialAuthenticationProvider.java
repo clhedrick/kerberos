@@ -194,7 +194,10 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 		    // Get name and value from parameter string
 		    String name = param.substring(0, equals);
 		    String value = param.substring(equals+1);
-
+		    // we no longer have a password
+		    if (value.contains("GUAC_PASSWORD"))
+			continue;
+		    
 		    config.setParameter(name, value);
 		}
 
@@ -212,7 +215,7 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 	    config.setParameter("color-depth", "24");
 	    config.setParameter("ignore-cert","true");
 	    
-	    configs.put("-geneva", config);	    
+	    //	    configs.put("-geneva", config);	    
 
 	    context.close();
 
