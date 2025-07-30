@@ -1,6 +1,8 @@
 dnf download --source quota
 rpm -ivh quota-4.09-4.el9.src.rpm
 ; will create ~/rpmbuild
+;may need following:
+sudo dnf builddep quota
 rpmbuild -ba rpmbuild/SPECS/quota.spec
 ; will build the package in ~/rpmbuild/BUILD/quota...
 
