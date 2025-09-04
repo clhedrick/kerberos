@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# called after cas auth if user doesn't exist
+# return 0 if eligible, 1 if not
+
+PATH=/usr/bin:/bin
+USER="$1"
+
+export KRB5CCNAME=/var/lib/tomcat9/work/krb5makeaccount$$
+
+kinit -k -t /etc/krb5.keytab host/`hostname`@CS.RUTGERS.EDU
+
+# this will create them if they are in any CS course
+# and add groups for cs courses
+if ret=`curl --negotiate -u : https://services.cs.rutgers.edu/makeaccount/"$USER"/ilab 2>/dev/null`; then
+    logger -t makeaccount -p auth.info "makeaccount returned for user $USER"
+else
+    ret=""
+    logger -t makeaccount -p auth.info "makeaccount failed for user $USER"
+fi
+  
+kdestroy
+
+if ! [[ "$ret" =~ ^success ]] && ! [[ "$ret" =~ ^user\ is\ activated\ already ]] ; then
+   logger -t makeaccount -p auth.info "makeaccount user bad $USER"
+   exit 1
+else
+   logger -t makeaccount -p auth.info "makeaccount user ok $USER"
+   exit 0
+fi    

@@ -68,6 +68,22 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 
     // cas is going to do the auth
 
+    public static boolean userOk (String user) {
+	Process p = null;
+	String []cmd = new String[] {"/usr/libexec/makeuser", user};
+
+	try {
+	    String env[] = {"PATH=/bin:/usr/bin"};
+	    p = Runtime.getRuntime().exec(cmd, env);
+	    int retval = p.waitFor();
+	    return retval == 0;
+	} catch(Exception e) {
+	    System.out.println("failed " + e);
+	    return false;
+	}
+
+    }    
+
     @Override
     public UserContext getUserContext(AuthenticatedUser authenticatedUser)
             throws GuacamoleException {
@@ -142,6 +158,11 @@ public class TutorialAuthenticationProvider extends AbstractAuthenticationProvid
 			if (e.next().toString().equals(allowed_group))
 			    ok = true;
 		}
+	    }
+
+	    // no current account. See if we can make one
+	    if (! ok) {
+		ok = userOk(username);
 	    }
 
 	    if (! ok)  {
