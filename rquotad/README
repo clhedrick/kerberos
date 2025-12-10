@@ -1,0 +1,19 @@
+rpcgen -M -N -C -a rquota.x
+
+dnf install libtirpc-devel
+also needs zfs development enviornment
+  for Ubuntu this is apt install libzfslinux-dev
+  for redhat I did it on my build system
+
+edit Makefile. added tirpc and libzfs. removed libnsl, which no
+longer exists
+  CFLAGS += -g -I /usr/include/tirpc -I /usr/include/libzfs -I /usr/include/libspl
+  LDLIBS += -ltirpc -lpthread -lzfs
+
+Mostly this is code from rpcgen.
+rquota_server has the actual guts. The rpcgen boilerplate
+  is left in place.
+rquota_svc just has initialization code added.
+
+
+
