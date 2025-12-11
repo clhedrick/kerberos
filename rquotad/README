@@ -11,9 +11,7 @@ longer exists
   LDLIBS += -ltirpc -lpthread -lzfs
 
 Mostly this is code from rpcgen.
-rquota_server has the actual guts. The rpcgen boilerplate
-  is left in place.
-rquota_svc just has initialization code added.
+Lines I added or changed are noted as // Rutgers
 
 
 

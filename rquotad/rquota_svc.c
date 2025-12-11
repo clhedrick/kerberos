@@ -19,9 +19,13 @@
 
 // Rutgers start
 
+#include <arpa/inet.h> // For ntohs()
+#include <netdb.h>
+
 char nfs_pseudoroot[PATH_MAX];
 
 #define NFSD_XTAB_PATH "/var/lib/nfs/etab"
+#define QPORT 875
 
 /* Parse NFSD export table and find a filesystem pseudoroot if it is there */
 static void get_pseudoroot(void)
@@ -58,6 +62,40 @@ static void get_pseudoroot(void)
 	}
 	fclose(f);
 }
+
+int
+makesocket(int istcp) {
+  struct servent *service;
+  struct sockaddr_in6 sin6;
+  int optval = 1;
+  int sock;
+
+  sock = socket(AF_INET6, (istcp ? SOCK_STREAM : SOCK_DGRAM), 0);
+  if (!sock)
+    {fprintf(stderr, "socket failed\n"); exit(1);}
+
+  setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+
+  bzero(&sin6, sizeof(sin6));
+  sin6.sin6_family = AF_INET6;
+  inet_pton(AF_INET6, "::", &sin6.sin6_addr);
+  service = getservbyname("rquotad", (istcp ? "tcp" : "udp"));
+  if (service)
+    sin6.sin6_port = service->s_port;
+  else
+    sin6.sin6_port = htons(QPORT);
+
+  if (bind(sock, (const struct sockaddr *)&sin6, sizeof(sin6)) != 0)
+    {fprintf(stderr, "bind failed\n"); exit(1);}
+	
+  if (istcp) {
+    if (listen(sock, SOMAXCONN) != 0)
+      {fprintf(stderr, "listen failed"); exit(1);}
+  }
+
+  return sock;
+}
+  
 
 // Rutgers end
 
@@ -262,7 +300,8 @@ main (int argc, char **argv)
 	pmap_unset (RQUOTAPROG, RQUOTAVERS);
 	pmap_unset (RQUOTAPROG, EXT_RQUOTAVERS);
 
-	transp = svcudp_create(RPC_ANYSOCK);
+	// Rutgers
+	transp = svcudp_create(makesocket(0));
 	if (transp == NULL) {
 		fprintf (stderr, "%s", "cannot create udp service.");
 		exit(1);
@@ -276,7 +315,8 @@ main (int argc, char **argv)
 		exit(1);
 	}
 
-	transp = svctcp_create(RPC_ANYSOCK, 0, 0);
+	// Rutgers
+	transp = svctcp_create(makesocket(1), 0, 0);
 	if (transp == NULL) {
 		fprintf (stderr, "%s", "cannot create tcp service.");
 		exit(1);
