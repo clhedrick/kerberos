@@ -1,0 +1,4 @@
+dn: cn=schema
+changetype: modify
+add: objectclasses
+objectclasses: (NAME 'csRutgersEduDhcpAddresses' DESC 'IP addresses as integers' SUP top AUXILIARY MAY ( csRutgersEduDhcpIpNumber $ csRutgersEduDhcpIpStart $ csRutgersEduDhcpIpEnd ) )

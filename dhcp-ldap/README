@@ -32,6 +32,10 @@ screen from the group management tool, and a few utility classes.
 accounts/README says how to deploy this tool, though it assumes you're
 going to use all the pieces.
 
+There are a second set of changes need to support freeradius.
+dhcpn.ldif and dhcp2n.ldif change the schema
+indexn.sh indexes the new attributes
+
 BUG
 
 There's a bug in the code that's critical for us. If there's more

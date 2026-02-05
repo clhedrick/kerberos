@@ -1,0 +1,6 @@
+dn: cn=schema
+changetype: modify
+add: attributetypes
+attributeTypes: (NAME 'csRutgersEduDhcpIpNumber' DESC 'IP Address as integer' EQUALITY integerMatch ORDERING integerOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 SINGLE-VALUE)
+attributeTypes: (NAME 'csRutgersEduDhcpIpStart' DESC 'IP Address start of range as integer' EQUALITY integerMatch ORDERING integerOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 SINGLE-VALUE)
+attributeTypes: (NAME 'csRutgersEduDhcpIpEnd' DESC 'IP Address end of range as integer' EQUALITY integerMatch ORDERING integerOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 SINGLE-VALUE)
