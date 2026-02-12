@@ -1,0 +1,493 @@
+# -*- text -*-
+######################################################################
+#
+#	This is a virtual server that handles DHCP.
+#
+#  See raddb/mods-available/dhcp_sqlippool for the IP Pool configuration.
+#
+#  See raddb/policy.d/dhcp_sqlippool for the "glue" code that allows
+#  the RADIUS based "sqlippool" module to be used for DHCP.
+#
+#  See raddb/mods-config/sql/ippool/ for the schemas.
+#
+#  See raddb/sites-available/dhcp for instructions on how to configure
+#  the DHCP server.
+#
+#	$Id: 696a395719904125f6b665425b691b5a11ec2d61 $
+#
+######################################################################
+
+#
+#  The DHCP functionality goes into a virtual server.
+#
+
+# tmp-strings used:
+#  0 - return from ldap: list of options 
+#  1 - return from ldap: list of statements
+#  NOTE: you can't clear a list, so each call will add
+#    for that reason the caller adds a MARK, so you#
+#    can see what is new
+#  2 - sent to ldap: first part of filter
+#  3 - sent to ldap: second part of filter
+
+# The problem is that there's no way to clear a list.
+# We call ldap 3 times, so 0 and 1 keep getting more
+# things. To find the new ones, we add a MARK 
+# then 3 and 4 are set to the things after the MARK
+# when we move to version 4, it will be possible
+# to clear a list, so this will be much easier
+
+server dhcp {
+
+#  Define a DHCP socket.
+#
+#  The default port below is 6700, so you don't break your network.
+#  If you want it to do real DHCP, change this to 67, and good luck!
+#
+#  You can also bind the DHCP socket to an interface.
+#  See below, and raddb/radiusd.conf for examples.
+#
+#  This lets you run *one* DHCP server instance and have it listen on
+#  multiple interfaces, each with a separate policy.
+#
+#  If you have multiple interfaces, it is a good idea to bind the
+#  listen section to an interface.  You will also need one listen
+#  section per interface.
+#
+#  FreeBSD does *not* support binding sockets to interfaces.  Therefore,
+#  if you have multiple interfaces, broadcasts may go out of the wrong
+#  one, or even all interfaces.  The solution is to use the "setfib" command.
+#  If you have a network "10.10.0/24" on LAN1, you will need to do:
+#
+#  Pick any IP on the 10.10.0/24 network
+#	$ setfib 1 route add default 10.10.0.1
+#
+#  Edit /etc/rc.local, and add a line:
+#	setfib 1 /path/to/radiusd
+#
+#  The kern must be built with the following options:
+#	options    ROUTETABLES=2
+#  or any value larger than 2.
+#
+# The other only solution is to update FreeRADIUS to use BPF sockets.
+#
+listen {
+	#  This is a dhcp socket.
+	type = dhcp
+
+	#  IP address to listen on. Will usually be the IP of the
+	#  interface, or 0.0.0.0
+	interface = enp1s0
+	ipaddr = *
+	src_ipaddr = 128.6.60.252
+	### WARNTNG: must update all instances of &DHCP-DHCP-Server-Identifier
+	### and Tmp-IP-Address-0 in policy.d/dhcp
+
+	#  source IP address for unicast packets sent by the
+	#  DHCP server.
+	#
+	#  The source IP for unicast packets is chosen from the first
+	#  one of the following items which returns a valid IP
+	#  address:
+	#
+	#	src_ipaddr
+	#	ipaddr
+	#	reply:DHCP-Server-IP-Address
+	#	reply:DHCP-DHCP-Server-Identifier
+	#
+
+	#  The port should be 67 for a production network. Don't set
+	#  it to 67 on a production network unless you really know
+	#  what you're doing. Even if nothing is configured below, the
+	#  server may still NAK legitimate responses from clients.
+	port = 67
+
+	#  Interface name we are listening on. See comments above.
+#	interface = lo0
+
+	#  The DHCP server defaults to allowing broadcast packets.
+	#  Set this to "no" only when the server receives *all* packets
+	#  from a relay agent.  i.e. when *no* clients are on the same
+	#  LAN as the DHCP server.
+	#
+	#  It's set to "no" here for testing. It will usually want to
+	#  be "yes" in production, unless you are only dealing with
+	#  relayed packets.
+	broadcast = yes
+
+	#  On Linux if you're running the server as non-root, you
+	#  will need to do:
+	#
+	#	setcap cap_net_admin,cap_net_bind_service=eip /path/to/radiusd 
+	#
+	#  This will allow the server to set ARP table entries
+	#  for newly allocated IPs, when run as the "radius" user.
+	#
+	#  The above "setcap" command adds the capability to the program,
+	#  usually so long as it is run by the "radius" user.  Which means
+	#  (oddly enough) that it no longer works when run as root!
+	#
+	#  When running the server as root in debug mode, you can use:
+	#
+	#  capsh --caps="cap_setpcap,cap_setuid,cap_setgid,cap_net_admin,cap_net_bind_service+eip" --keep=1 --user=radius --addamb=cap_net_admin,cap_net_bind_service -- -c "/path/to/radiusd -X"
+	#
+	#  Or, simply "sudo" or "su" to the "radius" user, and then run
+	#  the server in debug mode.
+
+	#  De-duplicate DHCP packets.  If clients don't receive
+	#  a reply within their timeout, most will re-transmit.
+	#  A reply to either packet will satisfy, so de-duplicating
+	#  helps manage load on a busy server
+	performance {
+		skip_duplicate_checks = no
+	}
+}
+
+#  Packets received on the socket will be processed through one
+#  of the following sections, named after the DHCP packet type.
+#  See dictionary.dhcp for the packet types.
+
+#  Return packets will be sent to, in preference order:
+#     DHCP-Gateway-IP-Address
+#     DHCP-Client-IP-Address
+#     DHCP-Your-IP-Address
+#  At least one of these attributes should be set at the end of each
+#  section for a response to be sent.
+
+#  An internal attribute of DHCP-Network-Subnet is set to provide
+#  a basis for determining the network that a client belongs to.  This
+#  is a hierarchical assignment based on:
+#
+#    - DHCP-Relay-Link-Selection
+#    - DHCP-Subnet-Selection-Option
+#    - DHCP-Gateway-IP-Address
+#    - DHCP-Client-IP-Address
+#
+#  Except for cases where all IP allocation is performed using a mapping from
+#  the device MAC address to a fixed IP address the DHCP configuration will
+#  involve the use of one or more pools.
+#
+#  Each pool should be composed of a set of equally valid IP addresses for the
+#  devices designated as users of the pool. During IP allocation the choice of
+#  pool is driven by setting the Pool-Name attribute which may either be
+#  specified directly or chosen (usually with the help of the dhcp_network
+#  module) based on the initial value of DHCP-Network-Subnet.
+#
+#  DHCP-Network-Subnet indicates the network from which the request is
+#  originating. In cases where the originating network alone is insufficent to
+#  define the required IP allocated policy, DHCP-Network-Subnet may be
+#  overridden to force the selection of a particular pool.
+#
+#  IP addresses belonging to a single pool that is designated for a Layer 2
+#  network containing multiple subnets (a "shared-network" or "multinet"
+#  configuration as defined by some other DHCP servers), will by definition be
+#  members of distinct subnets that require their own DHCP reply parameters. In
+#  this case the dhcp_subnet policy can be used to set the correct
+#  DHCP-Subnet-Mask, DHCP-Router-Address and DHCP-Broadcast-Address options
+#  based on the allocated IP.
+
+dhcp DHCP-Discover {
+
+	linelog_recv_request
+	
+	#  The DHCP Server Identifier is set here since is returned in OFFERs
+	update control {
+		&DHCP-DHCP-Server-Identifier = 128.6.60.252		
+	}
+
+	#  If the request is not for this server then silently discard it
+	if (&request:DHCP-DHCP-Server-Identifier && \
+	    &request:DHCP-DHCP-Server-Identifier != &control:DHCP-DHCP-Server-Identifier) {
+		do_not_respond
+	}
+
+	dhcp_makereply
+
+        if (&reply:DHCP-Your-IP-Address) {
+    	   update control {
+	     reply:DHCP-Message-Type := DHCP-Offer
+           }
+	   linelog_send_reply
+	   ok
+	} else {
+	   reject
+	}
+
+}
+
+dhcp DHCP-Request {
+
+	linelog_recv_request
+
+	#  You must set the DHCP Server Identifier here since this is returned
+	#  in ACKs and is used to determine whether a request containing a
+	#  "server-ip" field is intended for this server
+	update control {
+		&DHCP-DHCP-Server-Identifier = 128.6.60.252
+	}
+
+	#  If the request is not for this server then silently discard it
+	if (&request:DHCP-DHCP-Server-Identifier && \
+	    &request:DHCP-DHCP-Server-Identifier != &control:DHCP-DHCP-Server-Identifier) {
+		do_not_respond
+	}
+
+	dhcp_makereply
+
+        if (&reply:DHCP-Your-IP-Address) {
+	    if (&request:DHCP-Requested-IP-Address && \
+	        &request:DHCP-Requested-IP-Address != &reply:DHCP-Your-IP-Address) {
+		update control {
+		    reply:DHCP-Message-Type := DHCP-Nak
+                }
+               	linelog_send_reply
+	    } else {
+	        update control {
+	            reply:DHCP-Message-Type := DHCP-Ack
+	        }
+               	linelog_send_reply
+	        ok
+	    }
+	} else {
+    	   update control {
+	     reply:DHCP-Message-Type := DHCP-Nak
+           }
+           linelog_send_reply
+	}
+
+
+
+}
+
+#
+#  Other DHCP packet types
+#
+#  There should be a separate section for each DHCP message type.
+#  By default this configuration will ignore them all. Any packet type
+#  not defined here will be responded to with a DHCP-NAK.
+
+authenticate {
+}
+
+dhcp DHCP-Decline {
+
+	linelog_recv_request
+	
+	#  Use a "passwd" module to set group memberships in DHCP-Group-Name
+	#  Enable mods-available/dhcp_passwd to use this
+	#dhcp_group_membership
+
+	#  Optionally override the network address based on client attributes
+	#  See Discover section
+	#dhcp_override_network
+
+	#  Use a "files" module to lookup global and subnet options
+	#  For multiple networks use this in place of dhcp_common
+	#  Enable mods-available/dhcp_files to use this
+	#  Options are set in mods-config/files/dhcp
+	#dhcp_network
+
+	#  Use a policy that set options from data stored in an SQL database
+	#dhcp_policy_sql
+
+	#  If using IPs from a DHCP pool in SQL then you may need to set the
+	#  pool name here if you haven't set it elsewhere and release the IP.
+#	update control {
+#		&Pool-Name := "local"
+#	}
+#	dhcp_sqlippool_decline
+
+	update reply {
+	       &DHCP-Message-Type = DHCP-Do-Not-Respond
+	}
+	reject
+}
+
+#
+#  A dummy config for Inform packets - this should match the
+#  options set in the Request section above, except Inform replies
+#  must not set Your-IP-Address or IP-Address-Lease-Time
+#
+dhcp DHCP-Inform {
+
+	linelog_recv_request
+
+	update control {
+		&DHCP-DHCP-Server-Identifier = 128.6.60.252		
+# not sure why this is needed
+
+	}
+
+	dhcp_makereply
+
+# we're about to clear your ip. Response goes to client-ip if no your ip
+        update reply {
+	      &reply:DHCP-Client-IP-Address = "%{&reply:DHCP-Your-IP-Address}"
+        }       
+
+        update reply {
+	      reply:DHCP-IP-Address-Lease-Time !* ANY
+              reply:DHCP-Your-IP-Address !*
+              control:DHCP-Your-IP-Address !* ANY
+# it looks like the response isn't initialized to ACK
+# an ok isn't good enough. Have to set to Ack
+# If your-ip-address dosn't exist, the previous
+# update will fail and we'll get a nak
+              reply:DHCP-Message-Type := DHCP-Ack
+        }
+
+	linelog_send_reply
+
+}
+
+#
+#  For Windows 7 boxes
+#
+#dhcp DHCP-Inform {
+#	update reply {
+#		Packet-Dst-Port = 67
+#		DHCP-Message-Type = DHCP-ACK
+#		DHCP-DHCP-Server-Identifier = "%{Packet-Dst-IP-Address}"
+#		DHCP-Site-specific-28 = 0x0a00
+#	}
+#	ok
+#}
+
+dhcp DHCP-Release {
+
+	linelog_recv_request
+	
+
+	#  Use a "passwd" module to set group memberships in DHCP-Group-Name
+	#  Enable mods-available/dhcp_passwd to use this
+	#dhcp_group_membership
+
+	#  Optionally override the network address based on client attributes
+	#  See Discover section
+	#dhcp_override_network
+
+	#  Use a "files" module to lookup global and subnet options
+	#  For multiple subnets use this in place of dhcp_common
+	#  Enable mods-available/dhcp_files to use this
+	#  Options are set in mods-config/files/dhcp
+	#dhcp_network
+
+	#  If using IPs from a DHCP pool in SQL then you may need to set the
+	#  pool name here if you haven't set it elsewhere and release the IP.
+#	update control {
+#		&Pool-Name := "local"
+#	}
+#	dhcp_sqlippool_release
+
+	update reply {
+	       &DHCP-Message-Type = DHCP-Do-Not-Respond
+	}
+	reject
+}
+
+
+dhcp DHCP-Lease-Query {
+	#  The thing being queried for is implicit
+	#  in the packets.
+
+	linelog_recv_request
+	
+	# has MAC, asking for IP, etc.
+	if (&DHCP-Client-Hardware-Address) {
+		# look up MAC in database
+	}
+
+	# has IP, asking for MAC, etc.
+	elsif (&DHCP-Your-IP-Address) {
+		# look up IP in database
+	}
+
+	# has host name, asking for IP, MAC, etc.
+	elsif (&DHCP-Client-Identifier) {
+		# look up identifier in database
+	}
+	else {
+		update reply {
+			&DHCP-Message-Type = DHCP-Lease-Unknown
+		}
+
+		ok
+
+		# stop processing
+		return
+	}
+
+	#
+	#  We presume that the database lookup returns "notfound"
+	#  if it can't find anything.
+	#
+	if (notfound) {
+		update reply {
+			&DHCP-Message-Type = DHCP-Lease-Unknown
+		}
+		ok
+		return
+	}
+
+	#
+	#	Add more logic here.  Is the lease inactive?
+	#	If so, respond with DHCP-Lease-Unassigned.
+	#
+	#	Otherwise, respond with DHCP-Lease-Active
+	#
+
+	#
+	#	Also be sure to return ALL information about
+	#	the lease.
+	#
+
+	#
+	#	The reply types are:
+	#
+	#	DHCP-Lease-Unknown
+	#	DHCP-Lease-Active
+	#	DHCP-Lease-Unassigned
+	#
+	update reply {
+		&DHCP-Message-Type = DHCP-Lease-Unassigned
+	}
+
+}
+
+}
+
+######################################################################
+#
+#  This next section is a sample configuration for the "passwd"
+#  module, that reads flat-text files.  It should go into
+#  radiusd.conf, in the "modules" section.
+#
+#  The file is in the format <mac>,<ip>
+#
+#	00:01:02:03:04:05,192.0.2.100
+#	01:01:02:03:04:05,192.0.2.101
+#	02:01:02:03:04:05,192.0.2.102
+#
+#  This lets you perform simple static IP assignment.
+#
+#  There is a preconfigured "mac2ip" module setup in
+#  mods-available/mac2ip. To use it do:
+#
+#    # cd raddb/
+#    # ln -s ../mods-available/mac2ip mods-enabled/mac2ip
+#    # mkdir mods-config/passwd
+#
+#  Then create the file mods-config/passwd/mac2ip with the above
+#  format.
+#
+######################################################################
+
+
+#  This is an example only - see mods-available/mac2ip instead; do
+#  not uncomment these lines here.
+#
+#passwd mac2ip {
+#	filename = ${confdir}/mac2ip
+#	format = "*DHCP-Client-Hardware-Address:=DHCP-Your-IP-Address"
+#	delimiter = ","
+#}
