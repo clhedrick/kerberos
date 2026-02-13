@@ -59,6 +59,10 @@ slightly depending upon the format of our course identifiers.
 It can be set to require people responsible for groups to review 
 membership periodically (we're doing it annually).
 
+## DHCP
+
+We put DHCP information in LDAP. See freeradius-dhcp/README.md
+
 ## credserv and kgetcred
 
 Kerberos works cleanly for interactive logins, but how do you get
@@ -229,12 +233,6 @@ normal password, on the same line.)
 
 This is also a simple example of how to write code to process
 one-time passwords in C.
-
-## dhcp-ldap
-
-Instructions for integrating the ISC dhcpd. Our accounts application
-will manage DHCP data in LDAP. This has setup instructions and a 
-patch for the LDAP server.
 
 ## rquotad
 
