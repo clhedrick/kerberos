@@ -3,7 +3,10 @@
 (Note that this is now in production at Rutgers. If anyone
 is interested in the ansible role I can include it.)
 
-We put DHCP information in LDAP.
+We put DHCP information in LDAP. This repo has an
+implementation for Freeradius 3. I'll add Freeradius 4
+when it's released, though we use the Ubuntu package,
+which likely won't move to version 4 for quite a while.
 
 implementing this:
 * Adding the DHCP schema to the LDAP servers
