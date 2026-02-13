@@ -30,3 +30,23 @@ server, which is in several files. Look for 128.6.60.
 (We use ansible, which automatically adds in the
 right address.)
 
+I only implement that options and statements that we
+use. It's easy to add others.
+ * Look in
+  /usr/share/freeradius/dictionary.dhcp to find the
+  variable name used within freeradius
+ * modify policy.d/dhcp to map the LDAP version
+   to the DHCP variable. We use the same option
+   and statement names as in dhcpd.
+ * modify the dhcp IPA plugin to add them to the
+   syntax check. there's a table, so it's easy to add
+
+WARNING: The encoding for the DNS search list is complex, and can't be
+done in the freeradius config language. So I cheat. I check the first
+item in the list, and then pick from 3 precoded options that cover all
+of our systems. These are for Rutgers.
+
+To do it for yours, use an online encoder such as
+https://jjjordan.github.io/dhcp119/.  For that
+one the Zyxel version is the best. Just take the
+hex string and replace ours in policy.d/dhcp
