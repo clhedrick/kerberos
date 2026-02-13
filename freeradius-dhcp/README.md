@@ -1,5 +1,8 @@
 ## DHCP
 
+(Note that this is now in production at Rutgers. If anyone
+is interested in the ansible role I can include it.)
+
 We put DHCP information in LDAP.
 
 implementing this:
