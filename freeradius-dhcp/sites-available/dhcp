@@ -327,7 +327,7 @@ dhcp DHCP-Inform {
 
         update reply {
 	      reply:DHCP-IP-Address-Lease-Time !* ANY
-              reply:DHCP-Your-IP-Address !*
+              reply:DHCP-Your-IP-Address !* ANY
               control:DHCP-Your-IP-Address !* ANY
 # it looks like the response isn't initialized to ACK
 # an ok isn't good enough. Have to set to Ack
