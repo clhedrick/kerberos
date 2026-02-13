@@ -6,6 +6,14 @@ git clone https://github.com/clhedrick/kerberos.git
 
 # Summary
 
+Note that the accounting application, in ./accounts, is no
+longer maintained. I'm not doing updates for dependency bugs.
+We've rewritten it in python. If anyone is interested I'd be happy
+to make it available, but it seems likely that our policy needs are
+site-specific. The overall design is the same as the java application,
+so if you find that useful, tell me and I'll make the python one
+available.
+
 This is support code for Kerberos and IPA, created as part of a
 project to fully Kerberize the Rutgers CS department. We are
 specifically interested in secure NFS. However the software here may
