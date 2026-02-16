@@ -169,6 +169,16 @@ linelog log_accounting {
 	}
 }
 
+linelog linelog_ldap_failed {
+        filename = syslog
+        format = "action = Reject-LDAP, DHCP-Query=%{control:Tmp-String-2}, DHCP-Transaction-Id = %{request:DHCP-Transaction-Id}, DHCP-Client-Hardware-Address = %{request:DHCP-Client-Hardware-Address}, DHCP-Message-Type = %{request:DHCP-Message-Type}"
+}
+
+linelog linelog_reject {
+	filename = syslog
+        format = "action = Reject-Bad-Server, DHCP-DHCP-Server-Identifier = %{request:DHCP-DHCP-Server-Identifier}, DHCP-Transaction-Id = %{request:DHCP-Transaction-Id}, DHCP-Client-Hardware-Address = %{request:DHCP-Client-Hardware-Address}, DHCP-Message-Type = %{request:DHCP-Message-Type}"
+}
+
 linelog linelog_recv_request {
 #	filename = ${logdir}/dhcp.log
 	filename = syslog
