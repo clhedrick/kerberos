@@ -771,7 +771,7 @@ class dhcphost_add(LDAPCreate):
         if 'dhcphwaddress' in options:
             entry_attrs['dhcphwaddress'] = 'ethernet ' + self.obj.normalize_hwaddress(options['dhcphwaddress'])
 
-        check_dhcp_entry(None, None, entry_addrs)
+        check_dhcp_entry(None, None, entry_attrs)
 
         return entry_attrs.dn
 
