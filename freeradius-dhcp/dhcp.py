@@ -644,6 +644,7 @@ class dhcphost_mod(LDAPUpdate):
 
         if 'dhcphwaddress' in options:
             entry_attrs['dhcphwaddress'] = 'ethernet ' + self.obj.normalize_hwaddress(options['dhcphwaddress'])
+        check_dhcp_entry('', '', entry_attrs)
         return dn
 
 @register()
@@ -666,6 +667,13 @@ class dhcphost_add_statement(LDAPAddAttribute):
     attribute = 'dhcpstatements'
 
     def pre_callback(self, ldap, dn, entry_attrs, attrs_list, *keys, **options):
+        if 'dhcpstatements' in entry_attrs:
+            items = entry_attrs['dhcpstatements']
+            for item in items:
+                if item.startswith('fixed-address'):
+                    error_text = 'Please used dhcphost-mod to change ip address'
+                    raise errors.ValidationError(
+                        name='syntax', error=_(error_text))
         check_dhcp_entry('', '', entry_attrs)
         return dn
 
