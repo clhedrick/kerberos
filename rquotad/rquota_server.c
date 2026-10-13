@@ -235,6 +235,7 @@ rquotaproc_common(char *path, struct svc_req *rqstp, getquota_rslt *result, uid_
 	zh = zfs_open(libh, filesys, ZFS_TYPE_FILESYSTEM);
 	if (!zh) {
 	  fprintf(stderr, "can't open file systen %s\n", filesys);
+	  libzfs_fini(libh);
 	  return 0;
 	}
 
