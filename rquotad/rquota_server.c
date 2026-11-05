@@ -173,6 +173,8 @@ rquotaproc_common(char *path, struct svc_req *rqstp, getquota_rslt *result, uid_
 	unsigned long currfiles;
 	unsigned long quotaspace;
 	unsigned long quotafiles;		
+ 	unsigned long maxvalue;
+ 	unsigned int blocksize;
 	char propbuf[1024];
 	int failed = 0;
 	int matched = 0;
@@ -267,13 +269,33 @@ rquotaproc_common(char *path, struct svc_req *rqstp, getquota_rslt *result, uid_
 
 	// return the info
 
+ 	// normally use blocksize 1024.
+ 	// but if values won't fit, scale it
+ 	blocksize = 1024;
+ 
+ 	// find maximum of the sizes
+ 	maxvalue = quotaspace;
+ 	if (currspace > maxvalue)
+ 	  maxvalue = currspace;
+ 
+ 	// this is what we'd normally send
+ 	maxvalue = maxvalue / blocksize;
+ 
+ 	// see if we would have any bits above basic 32
+ 	maxvalue >>= 32;
+ 	// if so, scale up block size until no extra bits
+ 	while (maxvalue) {
+ 	  blocksize <<= 1;
+ 	  maxvalue >>= 1;
+ 	}
+
 	result->status = Q_OK;
         result->getquota_rslt_u.gqr_rquota.rq_active = TRUE;
-	result->getquota_rslt_u.gqr_rquota.rq_bsize = 1024;
-	result->getquota_rslt_u.gqr_rquota.rq_bsize = 1024;
-	result->getquota_rslt_u.gqr_rquota.rq_bhardlimit = quotaspace / 1024;
-	result->getquota_rslt_u.gqr_rquota.rq_bsoftlimit = quotaspace / 1024;
-	result->getquota_rslt_u.gqr_rquota.rq_curblocks = currspace / 1024;
+	result->getquota_rslt_u.gqr_rquota.rq_bsize = blocksize;
+	result->getquota_rslt_u.gqr_rquota.rq_bsize = blocksize;
+	result->getquota_rslt_u.gqr_rquota.rq_bhardlimit = quotaspace / blocksize;
+	result->getquota_rslt_u.gqr_rquota.rq_bsoftlimit = quotaspace / blocksize;
+	result->getquota_rslt_u.gqr_rquota.rq_curblocks = currspace / blocksize;
 	result->getquota_rslt_u.gqr_rquota.rq_fhardlimit = quotafiles;
 	result->getquota_rslt_u.gqr_rquota.rq_fsoftlimit = quotafiles;
 	result->getquota_rslt_u.gqr_rquota.rq_curfiles = currfiles;
